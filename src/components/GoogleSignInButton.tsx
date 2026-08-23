@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { signInWithGoogle, friendlyAuthError } from '../lib/authActions'
 
-export default function GoogleSignInButton({ onError }: { onError: (msg: string) => void }) {
+export default function GoogleSignInButton({ onError, disabled = false }: { onError: (msg: string) => void; disabled?: boolean }) {
   const [loading, setLoading] = useState(false)
 
   async function handleClick() {
@@ -19,11 +19,11 @@ export default function GoogleSignInButton({ onError }: { onError: (msg: string)
     <button
       type="button"
       onClick={handleClick}
-      disabled={loading}
+      disabled={loading || disabled}
       style={{
         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, width: '100%',
         background: '#fff', color: '#1f1f1f', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 10,
-        padding: '11px', fontSize: 14, fontWeight: 600, cursor: loading ? 'default' : 'pointer', opacity: loading ? 0.7 : 1,
+        padding: '11px', fontSize: 14, fontWeight: 600, cursor: loading || disabled ? 'default' : 'pointer', opacity: loading || disabled ? 0.55 : 1,
       }}
     >
       <GoogleLogo />

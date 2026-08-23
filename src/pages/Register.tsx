@@ -16,12 +16,17 @@ export default function Register() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [awaitingConfirmation, setAwaitingConfirmation] = useState(false)
+  const [termsAccepted, setTermsAccepted] = useState(false)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
     if (password.length < 6) {
       setError('Password must be at least 6 characters.')
+      return
+    }
+    if (!termsAccepted) {
+      setError('Please accept the AbroBiz Terms of Service and Privacy Policy to continue.')
       return
     }
     setLoading(true)
@@ -91,7 +96,13 @@ export default function Register() {
                 Set up your business's digital presence in minutes.
               </p>
 
-              <GoogleSignInButton onError={setError} />
+              <GoogleSignInButton
+                onError={setError}
+                disabled={!termsAccepted}
+              />
+              <p style={{ color: 'rgba(240,237,231,0.38)', fontSize: 11.5, lineHeight: 1.5, marginTop: -8 }}>
+                Accept the AbroBiz terms below to enable Google sign-up.
+              </p>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '18px 0' }}>
                 <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.08)' }} />
                 <span style={{ fontSize: 12, color: 'rgba(240,237,231,0.35)' }}>or</span>
@@ -111,6 +122,18 @@ export default function Register() {
                 <Field label="Password">
                   <input required type="password" value={password} onChange={e => setPassword(e.target.value)} style={inputStyle} placeholder="At least 6 characters" />
                 </Field>
+
+                <label style={{ display: 'flex', alignItems: 'flex-start', gap: 9, color: 'rgba(240,237,231,0.58)', fontSize: 12, lineHeight: 1.55, cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={termsAccepted}
+                    onChange={e => setTermsAccepted(e.target.checked)}
+                    style={{ marginTop: 3, accentColor: '#D4A853' }}
+                  />
+                  <span>
+                    I agree to the AbroBiz <Link to="/terms" target="_blank" style={{ color: '#D4A853' }}>Terms of Service</Link> and <Link to="/privacy" target="_blank" style={{ color: '#D4A853' }}>Privacy Policy</Link>.
+                  </span>
+                </label>
 
                 {error && (
                   <div style={{ color: '#F87171', fontSize: 13, background: 'rgba(248,113,113,0.08)', padding: '10px 12px', borderRadius: 10 }}>

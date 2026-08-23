@@ -203,7 +203,11 @@ Do not set that variable before the custom domain is active.
 
 ## 7. Configure email and Edge Function secrets
 
-Set these as Supabase Edge Function secrets. Do not put them in Vercel:
+Set these as Supabase Edge Function secrets. Do not put them only in Vercel:
+Vercel variables are available to the frontend build, but Supabase Edge
+Functions cannot read Vercel's environment. The sender variables must appear
+in Supabase Dashboard → Edge Functions → Secrets (or be set with the
+Supabase CLI).
 
 ```text
 APP_NAME=AbroBiz
@@ -258,6 +262,10 @@ supabase.cmd secrets list --project-ref $env:SUPABASE_PROJECT_REF
 The output must contain the names, not values, for `APP_NAME`, `SITE_URL`,
 `CORS_ORIGINS`, `MAIL_SERVER`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`,
 `MAIL_USE_TLS`, and `MAIL_FROM`.
+
+For Resend, it must also contain `RESEND_API_KEY`, `EMAIL_DOMAIN`, and
+`EMAIL_FROM`. If those three names are missing, email cannot be sent from
+`noreply@abrobiz.com`, regardless of whether the DNS records are correct.
 
 Deploy all current Edge Functions after migrations `0023` and `0024` and after setting the
 secrets:
@@ -338,6 +346,10 @@ Wildcard domains require Vercel nameserver configuration. Delegate the domain
 to the Vercel nameservers shown in the Domains page, or follow the exact
 verification method Vercel displays. Do not create a separate DNS record for
 every future business; the wildcard handles them all.
+
+The application reserves each slug in the database and automatically produces
+`https://<slug>.abrobiz.com`. No per-user DNS API call is required. The
+wildcard domain must be verified and have active TLS first.
 
 CLI inspection:
 
