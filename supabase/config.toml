@@ -16,3 +16,18 @@ verify_jwt = false
 
 [functions.reset-password]
 verify_jwt = false
+
+# These functions perform their own role/session checks as well, but keeping
+# gateway JWT verification enabled prevents unauthenticated traffic from
+# reaching protected email/admin handlers.
+[functions.send-verification-email]
+verify_jwt = true
+
+[functions.send-announcement]
+verify_jwt = true
+
+[functions.import-template]
+verify_jwt = true
+
+[functions.notify-payment-submitted]
+verify_jwt = true
