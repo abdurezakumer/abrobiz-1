@@ -43,7 +43,12 @@ function mapBusiness(row: any): Business {
 }
 
 export async function getMyBusiness(): Promise<Business | null> {
-  const { data, error } = await supabase.from('businesses').select('*').maybeSingle()
+  // Published businesses are intentionally public. Always scope the owner
+  // dashboard lookup explicitly, otherwise maybeSingle() can see another
+  // published tenant and every account may appear to share its subdomain.
+  const { data: authData, error: authError } = await supabase.auth.getUser()
+  if (authError || !authData.user) return null
+  const { data, error } = await supabase.from('businesses').select('*').eq('owner_id', authData.user.id).maybeSingle()
   if (error) throw error
   return data ? mapBusiness(data) : null
 }

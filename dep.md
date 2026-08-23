@@ -92,12 +92,13 @@ For a new database, apply every migration in filename order:
 0021_role_security_hardening.sql
 0022_subdomain_rules.sql
 0023_production_security.sql
+0024_tenant_subdomain_isolation.sql
 ```
 
 For the existing AbroBiz project, migrations were previously run manually in
 the SQL Editor. In that case, confirm the earlier migrations are already
 present and run only any missing migration files, especially
-`0023_production_security.sql`, in the SQL Editor. Do not blindly run
+`0023_production_security.sql` and `0024_tenant_subdomain_isolation.sql`, in the SQL Editor. Do not blindly run
 `supabase db push` against a database whose migration history was not recorded;
 repair the migration history first or use the SQL Editor to avoid duplicate
 object errors.
@@ -111,6 +112,9 @@ After `0023`, production has:
   public contact, bookings, reviews, announcements, template imports, and
   payment notifications.
 - A service-role-only rate-limit table and admin cleanup function.
+
+After `0024`, the owner lookup and database constraints enforce one website
+and one unique subdomain per account, even when two setup requests race.
 
 ## 5. Configure Supabase secrets
 
@@ -132,7 +136,7 @@ Verify `abrobiz.com` in Resend first, then run:
 supabase.cmd secrets set --project-ref YOUR_PROJECT_REF `
   APP_NAME=AbroBiz `
   SITE_URL=https://abrobiz.com `
-  CORS_ORIGIN=https://abrobiz.com `
+  CORS_ORIGINS="https://abrobiz.com,https://www.abrobiz.com,http://localhost:5173,http://127.0.0.1:5173" `
   EMAIL_DOMAIN=abrobiz.com `
   EMAIL_FROM="AbroBiz <noreply@abrobiz.com>" `
   RESEND_API_KEY=YOUR_RESEND_API_KEY
@@ -146,7 +150,7 @@ Use a Google App Password, not the normal Gmail password:
 supabase.cmd secrets set --project-ref YOUR_PROJECT_REF `
   APP_NAME=AbroBiz `
   SITE_URL=https://abrobiz.com `
-  CORS_ORIGIN=https://abrobiz.com `
+  CORS_ORIGINS="https://abrobiz.com,https://www.abrobiz.com,http://localhost:5173,http://127.0.0.1:5173" `
   MAIL_SERVER=smtp.gmail.com `
   MAIL_PORT=587 `
   MAIL_USERNAME=YOUR_GMAIL_ADDRESS `
@@ -157,6 +161,11 @@ supabase.cmd secrets set --project-ref YOUR_PROJECT_REF `
 
 The mailer removes spaces from Gmail app passwords automatically. Gmail SMTP
 has daily sending limits; use Resend for production volume.
+
+Gmail authenticates the sender as the Gmail account. For a true
+`noreply@abrobiz.com` sender, verify the domain with Resend or another domain
+SMTP provider and configure `EMAIL_DOMAIN=abrobiz.com` plus
+`EMAIL_FROM="AbroBiz <noreply@abrobiz.com>"`.
 
 List names only to confirm secrets exist:
 

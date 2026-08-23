@@ -40,6 +40,7 @@ files in order from the Supabase Dashboard → SQL Editor:
 9. [0021_role_security_hardening.sql](supabase/migrations/0021_role_security_hardening.sql)
 10. [0022_subdomain_rules.sql](supabase/migrations/0022_subdomain_rules.sql)
 11. [0023_production_security.sql](supabase/migrations/0023_production_security.sql)
+12. [0024_tenant_subdomain_isolation.sql](supabase/migrations/0024_tenant_subdomain_isolation.sql)
 
 Paste and run one file at a time. The first four base migrations must already
 be applied; if not, run all files in `supabase/migrations` in filename order.

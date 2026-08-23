@@ -4,6 +4,7 @@ import { businessSlugFromHostname, storefrontPath } from '../storefrontUrl'
 describe('storefront subdomain routing', () => {
   it('extracts a business slug from an abrobiz.com subdomain', () => {
     expect(businessSlugFromHostname('habesha-kitchen.abrobiz.com')).toBe('habesha-kitchen')
+    expect(businessSlugFromHostname('www.habesha-kitchen.abrobiz.com')).toBe('habesha-kitchen')
   })
 
   it('ignores reserved platform subdomains', () => {
@@ -13,6 +14,7 @@ describe('storefront subdomain routing', () => {
 
   it('supports local wildcard-style development hosts', () => {
     expect(businessSlugFromHostname('test-business.localhost')).toBe('test-business')
+    expect(businessSlugFromHostname('www.test-business.localhost')).toBe('test-business')
   })
 
   it('uses clean paths on subdomains and fallback paths on the main site', () => {
@@ -20,4 +22,3 @@ describe('storefront subdomain routing', () => {
     expect(storefrontPath('habesha-kitchen', 'menu', 'abrobiz.com')).toBe('/r/habesha-kitchen/menu')
   })
 })
-

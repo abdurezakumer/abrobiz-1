@@ -427,7 +427,7 @@ supabase functions deploy send-announcement
 supabase functions deploy import-template
 ```
 
-Run migrations `0013_email_verification.sql` through `0023_production_security.sql`
+Run migrations `0013_email_verification.sql` through `0024_tenant_subdomain_isolation.sql`
 if you haven't already (in order — each depends on the last).
 
 ## Try it

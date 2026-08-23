@@ -113,7 +113,7 @@ confirmed that its history can be replaced.
 ## 5. Apply the Supabase database migrations
 
 The migrations are in `supabase/migrations/` and must be applied in filename
-order from `0001_schema.sql` through `0023_production_security.sql`.
+order from `0001_schema.sql` through `0024_tenant_subdomain_isolation.sql`.
 
 For a new database, the safest choices are:
 
@@ -129,7 +129,7 @@ supabase.cmd migration list --project-ref $env:SUPABASE_PROJECT_REF
 
 Do not blindly run every migration against an existing database whose schema
 was created manually. Take a database backup, compare the existing schema,
-and apply only the missing migrations. Migration `0023` is required before
+and apply only the missing migrations. Migrations `0023` and `0024` are required before
 deploying the current rate-limited Edge Functions because it creates the rate
 limit table, RPC, and triggers.
 
@@ -140,6 +140,7 @@ select to_regclass('public.profiles');
 select to_regclass('public.businesses');
 select to_regclass('public.email_verification_tokens');
 select to_regclass('public.rate_limits');
+select to_regclass('public.businesses');
 ```
 
 ## 6. Configure Supabase Auth
@@ -220,6 +221,18 @@ The Gmail password must be a Google App Password created after enabling
 2-Step Verification. It is not the normal Gmail password. For higher volume,
 use Resend and set `RESEND_API_KEY` plus `EMAIL_DOMAIN` instead of Gmail SMTP.
 
+Gmail will show the Gmail account as the authenticated sender. For mail that
+is actually sent from AbroBiz, verify `abrobiz.com` with Resend or another
+authenticated domain provider, then set:
+
+```text
+RESEND_API_KEY=YOUR_PROVIDER_KEY
+EMAIL_DOMAIN=abrobiz.com
+EMAIL_FROM=AbroBiz <noreply@abrobiz.com>
+```
+
+Add the provider's SPF, DKIM, and verification DNS records before testing.
+
 CLI form:
 
 ```powershell
@@ -246,7 +259,7 @@ The output must contain the names, not values, for `APP_NAME`, `SITE_URL`,
 `CORS_ORIGINS`, `MAIL_SERVER`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`,
 `MAIL_USE_TLS`, and `MAIL_FROM`.
 
-Deploy all current Edge Functions after migration `0023` and after setting the
+Deploy all current Edge Functions after migrations `0023` and `0024` and after setting the
 secrets:
 
 ```powershell
@@ -415,7 +428,8 @@ supabase.cmd secrets list --project-ref $env:SUPABASE_PROJECT_REF
 supabase.cmd functions logs send-verification-email --project-ref $env:SUPABASE_PROJECT_REF
 ```
 
-Confirm migration `0013_email_verification.sql` and `0023_production_security.sql`
+Confirm migration `0013_email_verification.sql`, `0023_production_security.sql`,
+and `0024_tenant_subdomain_isolation.sql`
 are applied, the function is deployed to the same project as the frontend, and
 the Gmail App Password has no spaces. A `502` from the function means SMTP
 rejected the message; inspect the function log without sharing secrets.
@@ -431,11 +445,19 @@ startup/build time.
 Confirm the repository's `vercel.json` is deployed. Its SPA rewrite sends
 unknown browser routes to `index.html`.
 
+### One owner sees another owner's subdomain
+
+Apply migration `0024_tenant_subdomain_isolation.sql` and redeploy the frontend.
+The dashboard lookup is explicitly filtered by the signed-in owner; published
+storefront reads remain public for customers.
+
 ### Subdomain opens the platform landing page
 
 Confirm `*.abrobiz.com` is verified on Vercel, the DNS wildcard is delegated
 through Vercel nameservers, and `VITE_PLATFORM_DOMAIN=abrobiz.com` is present
-in the latest Vercel production deployment.
+in the latest Vercel production deployment. The app accepts both
+`slug.abrobiz.com` and `www.slug.abrobiz.com`; the nested hostname also needs
+DNS and TLS coverage from the hosting provider.
 
 ## Official references
 
