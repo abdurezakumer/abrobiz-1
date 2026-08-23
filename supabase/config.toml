@@ -1,0 +1,18 @@
+# Keep the CLI project aligned with the production VITE_SUPABASE_URL.
+# Change this only when the frontend and hosting environment use the same
+# replacement Supabase project.
+project_id = "ckawqslkbanqolbvdpgf"
+
+[functions.telegram-webhook]
+verify_jwt = false
+
+[functions.subscription-cron]
+verify_jwt = false
+
+# These endpoints are reached before a user has a session. The function code
+# performs its own validation and keeps the password-reset response generic.
+[functions.request-password-reset]
+verify_jwt = false
+
+[functions.reset-password]
+verify_jwt = false

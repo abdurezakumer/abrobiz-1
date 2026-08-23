@@ -1,0 +1,71 @@
+import type { ReactNode } from 'react'
+import { Navigate, useLocation } from 'react-router-dom'
+import { useAuth } from '../lib/authContext'
+
+function FullScreenSpinner() {
+  return (
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0A0C10' }}>
+      <div
+        style={{
+          width: 32,
+          height: 32,
+          borderRadius: '50%',
+          border: '3px solid rgba(212,168,83,0.2)',
+          borderTopColor: '#D4A853',
+          animation: 'spin 0.8s linear infinite',
+        }}
+      />
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  )
+}
+
+export function RequireAuth({ children }: { children: ReactNode }) {
+  const { session, loading } = useAuth()
+  const location = useLocation()
+  if (loading) return <FullScreenSpinner />
+  if (!session) return <Navigate to="/login" state={{ from: location }} replace />
+  return <>{children}</>
+}
+
+export function RequireSetup({ children }: { children: ReactNode }) {
+  const { session, profile, business, loading } = useAuth()
+  const location = useLocation()
+  if (loading) return <FullScreenSpinner />
+  if (!session) return <Navigate to="/login" state={{ from: location }} replace />
+  if (profile?.role === 'admin') return <Navigate to="/admin" replace />
+  if (profile?.role !== 'owner') return <Navigate to="/login" replace />
+  if (business) return <Navigate to="/dashboard" replace />
+  return <>{children}</>
+}
+
+export function RequireGuest({ children }: { children: ReactNode }) {
+  const { session, profile, business, loading } = useAuth()
+  if (loading) return <FullScreenSpinner />
+  if (session && profile) {
+    if (profile.role === 'admin') return <Navigate to="/admin" replace />
+    if (business) return <Navigate to="/dashboard" replace />
+    return <Navigate to="/setup" replace />
+  }
+  return <>{children}</>
+}
+
+export function RequireOwner({ children }: { children: ReactNode }) {
+  const { session, profile, business, loading } = useAuth()
+  const location = useLocation()
+  if (loading) return <FullScreenSpinner />
+  if (!session) return <Navigate to="/login" state={{ from: location }} replace />
+  if (profile?.role === 'admin') return <Navigate to="/admin" replace />
+  if (profile?.role !== 'owner') return <Navigate to="/login" replace />
+  if (!business) return <Navigate to="/setup" replace />
+  return <>{children}</>
+}
+
+export function RequireAdmin({ children }: { children: ReactNode }) {
+  const { session, profile, loading } = useAuth()
+  const location = useLocation()
+  if (loading) return <FullScreenSpinner />
+  if (!session) return <Navigate to="/login" state={{ from: location }} replace />
+  if (profile?.role !== 'admin') return <Navigate to="/dashboard" replace />
+  return <>{children}</>
+}

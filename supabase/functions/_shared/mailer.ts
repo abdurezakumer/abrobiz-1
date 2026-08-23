@@ -1,0 +1,136 @@
+import nodemailer from 'npm:nodemailer@6.9.16'
+
+export interface EmailContent {
+  subject: string
+  html: string
+  text: string
+}
+
+export interface SendResult {
+  ok: boolean
+  id?: string
+  error?: string
+}
+
+export interface SendMailFn {
+  (msg: { from: string; to: string; subject: string; html: string; text: string }): Promise<{ messageId?: string }>
+}
+
+/** Domain email via Resend — the recommended path once you own a real domain. */
+export function createResendSender(apiKey: string): SendMailFn {
+  return async msg => {
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(msg),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(data?.message ?? `Resend API error (${res.status})`)
+    return { messageId: data?.id }
+  }
+}
+
+/** Gmail SMTP fallback — works with just a personal Gmail account, capped around 500 sends/day. */
+export function createGmailSender(gmailUser: string, appPassword: string): SendMailFn {
+  const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: { user: gmailUser, pass: appPassword },
+  })
+  return msg => transporter.sendMail(msg)
+}
+
+/** Generic SMTP sender. This is the shape used by the platform's deployment
+ * secrets, so it works with Gmail now and can be moved to another SMTP host
+ * later without changing any email function. */
+export function createSmtpSender(opts: {
+  server: string
+  port: number
+  username: string
+  password: string
+  useTls: boolean
+}): SendMailFn {
+  const password = /(^|\.)gmail\.com$/i.test(opts.server) ? opts.password.replace(/\s+/g, '') : opts.password
+  const transporter = nodemailer.createTransport({
+    host: opts.server,
+    port: opts.port,
+    secure: opts.port === 465,
+    requireTLS: opts.useTls && opts.port !== 465,
+    auth: { user: opts.username, pass: password },
+  })
+  return msg => transporter.sendMail(msg)
+}
+
+function envBoolean(value: string | undefined, fallback: boolean): boolean {
+  if (value === undefined) return fallback
+  return /^(1|true|yes|on)$/i.test(value)
+}
+
+/**
+ * Builds the visible From header.
+ * - Explicit EMAIL_FROM always wins.
+ * - Otherwise, a configured domain gets `noreply@yourdomain.com`.
+ * - Otherwise, a Gmail account gets plus-addressed (`user+noreply@gmail.com`)
+ *   so it reads as no-reply while still landing in that same inbox.
+ */
+export function buildFromAddress(appName: string, opts: { override?: string; domain?: string; gmailUser?: string }): string {
+  if (opts.override) return opts.override
+  if (opts.domain) return `"${appName}" <noreply@${opts.domain}>`
+  if (opts.gmailUser) {
+    const atIndex = opts.gmailUser.indexOf('@')
+    if (atIndex === -1) return `"${appName}" <${opts.gmailUser}>`
+    const [local, domain] = [opts.gmailUser.slice(0, atIndex), opts.gmailUser.slice(atIndex + 1)]
+    const noreplyLocal = local.includes('+') ? local : `${local}+noreply`
+    return `"${appName}" <${noreplyLocal}@${domain}>`
+  }
+  return `"${appName}" <noreply@example.com>`
+}
+
+/** Picks Resend, then generic MAIL_* SMTP, then legacy Gmail vars automatically. */
+export function createSenderFromEnv(env: { get(key: string): string | undefined }): { sendMail: SendMailFn; from: string } {
+  const appName = env.get('APP_NAME') ?? 'AbroBiz'
+  const override = env.get('EMAIL_FROM') ?? env.get('MAIL_FROM') ?? undefined
+  const resendKey = env.get('RESEND_API_KEY')
+  const domain = env.get('EMAIL_DOMAIN') ?? undefined
+
+  if (resendKey) {
+    return { sendMail: createResendSender(resendKey), from: buildFromAddress(appName, { override, domain }) }
+  }
+
+  const mailServer = env.get('MAIL_SERVER')
+  const mailPort = Number(env.get('MAIL_PORT') ?? '587')
+  const mailUsername = env.get('MAIL_USERNAME')
+  const mailPassword = env.get('MAIL_PASSWORD')
+  if (mailServer && mailUsername && mailPassword) {
+    return {
+      sendMail: createSmtpSender({
+        server: mailServer,
+        port: Number.isFinite(mailPort) ? mailPort : 587,
+        username: mailUsername,
+        password: mailPassword,
+        useTls: envBoolean(env.get('MAIL_USE_TLS'), true),
+      }),
+      from: buildFromAddress(appName, { override, domain, gmailUser: mailUsername }),
+    }
+  }
+
+  const gmailUser = env.get('GMAIL_USER')
+  const gmailAppPassword = env.get('GMAIL_APP_PASSWORD')
+  if (gmailUser && gmailAppPassword) {
+    return { sendMail: createGmailSender(gmailUser, gmailAppPassword), from: buildFromAddress(appName, { override, gmailUser }) }
+  }
+
+  throw new Error('No email provider configured — set RESEND_API_KEY (+ EMAIL_DOMAIN), MAIL_SERVER + MAIL_USERNAME + MAIL_PASSWORD, or GMAIL_USER + GMAIL_APP_PASSWORD')
+}
+
+export async function sendEmail(sendMail: SendMailFn, opts: { from: string; to: string; content: EmailContent }): Promise<SendResult> {
+  try {
+    const info = await sendMail({ from: opts.from, to: opts.to, subject: opts.content.subject, html: opts.content.html, text: opts.content.text })
+    return { ok: true, id: info.messageId }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) }
+  }
+}
+
+export function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+}
