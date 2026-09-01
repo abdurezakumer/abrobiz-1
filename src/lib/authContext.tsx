@@ -12,6 +12,7 @@ interface AuthContextValue {
   subscription: Subscription | null
   loading: boolean
   refreshBusiness: () => Promise<void>
+  refreshProfile: () => Promise<void>
   signOut: () => Promise<void>
 }
 
@@ -93,6 +94,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await loadForSession(session)
   }, [session, loadForSession])
 
+  const refreshProfile = useCallback(async () => {
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
+    if (sessionError) throw sessionError
+    const currentSession = sessionData.session
+    setSession(currentSession)
+
+    if (!currentSession) {
+      setProfile(null)
+      return
+    }
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, role, name, phone, email_verified_at, terms_accepted_at, privacy_accepted_at, legal_version')
+      .eq('id', currentSession.user.id)
+      .single()
+
+    if (error) throw error
+    setProfile(data ? {
+      id: data.id,
+      role: data.role,
+      name: data.name,
+      phone: data.phone,
+      email: currentSession.user.email ?? undefined,
+      emailVerifiedAt: data.email_verified_at ?? null,
+      termsAcceptedAt: data.terms_accepted_at ?? null,
+      privacyAcceptedAt: data.privacy_accepted_at ?? null,
+      legalVersion: data.legal_version ?? null,
+    } : null)
+  }, [])
+
   useEffect(() => {
     let mounted = true
 
@@ -121,7 +153,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   return (
-    <AuthContext.Provider value={{ session, profile, business, subscription, loading, refreshBusiness, signOut }}>
+    <AuthContext.Provider value={{ session, profile, business, subscription, loading, refreshBusiness, refreshProfile, signOut }}>
       {children}
     </AuthContext.Provider>
   )

@@ -7,6 +7,7 @@ import { recordLegalAcceptance } from '../lib/api/legal'
 import { friendlyAuthError } from '../lib/authActions'
 import TurnstileWidget from '../components/TurnstileWidget'
 import { turnstileEnabled } from '../lib/turnstile'
+import { useAuth } from '../lib/authContext'
 
 export default function VerifyEmail() {
   const [params] = useSearchParams()
@@ -21,6 +22,7 @@ export default function VerifyEmail() {
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
   const [turnstileResetKey, setTurnstileResetKey] = useState(0)
   const inputs = useRef<Array<HTMLInputElement | null>>([])
+  const { refreshProfile } = useAuth()
 
   useEffect(() => {
     if (cooldown <= 0) return
@@ -65,6 +67,7 @@ export default function VerifyEmail() {
     try {
       await verifySignupOtp(email, token)
       await recordLegalAcceptance()
+      await refreshProfile()
       setVerified(true)
     } catch (err) {
       setError(friendlyAuthError(err))
