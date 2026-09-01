@@ -1,6 +1,9 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4'
-import { enforceRateLimit } from '../_shared/rateLimit.ts'
+import { enforceRateLimits } from '../_shared/rateLimit.ts'
 import { corsHeaders } from '../_shared/cors.ts'
+import { isBearerAuthorization, isRecord, readJsonBody } from '../_shared/requestSecurity.ts'
+import { fetchWithTimeout, readJsonResponse } from '../_shared/external.ts'
+import { logFailure } from '../_shared/observability.ts'
 
 function json(body: unknown, status = 200, req?: Request): Response {
   return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders(req), 'Content-Type': 'application/json' } })
@@ -57,10 +60,11 @@ function themeConfig(value: unknown): Record<string, string> {
 if (import.meta.main) {
   Deno.serve(async req => {
     if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders(req) })
+    if (req.method !== 'POST') return json({ error: 'Method not allowed.' }, 405, req)
 
     try {
       const authHeader = req.headers.get('Authorization') ?? ''
-      if (!authHeader) return json({ error: 'Not authenticated' }, 401, req)
+      if (!isBearerAuthorization(authHeader)) return json({ error: 'Not authenticated' }, 401, req)
 
       const client = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, {
         global: { headers: { Authorization: authHeader } },
@@ -71,10 +75,16 @@ if (import.meta.main) {
       const { data: profile } = await client.from('profiles').select('role').eq('id', userData.user.id).single()
       if (profile?.role !== 'admin') return json({ error: 'Admins only' }, 403, req)
 
-      const limited = await enforceRateLimit(req, 'template-import', 20, 3600, userData.user.id)
+      const limited = await enforceRateLimits(req, [
+        { scope: 'template-import-ip', limit: 30, windowSeconds: 3600 },
+        { scope: 'template-import-admin', limit: 20, windowSeconds: 3600, identity: userData.user.id },
+      ])
       if (limited) return limited
 
-      const { repoUrl } = await req.json()
+      const parsedBody = await readJsonBody(req, 8 * 1024)
+      if (parsedBody.error) return json({ error: parsedBody.error }, parsedBody.status ?? 400, req)
+      const body = isRecord(parsedBody.data) ? parsedBody.data : {}
+      const repoUrl = body.repoUrl
       if (typeof repoUrl !== 'string' || !repoUrl.trim()) return json({ error: 'A GitHub repository link is required' }, 400, req)
       const parsed = parseGithubUrl(repoUrl)
       if (!parsed) return json({ error: 'Use a public https://github.com/owner/repository link' }, 400, req)
@@ -83,20 +93,20 @@ if (import.meta.main) {
       if (existing) return json({ template: existing, existing: true }, 200, req)
 
       const headers = { Accept: 'application/vnd.github+json', 'User-Agent': 'abrobiz-template-importer' }
-      const repoResponse = await fetch(`https://api.github.com/repos/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repo)}`, { headers })
+      const repoResponse = await fetchWithTimeout(`https://api.github.com/repos/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repo)}`, { headers })
       if (!repoResponse.ok) {
         return json({ error: repoResponse.status === 404 ? 'Repository not found or not public' : 'GitHub could not be reached' }, 400, req)
       }
-      const repo = await repoResponse.json()
+      const repo = await readJsonResponse(repoResponse, 256 * 1024)
 
       // A repository may include template.json at its root. It is optional:
       // without it, the repository name is still imported as a safe template
       // entry using the default storefront skin.
       let manifest: Record<string, unknown> = {}
-      const manifestResponse = await fetch(`https://raw.githubusercontent.com/${parsed.owner}/${parsed.repo}/${encodeURIComponent(repo.default_branch ?? 'main')}/template.json`)
+      const manifestResponse = await fetchWithTimeout(`https://raw.githubusercontent.com/${parsed.owner}/${parsed.repo}/${encodeURIComponent(repo.default_branch ?? 'main')}/template.json`, {}, 8000)
       if (manifestResponse.ok) {
         try {
-          const candidate = await manifestResponse.json()
+          const candidate = await readJsonResponse(manifestResponse, 128 * 1024)
           if (candidate && typeof candidate === 'object' && !Array.isArray(candidate)) manifest = candidate
         } catch {
           // Invalid optional manifest: continue with repository metadata.
@@ -120,11 +130,12 @@ if (import.meta.main) {
       const { data: template, error } = await client.from('templates').insert(row).select('*').single()
       if (error) {
         if (error.code === '23505') return json({ error: 'A template with that slug already exists. Add a unique "slug" in template.json.' }, 409, req)
-        return json({ error: error.message }, 500, req)
+        logFailure(req, { function_name: 'import-template', operation: 'insert_template', error_category: 'DATABASE_ERROR', error_code: error.code ?? 'unknown', status: 400 })
+        return json({ error: 'Could not save that template.' }, 500, req)
       }
       return json({ template }, 200, req)
     } catch (err) {
-      console.error('import-template error', err)
+      logFailure(req, { function_name: 'import-template', operation: 'import_template', error_category: 'INTERNAL_ERROR', error_code: err instanceof Error ? err.name : 'UnknownError', status: 500 })
       return json({ error: 'Could not import that GitHub repository' }, 500, req)
     }
   })

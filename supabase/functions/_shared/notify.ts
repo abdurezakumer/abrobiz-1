@@ -1,5 +1,6 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.45.4'
 import { TelegramClient, buildInlineKeyboard } from './telegram.ts'
+import { logEvent } from './observability.ts'
 
 export async function notifyAdminsOfPayment(db: SupabaseClient, tg: TelegramClient, paymentId: string): Promise<void> {
   const { data: payment } = await db
@@ -16,7 +17,7 @@ export async function notifyAdminsOfPayment(db: SupabaseClient, tg: TelegramClie
     .not('telegram_chat_id', 'is', null)
 
   if (!admins || admins.length === 0) {
-    console.log('No linked admin Telegram chats — payment', paymentId, 'still visible in the web admin panel')
+    logEvent('info', { service: 'abrobiz-edge', function_name: 'notify-payment-submitted', operation: 'notify_admins', outcome: 'no_recipients' })
     return
   }
 
@@ -55,7 +56,7 @@ export async function notifyAdminsOfPayment(db: SupabaseClient, tg: TelegramClie
         await tg.sendMessage(chatId, caption, { replyMarkup: keyboard })
       }
     } catch (err) {
-      console.error('Failed to notify admin chat', chatId, err)
+      logEvent('error', { service: 'abrobiz-edge', function_name: 'notify-payment-submitted', operation: 'telegram_notify', error_category: 'DEPENDENCY_ERROR', error_code: err instanceof Error ? err.name : 'UnknownError', outcome: 'failed' })
     }
   }
 }

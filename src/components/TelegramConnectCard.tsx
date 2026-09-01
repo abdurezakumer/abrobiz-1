@@ -41,7 +41,7 @@ export default function TelegramConnectCard({ status, kind }: { status: Telegram
           <Check size={13} /> Connected
         </span>
       ) : deepLink ? (
-        <a href={deepLink} target="_blank" rel="noreferrer" style={connectBtn}>Connect</a>
+        <a href={deepLink} target="_blank" rel="noopener noreferrer" style={connectBtn}>Connect</a>
       ) : (
         <span style={{ fontSize: 11.5, color: 'rgba(10,12,16,0.4)' }}>Bot not configured yet</span>
       )}

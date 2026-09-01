@@ -4,6 +4,7 @@ import DashboardLayout from '../components/DashboardLayout'
 import { useAuth } from '../lib/authContext'
 import { listMessages, markMessageRead } from '../lib/api/messages'
 import type { ContactMessage } from '../types'
+import { safeMailto, safeTel } from '../lib/safeUrl'
 
 export default function Messages() {
   const { business } = useAuth()
@@ -56,8 +57,8 @@ export default function Messages() {
               </div>
               <p style={{ fontSize: 13.5, color: 'rgba(10,12,16,0.65)', marginTop: 8, lineHeight: 1.5 }}>{msg.message}</p>
               <div style={{ display: 'flex', gap: 14, marginTop: 10 }}>
-                {msg.email && <a href={`mailto:${msg.email}`} onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#D4A853', textDecoration: 'none' }}><Mail size={12} /> {msg.email}</a>}
-                {msg.phone && <a href={`tel:${msg.phone}`} onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#D4A853', textDecoration: 'none' }}><Phone size={12} /> {msg.phone}</a>}
+                {safeMailto(msg.email) && <a href={safeMailto(msg.email) ?? undefined} onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#D4A853', textDecoration: 'none' }}><Mail size={12} /> {msg.email}</a>}
+                {safeTel(msg.phone) && <a href={safeTel(msg.phone) ?? undefined} onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#D4A853', textDecoration: 'none' }}><Phone size={12} /> {msg.phone}</a>}
               </div>
             </div>
           ))}

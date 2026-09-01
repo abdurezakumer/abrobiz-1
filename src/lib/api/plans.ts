@@ -22,7 +22,7 @@ function mapPlan(row: any): Plan {
 }
 
 export async function listPlans(activeOnly = true): Promise<Plan[]> {
-  let query = supabase.from('plans').select('*').order('sort_order', { ascending: true })
+  let query = supabase.from('plans').select('*').order('sort_order', { ascending: true }).limit(100)
   if (activeOnly) query = query.eq('is_active', true)
   const { data, error } = await query
   if (error) throw error
@@ -30,7 +30,7 @@ export async function listPlans(activeOnly = true): Promise<Plan[]> {
 }
 
 export async function adminListAllPlans(): Promise<Plan[]> {
-  const { data, error } = await supabase.from('plans').select('*').order('sort_order', { ascending: true })
+  const { data, error } = await supabase.from('plans').select('*').order('sort_order', { ascending: true }).limit(100)
   if (error) throw error
   return (data ?? []).map(mapPlan)
 }

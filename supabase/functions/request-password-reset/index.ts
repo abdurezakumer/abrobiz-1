@@ -1,8 +1,11 @@
-import { createClient } from 'npm:@supabase/supabase-js@2.45.4'
+import { createAdminClient } from '../_shared/db.ts'
 import { buildPasswordResetEmail } from './email.ts'
 import { createSenderFromEnv, sendEmail } from '../_shared/mailer.ts'
-import { enforceRateLimit } from '../_shared/rateLimit.ts'
+import { enforceRateLimits } from '../_shared/rateLimit.ts'
 import { corsHeaders } from '../_shared/cors.ts'
+import { isRecord, readJsonBody } from '../_shared/requestSecurity.ts'
+import { logFailure } from '../_shared/observability.ts'
+import { requireTurnstile } from '../_shared/turnstile.ts'
 
 function json(body: unknown, status = 200, req?: Request): Response {
   return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders(req), 'Content-Type': 'application/json' } })
@@ -15,20 +18,30 @@ const GENERIC_RESPONSE = { ok: true, message: 'If that email has an account, a r
 if (import.meta.main) {
   Deno.serve(async req => {
     if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders(req) })
+    if (req.method !== 'POST') return json(GENERIC_RESPONSE, 405, req)
 
     try {
-      const limited = await enforceRateLimit(req, 'password-reset', 5, 900)
-      if (limited) return limited
-      const { email } = await req.json()
-      if (!email || typeof email !== 'string') {
+      const parsedBody = await readJsonBody(req, 8 * 1024)
+      if (parsedBody.error) return json(GENERIC_RESPONSE, 200, req)
+      const body = isRecord(parsedBody.data) ? parsedBody.data : {}
+      const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : ''
+      if (!email) {
         return json({ error: 'email is required' }, 400, req)
       }
+      if (email.length > 254 || !/^\S+@\S+\.\S+$/.test(email)) return json(GENERIC_RESPONSE, 200, req)
+      const limited = await enforceRateLimits(req, [
+        { scope: 'password-reset-ip', limit: 10, windowSeconds: 900 },
+        { scope: 'password-reset-account', limit: 5, windowSeconds: 900, identity: email },
+      ])
+      if (limited) return limited
+      const turnstileFailure = await requireTurnstile(req, body.turnstileToken, 'password-reset')
+      if (turnstileFailure) return turnstileFailure
 
-      const anonClient = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!)
-      const { data, error } = await anonClient.rpc('request_password_reset', { p_email: email })
+      const adminClient = createAdminClient()
+      const { data, error } = await adminClient.rpc('request_password_reset', { p_email: email })
 
       if (error) {
-        console.error('request_password_reset RPC failed', error)
+        logFailure(req, { function_name: 'request-password-reset', operation: 'create_reset_token', error_category: 'DATABASE_ERROR', error_code: error.code ?? 'unknown', status: 500 })
         // Still return the generic response — don't let an internal error leak whether the email matched.
         return json(GENERIC_RESPONSE, 200, req)
       }
@@ -42,15 +55,15 @@ if (import.meta.main) {
         try {
           const sender = createSenderFromEnv(Deno.env)
           const result = await sendEmail(sender.sendMail, { from: sender.from, to: email, content })
-          if (!result.ok) console.error('Password reset email send failed', result.error)
+          if (!result.ok) logFailure(req, { function_name: 'request-password-reset', operation: 'send_reset_email', error_category: 'DEPENDENCY_ERROR', provider: 'email', outcome: 'provider_rejected', status: 502 })
         } catch (err) {
-          console.error('Email sending is not configured', err)
+          logFailure(req, { function_name: 'request-password-reset', operation: 'send_reset_email', error_category: 'DEPENDENCY_ERROR', error_code: err instanceof Error ? err.name : 'UnknownError', provider: 'email', status: 503 })
         }
       }
 
       return json(GENERIC_RESPONSE, 200, req)
     } catch (err) {
-      console.error('request-password-reset error', err)
+      logFailure(req, { function_name: 'request-password-reset', operation: 'request_reset', error_category: 'INTERNAL_ERROR', error_code: err instanceof Error ? err.name : 'UnknownError', status: 500 })
       return json(GENERIC_RESPONSE, 200, req)
     }
   })

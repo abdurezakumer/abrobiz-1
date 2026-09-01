@@ -10,7 +10,13 @@ export function friendlyError(error: unknown): string {
   if (/JWT expired/i.test(msg)) return 'Your session expired — please log in again.'
   if (/exceeded the maximum/i.test(msg) || /Payload too large/i.test(msg)) return 'That file is too large.'
   if (/Bucket not found/i.test(msg)) return "Storage isn't set up correctly yet — contact support."
-  return msg || 'Something went wrong. Please try again.'
+  if (/use a (JPEG|PNG|WebP)|file type/i.test(msg)) return 'That file type or size is not supported.'
+  if (/not authenticated|admins only|permission denied/i.test(msg)) return 'Please sign in again and try once more.'
+  if (/subdomain.*(taken|reserved)|slug.*(taken|reserved)/i.test(msg)) return 'That website address is unavailable. Please choose another.'
+  if (/github|repository|template/i.test(msg)) return 'That template could not be imported. Check the public GitHub repository link.'
+  if (/email.*(service|send)|verification.*email/i.test(msg)) return 'The AbroBiz email service is temporarily unavailable. Please try again later.'
+  if (/invalid or expired|already been used|reset link|verification link/i.test(msg)) return 'That link is invalid or expired. Please request a new one.'
+  return 'Something went wrong. Please try again.'
 }
 
 /** Supabase FunctionsHttpError keeps the JSON response in `context`, while

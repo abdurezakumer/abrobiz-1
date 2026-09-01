@@ -40,16 +40,22 @@ function mapPayment(row: any): Payment {
 }
 
 export async function uploadPaymentProof(businessId: string, file: File): Promise<string> {
-  const ext = file.name.split('.').pop() || 'jpg'
-  const path = `${businessId}/${Date.now()}.${ext}`
-  const { error } = await supabase.storage.from('payment-proofs').upload(path, file)
+  if (file.size > 10 * 1024 * 1024 || !['image/jpeg', 'image/png', 'image/webp', 'application/pdf'].includes(file.type)) {
+    throw new Error('Use a JPEG, PNG, WebP, or PDF file up to 10 MB.')
+  }
+  const { data, error } = await supabase.functions.invoke('storage-upload', {
+    body: file,
+    headers: { 'X-Upload-Bucket': 'payment-proofs', 'X-Business-Id': businessId, 'Content-Type': file.type },
+  })
   if (error) throw error
-  return path // private bucket: store the path, resolve signed URLs on read
+  if (!data?.path) throw new Error('Upload did not return a file path.')
+  return data.path // private bucket: resolve signed URLs on read
 }
 
 export async function getPaymentProofUrl(path: string): Promise<string> {
-  const { data, error } = await supabase.storage.from('payment-proofs').createSignedUrl(path, 60 * 10)
+  const { data, error } = await supabase.functions.invoke('storage-signed-url', { body: { path } })
   if (error) throw error
+  if (!data?.signedUrl) throw new Error('Could not prepare the file.')
   return data.signedUrl
 }
 
@@ -61,31 +67,23 @@ export async function submitPayment(input: {
   paymentMethodId: string
   proofPath: string
   ownerNote?: string
+  idempotencyKey?: string
 }): Promise<Payment> {
-  const { data, error } = await supabase
-    .from('payments')
-    .insert({
-      business_id: input.businessId,
-      plan_id: input.planId,
-      billing_cycle: input.billingCycle,
-      amount_etb: input.amountEtb,
-      payment_method_id: input.paymentMethodId,
-      proof_url: input.proofPath,
-      owner_note: input.ownerNote ?? '',
-      status: 'pending',
-    })
-    .select()
-    .single()
+  const { data, error } = await supabase.functions.invoke('submit-payment', {
+    headers: { 'Idempotency-Key': input.idempotencyKey ?? crypto.randomUUID() },
+    body: input,
+  })
   if (error) throw error
-  return mapPayment(data)
+  return mapPayment(data.payment)
 }
 
 export async function listPaymentsForBusiness(businessId: string): Promise<Payment[]> {
   const { data, error } = await supabase
     .from('payments')
-    .select('*, plans(*)')
+    .select('id, business_id, plan_id, billing_cycle, amount_etb, payment_method_id, proof_url, owner_note, status, reviewed_by, reviewed_at, rejection_reason, created_at, plans(id, slug, name, price_etb, billing_interval, features, feature_flags, is_trial, trial_days, is_active, sort_order)')
     .eq('business_id', businessId)
     .order('created_at', { ascending: false })
+    .limit(200)
   if (error) throw error
   return (data ?? []).map(mapPayment)
 }
@@ -95,9 +93,10 @@ export async function listPaymentsForBusiness(businessId: string): Promise<Payme
 export async function adminListPendingPayments(): Promise<Payment[]> {
   const { data, error } = await supabase
     .from('payments')
-    .select('*, plans(*), businesses(name, slug)')
+    .select('id, business_id, plan_id, billing_cycle, amount_etb, payment_method_id, proof_url, owner_note, status, reviewed_by, reviewed_at, rejection_reason, created_at, plans(id, slug, name, price_etb, billing_interval, features, feature_flags, is_trial, trial_days, is_active, sort_order), businesses(name, slug)')
     .eq('status', 'pending')
     .order('created_at', { ascending: true })
+    .limit(200)
   if (error) throw error
   return (data ?? []).map(mapPayment)
 }
@@ -105,7 +104,7 @@ export async function adminListPendingPayments(): Promise<Payment[]> {
 export async function adminListAllPayments(): Promise<Payment[]> {
   const { data, error } = await supabase
     .from('payments')
-    .select('*, plans(*), businesses(name, slug)')
+    .select('id, business_id, plan_id, billing_cycle, amount_etb, payment_method_id, proof_url, owner_note, status, reviewed_by, reviewed_at, rejection_reason, created_at, plans(id, slug, name, price_etb, billing_interval, features, feature_flags, is_trial, trial_days, is_active, sort_order), businesses(name, slug)')
     .order('created_at', { ascending: false })
     .limit(200)
   if (error) throw error

@@ -1,4 +1,5 @@
 import { supabase } from '../supabaseClient'
+import { safeHttpsUrl } from '../safeUrl'
 
 export interface TelegramLinkStatus {
   linkToken: string
@@ -9,8 +10,8 @@ export interface TelegramLinkStatus {
 const BOT_USERNAME = import.meta.env.VITE_TELEGRAM_BOT_USERNAME as string | undefined
 
 export function telegramDeepLink(linkToken: string): string | null {
-  if (!BOT_USERNAME) return null
-  return `https://t.me/${BOT_USERNAME}?start=${linkToken}`
+  if (!BOT_USERNAME || !/^[A-Za-z0-9_]{5,32}$/.test(BOT_USERNAME)) return null
+  return safeHttpsUrl(`https://t.me/${BOT_USERNAME}?start=${encodeURIComponent(linkToken)}`)
 }
 
 export async function getOrCreateBusinessTelegramLink(businessId: string): Promise<TelegramLinkStatus> {
@@ -52,6 +53,7 @@ export async function notifyAdminsOfPayment(paymentId: string): Promise<void> {
   try {
     await supabase.functions.invoke('notify-payment-submitted', { body: { paymentId } })
   } catch (err) {
-    console.warn('Telegram notification failed (payment still submitted normally):', err)
+    // Telegram is non-critical for payment submission. Keep provider errors
+    // out of the browser console; the Edge Function records safe diagnostics.
   }
 }

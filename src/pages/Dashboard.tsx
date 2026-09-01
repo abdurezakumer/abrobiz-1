@@ -101,7 +101,7 @@ export default function Dashboard() {
             {siteUrl}
           </div>
           <button onClick={copyLink} style={iconBtn}>{copied ? <Check size={15} /> : <Copy size={15} />}</button>
-          <a href={siteUrl} target="_blank" rel="noreferrer" style={iconBtn}><ExternalLink size={15} /></a>
+          <a href={siteUrl} target="_blank" rel="noopener noreferrer" style={iconBtn}><ExternalLink size={15} /></a>
         </div>
         {!business.isPublished && (
           <p style={{ fontSize: 12.5, color: '#B45309', marginTop: 10 }}>

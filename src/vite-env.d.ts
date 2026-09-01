@@ -7,6 +7,7 @@ interface ImportMetaEnv {
   readonly VITE_SITE_URL?: string
   readonly VITE_PLATFORM_DOMAIN?: string
   readonly VITE_TELEGRAM_BOT_USERNAME?: string
+  readonly VITE_TURNSTILE_SITE_KEY?: string
 }
 
 interface ImportMeta {

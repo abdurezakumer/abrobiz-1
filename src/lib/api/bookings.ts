@@ -25,15 +25,10 @@ export async function submitBooking(input: {
   requestedDate: string
   requestedTime: string
   notes?: string
+  turnstileToken?: string | null
 }): Promise<void> {
-  const { error } = await supabase.from('bookings').insert({
-    business_id: input.businessId,
-    customer_name: input.customerName,
-    phone: input.phone,
-    party_size: input.partySize ?? null,
-    requested_date: input.requestedDate,
-    requested_time: input.requestedTime,
-    notes: input.notes ?? '',
+  const { error } = await supabase.functions.invoke('submit-booking', {
+    body: input,
   })
   if (error) throw error
 }
@@ -41,9 +36,10 @@ export async function submitBooking(input: {
 export async function listBookings(businessId: string): Promise<Booking[]> {
   const { data, error } = await supabase
     .from('bookings')
-    .select('*')
+    .select('id, business_id, customer_name, phone, party_size, requested_date, requested_time, notes, status, created_at')
     .eq('business_id', businessId)
     .order('requested_date', { ascending: true })
+    .limit(200)
   if (error) throw error
   return (data ?? []).map(mapBooking)
 }

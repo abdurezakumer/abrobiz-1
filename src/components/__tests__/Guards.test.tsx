@@ -56,7 +56,7 @@ describe('RequireOwner', () => {
 
   it('sends an admin account to /admin, not the owner dashboard', () => {
     mockUseAuth.mockReturnValue({
-      session: { user: { id: 'u1' } }, profile: { role: 'admin' }, business: null, loading: false,
+        session: { user: { id: 'u1', email: 'admin@example.com' } }, profile: { role: 'admin', emailVerifiedAt: 'now', termsAcceptedAt: 'now', privacyAcceptedAt: 'now', legalVersion: '2026-01' }, business: null, loading: false,
     })
     renderWithRoute(<RequireOwner><div>Owner area</div></RequireOwner>)
     expect(screen.getByText('Admin Page')).toBeInTheDocument()
@@ -64,7 +64,7 @@ describe('RequireOwner', () => {
 
   it('sends an owner with no business yet to /setup', () => {
     mockUseAuth.mockReturnValue({
-      session: { user: { id: 'u1' } }, profile: { role: 'owner' }, business: null, loading: false,
+        session: { user: { id: 'u1', email: 'owner@example.com' } }, profile: { role: 'owner', emailVerifiedAt: 'now', termsAcceptedAt: 'now', privacyAcceptedAt: 'now', legalVersion: '2026-01' }, business: null, loading: false,
     })
     renderWithRoute(<RequireOwner><div>Owner area</div></RequireOwner>)
     expect(screen.getByText('Setup Page')).toBeInTheDocument()
@@ -72,7 +72,7 @@ describe('RequireOwner', () => {
 
   it('renders the owner area once there is a session, an owner profile, and a business', () => {
     mockUseAuth.mockReturnValue({
-      session: { user: { id: 'u1' } }, profile: { role: 'owner' }, business: { id: 'biz1' }, loading: false,
+        session: { user: { id: 'u1', email: 'owner@example.com' } }, profile: { role: 'owner', emailVerifiedAt: 'now', termsAcceptedAt: 'now', privacyAcceptedAt: 'now', legalVersion: '2026-01' }, business: { id: 'biz1' }, loading: false,
     })
     renderWithRoute(<RequireOwner><div>Owner area</div></RequireOwner>)
     expect(screen.getByText('Owner area')).toBeInTheDocument()
@@ -82,7 +82,7 @@ describe('RequireOwner', () => {
 describe('RequireAdmin', () => {
   it('sends a non-admin owner to the owner dashboard, not the admin panel', () => {
     mockUseAuth.mockReturnValue({
-      session: { user: { id: 'u1' } }, profile: { role: 'owner' }, loading: false,
+        session: { user: { id: 'u1', email: 'owner@example.com' } }, profile: { role: 'owner', emailVerifiedAt: 'now', termsAcceptedAt: 'now', privacyAcceptedAt: 'now', legalVersion: '2026-01' }, loading: false,
     })
     renderWithRoute(<RequireAdmin><div>Admin area</div></RequireAdmin>)
     expect(screen.getByText('Dashboard Page')).toBeInTheDocument()
@@ -90,7 +90,7 @@ describe('RequireAdmin', () => {
 
   it('renders the admin area for an actual admin', () => {
     mockUseAuth.mockReturnValue({
-      session: { user: { id: 'u1' } }, profile: { role: 'admin' }, loading: false,
+        session: { user: { id: 'u1', email: 'admin@example.com' } }, profile: { role: 'admin', emailVerifiedAt: 'now', termsAcceptedAt: 'now', privacyAcceptedAt: 'now', legalVersion: '2026-01' }, loading: false,
     })
     renderWithRoute(<RequireAdmin><div>Admin area</div></RequireAdmin>)
     expect(screen.getByText('Admin area')).toBeInTheDocument()
@@ -106,7 +106,7 @@ describe('RequireGuest', () => {
 
   it('bounces an already-logged-in owner away from the login page to their dashboard', () => {
     mockUseAuth.mockReturnValue({
-      session: { user: { id: 'u1' } }, profile: { role: 'owner' }, business: { id: 'biz1' }, loading: false,
+        session: { user: { id: 'u1', email: 'owner@example.com' } }, profile: { role: 'owner', emailVerifiedAt: 'now', termsAcceptedAt: 'now', privacyAcceptedAt: 'now', legalVersion: '2026-01' }, business: { id: 'biz1' }, loading: false,
     })
     renderWithRoute(<RequireGuest><div>Login form</div></RequireGuest>)
     expect(screen.getByText('Dashboard Page')).toBeInTheDocument()

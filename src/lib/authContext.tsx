@@ -31,30 +31,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSubscription(null)
       return
     }
-    // Keep authentication usable while optional Phase 5 migrations are being
-    // rolled out. The core profile columns exist in the base schema; the
-    // verification timestamp is loaded separately and may not exist yet.
-    const { data: profileRow } = await supabase
+    setProfile(null)
+    setBusiness(null)
+    setSubscription(null)
+    const { data: profileRow, error: profileError } = await supabase
       .from('profiles')
-      .select('id, role, name, phone')
+      .select('id, role, name, phone, email_verified_at, terms_accepted_at, privacy_accepted_at, legal_version')
       .eq('id', s.user.id)
       .single()
 
     if (profileRow) {
-      const { data: verificationRow } = await supabase
-        .from('profiles')
-        .select('email_verified_at')
-        .eq('id', s.user.id)
-        .maybeSingle()
-
       setProfile({
         id: profileRow.id,
         role: profileRow.role,
         name: profileRow.name,
         phone: profileRow.phone,
         email: s.user.email ?? undefined,
-        emailVerifiedAt: verificationRow?.email_verified_at ?? null,
+        emailVerifiedAt: profileRow.email_verified_at ?? null,
+        termsAcceptedAt: profileRow.terms_accepted_at ?? null,
+        privacyAcceptedAt: profileRow.privacy_accepted_at ?? null,
+        legalVersion: profileRow.legal_version ?? null,
       })
+    } else if (profileError) {
+      // Keep existing sessions readable during the migration rollout. The
+      // production migration adds the full selection above.
+      const { data: legacyProfile } = await supabase
+        .from('profiles')
+        .select('id, role, name, phone, email_verified_at')
+        .eq('id', s.user.id)
+        .single()
+      if (legacyProfile) {
+        setProfile({
+          id: legacyProfile.id,
+          role: legacyProfile.role,
+          name: legacyProfile.name,
+          phone: legacyProfile.phone,
+          email: s.user.email ?? undefined,
+          emailVerifiedAt: legacyProfile.email_verified_at ?? null,
+        })
+      } else {
+        setProfile(null)
+      }
     }
 
     if (profileRow?.role === 'owner') {

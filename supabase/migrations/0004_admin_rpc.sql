@@ -64,6 +64,9 @@ begin
 end;
 $$;
 
+revoke all on function public.admin_approve_payment(uuid) from public;
+grant execute on function public.admin_approve_payment(uuid) to authenticated, service_role;
+
 create function public.admin_reject_payment(p_payment_id uuid, p_reason text)
 returns public.payments
 language plpgsql
@@ -101,3 +104,6 @@ begin
   return v_payment;
 end;
 $$;
+
+revoke all on function public.admin_reject_payment(uuid, text) from public;
+grant execute on function public.admin_reject_payment(uuid, text) to authenticated, service_role;

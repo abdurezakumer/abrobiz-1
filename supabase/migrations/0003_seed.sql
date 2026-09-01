@@ -33,15 +33,9 @@ values
 on conflict (slug) do nothing;
 
 -- ── Payment methods ──────────────────────────────────────────────────────────
--- Replace account numbers with your real ones from the Admin panel before
--- going live — these are placeholders so the Billing page has something to
--- show immediately.
-
-insert into public.payment_methods (name, account_name, account_number, instructions, is_active, sort_order)
-values
-  ('Telebirr', 'Your Business Name', '09XXXXXXXX', 'Send the exact plan amount, then upload your screenshot below.', true, 0),
-  ('CBE Bank Transfer', 'Your Business Name', '1000XXXXXXXX', 'Transfer the exact plan amount, then upload your receipt below.', true, 1)
-on conflict do nothing;
+-- Payment methods are intentionally not seeded. Placeholder account numbers
+-- must never be active in production. Create real methods from the Admin panel
+-- after deployment.
 
 -- ============================================================================
 -- IMPORTANT — creating your admin account

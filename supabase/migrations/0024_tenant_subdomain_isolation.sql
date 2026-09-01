@@ -45,3 +45,45 @@ $$;
 
 revoke all on function public.get_my_business() from public;
 grant execute on function public.get_my_business() to authenticated;
+
+-- A blocked tenant must disappear from every public storefront relation, not
+-- only from the business row itself. Owners and admins retain dashboard access.
+drop policy if exists "businesses_select" on public.businesses;
+create policy "businesses_select" on public.businesses
+  for select using (public.is_admin() or owner_id = auth.uid() or (is_published and not is_blocked));
+
+drop policy if exists "categories_select" on public.categories;
+create policy "categories_select" on public.categories
+  for select using (
+    public.is_admin()
+    or exists (
+      select 1 from public.businesses b
+      where b.id = public.categories.business_id
+        and (b.owner_id = auth.uid() or (b.is_published and not b.is_blocked))
+    )
+  );
+
+drop policy if exists "items_select" on public.items;
+create policy "items_select" on public.items
+  for select using (
+    public.is_admin()
+    or exists (
+      select 1 from public.businesses b
+      where b.id = public.items.business_id
+        and (b.owner_id = auth.uid() or (b.is_published and not b.is_blocked))
+    )
+  );
+
+drop policy if exists "reviews_select_approved_or_own" on public.reviews;
+create policy "reviews_select_approved_or_own" on public.reviews
+  for select using (
+    public.is_admin()
+    or exists (select 1 from public.businesses b where b.id = public.reviews.business_id and b.owner_id = auth.uid())
+    or (
+      is_approved
+      and exists (
+        select 1 from public.businesses b
+        where b.id = public.reviews.business_id and b.is_published and not b.is_blocked
+      )
+    )
+  );

@@ -8,6 +8,7 @@ import type { StorefrontTheme } from '../lib/storefrontTheme'
 import type { StorefrontEntitlements } from '../lib/useStorefrontData'
 import { t } from '../lib/i18n'
 import { storefrontPath } from '../lib/storefrontUrl'
+import { safeHttpsUrl, safeImageUrl, safeTelegramUrl } from '../lib/safeUrl'
 import AmbientBackdrop from './AmbientBackdrop'
 
 function pageLabel(itemLabel: string): string {
@@ -48,6 +49,10 @@ export default function StorefrontLayout({
     { href: anchor('gallery'), section: 'gallery', label: 'Gallery' },
     { href: anchor('contact'), section: 'contact', label: 'Contact' },
   ]
+  const logoUrl = safeImageUrl(business.logoUrl)
+  const facebookUrl = safeHttpsUrl(business.social.facebookUrl)
+  const instagramUrl = safeHttpsUrl(business.social.instagramUrl)
+  const telegramUrl = safeTelegramUrl(business.social.telegramHandle)
 
   return (
     <div style={{ position: 'relative', minHeight: '100vh', background: theme.bg, color: theme.text, fontFamily: 'Inter, sans-serif', display: 'flex', flexDirection: 'column' }}>
@@ -59,8 +64,8 @@ export default function StorefrontLayout({
         }}
       >
         <Link to={base} style={{ display: 'flex', alignItems: 'center', gap: 9, textDecoration: 'none', color: theme.text }}>
-          {business.logoUrl ? (
-            <img src={business.logoUrl} alt={business.name} style={{ width: 30, height: 30, borderRadius: '50%', objectFit: 'cover' }} />
+          {logoUrl ? (
+            <img src={logoUrl} alt={business.name} width={30} height={30} decoding="async" style={{ width: 30, height: 30, borderRadius: '50%', objectFit: 'cover' }} />
           ) : (
             <div style={{ width: 30, height: 30, borderRadius: '50%', background: business.accentColor, flexShrink: 0 }} />
           )}
@@ -132,9 +137,9 @@ export default function StorefrontLayout({
         <div style={{ maxWidth: 720, margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
           <span style={{ fontSize: 11.5, color: theme.textDim }}>{t('poweredBy', lang)} AbroBiz</span>
           <div style={{ display: 'flex', gap: 10 }}>
-            {business.social.facebookUrl && <a href={business.social.facebookUrl} target="_blank" rel="noreferrer" style={socialIcon(theme)}><Facebook size={13} /></a>}
-            {business.social.instagramUrl && <a href={business.social.instagramUrl} target="_blank" rel="noreferrer" style={socialIcon(theme)}><Instagram size={13} /></a>}
-            {business.social.telegramHandle && <a href={`https://t.me/${business.social.telegramHandle.replace('@', '')}`} target="_blank" rel="noreferrer" style={socialIcon(theme)}><Send size={13} /></a>}
+            {facebookUrl && <a href={facebookUrl} target="_blank" rel="noopener noreferrer" style={socialIcon(theme)}><Facebook size={13} /></a>}
+            {instagramUrl && <a href={instagramUrl} target="_blank" rel="noopener noreferrer" style={socialIcon(theme)}><Instagram size={13} /></a>}
+            {telegramUrl && <a href={telegramUrl} target="_blank" rel="noopener noreferrer" style={socialIcon(theme)}><Send size={13} /></a>}
           </div>
         </div>
       </footer>

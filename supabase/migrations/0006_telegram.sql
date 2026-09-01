@@ -7,11 +7,11 @@
 -- ============================================================================
 
 create table public.admin_telegram_links (
-  id uuid primary key default gen_random_uuid(),
+  id uuid primary key default extensions.gen_random_uuid(),
   admin_id uuid not null unique references public.profiles (id) on delete cascade,
   telegram_chat_id text,
   telegram_username text,
-  link_token text not null default encode(gen_random_bytes(16), 'hex'),
+  link_token text not null default encode(extensions.gen_random_bytes(16), 'hex'),
   linked_at timestamptz
 );
 

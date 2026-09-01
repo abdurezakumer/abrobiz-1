@@ -11,9 +11,9 @@
 alter table public.profiles add column if not exists email_verified_at timestamptz;
 
 create table public.email_verification_tokens (
-  id uuid primary key default gen_random_uuid(),
+  id uuid primary key default extensions.gen_random_uuid(),
   user_id uuid not null references public.profiles (id) on delete cascade,
-  token text not null unique default encode(gen_random_bytes(24), 'hex'),
+  token text not null unique default encode(extensions.gen_random_bytes(24), 'hex'),
   expires_at timestamptz not null default (now() + interval '24 hours'),
   used_at timestamptz,
   created_at timestamptz not null default now()

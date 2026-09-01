@@ -135,16 +135,23 @@ export async function uploadBusinessImage(
   businessId: string,
   file: File
 ): Promise<string> {
-  const ext = file.name.split('.').pop() || 'jpg'
-  const path = `${businessId}/${Date.now()}.${ext}`
-  const { error } = await supabase.storage.from(bucket).upload(path, file, { upsert: true })
+  if (file.size > 5 * 1024 * 1024 || !['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+    throw new Error('Use a JPEG, PNG, or WebP image up to 5 MB.')
+  }
+  const { data, error } = await supabase.functions.invoke('storage-upload', {
+    body: file,
+    headers: { 'X-Upload-Bucket': bucket, 'X-Business-Id': businessId, 'Content-Type': file.type },
+  })
   if (error) throw error
-  const { data } = supabase.storage.from(bucket).getPublicUrl(path)
-  return data.publicUrl
+  if (!data?.path) throw new Error('Upload did not return a file path.')
+  const { data: publicData } = supabase.storage.from(bucket).getPublicUrl(data.path)
+  return publicData.publicUrl
 }
 
 export async function trackPageView(businessId: string, path: string): Promise<void> {
-  await supabase.rpc('track_page_view', { p_business_id: businessId, p_path: path, p_referrer: document.referrer || '' })
+  await supabase.functions.invoke('track-page-view', {
+    body: { businessId, path, referrer: document.referrer || '' },
+  })
 }
 
 export async function getBusinessEntitlements(businessId: string): Promise<{ bookings: boolean; ordering: boolean; reviews: boolean }> {
@@ -167,6 +174,7 @@ export async function adminListBusinesses(): Promise<AdminBusinessRow[]> {
     .from('businesses')
     .select('*, profiles!businesses_owner_id_fkey(name), subscriptions(status, end_date)')
     .order('created_at', { ascending: false })
+    .limit(1000)
   if (error) throw error
   return (data ?? []).map((row: any) => ({
     ...mapBusiness(row),

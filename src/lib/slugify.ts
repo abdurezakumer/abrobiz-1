@@ -1,6 +1,8 @@
 export const RESERVED_BUSINESS_SLUGS = new Set([
   'www', 'app', 'admin', 'api', 'mail', 'smtp', 'auth', 'dashboard',
   'login', 'register', 'setup', 'support', 'status', 'static', 'cdn',
+  'ftp', 'dev', 'staging', 'test', 'billing', 'payments', 'storage',
+  'assets',
 ])
 
 export function slugify(input: string): string {

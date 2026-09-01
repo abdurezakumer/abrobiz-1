@@ -18,9 +18,10 @@ function mapItem(row: any): Item {
 export async function listItems(businessId: string): Promise<Item[]> {
   const { data, error } = await supabase
     .from('items')
-    .select('*')
+    .select('id, business_id, category_id, image_url, price, is_available, is_featured, sort_order, translations, created_at')
     .eq('business_id', businessId)
     .order('sort_order', { ascending: true })
+    .limit(500)
   if (error) throw error
   return (data ?? []).map(mapItem)
 }
@@ -75,10 +76,19 @@ export async function deleteItem(id: string): Promise<void> {
 }
 
 export async function uploadItemImage(businessId: string, file: File): Promise<string> {
-  const ext = file.name.split('.').pop() || 'jpg'
-  const path = `${businessId}/${Date.now()}.${ext}`
-  const { error } = await supabase.storage.from('item-images').upload(path, file, { upsert: true })
+  assertImageFile(file)
+  const { data, error } = await supabase.functions.invoke('storage-upload', {
+    body: file,
+    headers: { 'X-Upload-Bucket': 'item-images', 'X-Business-Id': businessId, 'Content-Type': file.type },
+  })
   if (error) throw error
-  const { data } = supabase.storage.from('item-images').getPublicUrl(path)
-  return data.publicUrl
+  if (!data?.path) throw new Error('Upload did not return a file path.')
+  const { data: publicData } = supabase.storage.from('item-images').getPublicUrl(data.path)
+  return publicData.publicUrl
+}
+
+function assertImageFile(file: File): void {
+  if (file.size > 5 * 1024 * 1024 || !['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+    throw new Error('Use a JPEG, PNG, or WebP image up to 5 MB.')
+  }
 }

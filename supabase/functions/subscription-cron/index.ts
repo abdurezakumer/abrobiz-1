@@ -1,6 +1,9 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.45.4'
 import { createAdminClient } from '../_shared/db.ts'
 import { TelegramClient } from '../_shared/telegram.ts'
+import { checkBearerSecret } from '../_shared/endpointSecurity.ts'
+import { readBoundedBody } from '../_shared/requestSecurity.ts'
+import { logFailure } from '../_shared/observability.ts'
 
 export interface CronResult {
   expiredCount: number
@@ -31,11 +34,19 @@ async function expireOverdueSubscriptions(db: SupabaseClient, tg: TelegramClient
     .select('id, business_id, businesses(owner_id, name)')
     .in('status', ['trial', 'active'])
     .lt('end_date', today)
+    .limit(1000)
 
   if (!overdue || overdue.length === 0) return 0
 
   for (const sub of overdue) {
-    await db.from('subscriptions').update({ status: 'expired', updated_at: new Date().toISOString() }).eq('id', sub.id)
+    const { data: claimed } = await db
+      .from('subscriptions')
+      .update({ status: 'expired', updated_at: new Date().toISOString() })
+      .eq('id', sub.id)
+      .in('status', ['trial', 'active'])
+      .select('id')
+      .maybeSingle()
+    if (!claimed) continue
 
     const ownerId = (sub as any).businesses?.owner_id
     const businessName = (sub as any).businesses?.name ?? 'Your business'
@@ -63,11 +74,19 @@ async function sendUpcomingExpiryReminders(db: SupabaseClient, tg: TelegramClien
     .in('status', ['trial', 'active'])
     .eq('end_date', reminderDate)
     .is('reminder_sent_at', null)
+    .limit(1000)
 
   if (!soonToExpire || soonToExpire.length === 0) return 0
 
   for (const sub of soonToExpire) {
-    await db.from('subscriptions').update({ reminder_sent_at: new Date().toISOString() }).eq('id', sub.id)
+    const { data: claimed } = await db
+      .from('subscriptions')
+      .update({ reminder_sent_at: new Date().toISOString() })
+      .eq('id', sub.id)
+      .is('reminder_sent_at', null)
+      .select('id')
+      .maybeSingle()
+    if (!claimed) continue
 
     const ownerId = (sub as any).businesses?.owner_id
     const businessName = (sub as any).businesses?.name ?? 'Your business'
@@ -109,23 +128,27 @@ function addDays(isoDate: string, days: number): string {
 
 if (import.meta.main) {
   Deno.serve(async req => {
-    const expected = Deno.env.get('CRON_SECRET')
-    if (expected) {
-      const got = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '')
-      if (got !== expected) {
-        return new Response('Unauthorized', { status: 401 })
-      }
+    if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 })
+    const authStatus = checkBearerSecret(req.headers.get('Authorization'), Deno.env.get('CRON_SECRET'))
+    if (authStatus === 'missing') {
+      return new Response('Service unavailable', { status: 503 })
+    }
+    if (authStatus === 'invalid') {
+      return new Response('Unauthorized', { status: 401 })
     }
 
     try {
+      const bounded = await readBoundedBody(req, 1024)
+      if (bounded.error) return new Response(JSON.stringify({ error: bounded.error }), { status: bounded.status ?? 413, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } })
       const db = createAdminClient()
+      await db.rpc('purge_phase3_request_state').catch(error => logFailure(req, { function_name: 'subscription-cron', operation: 'purge_request_state', error_category: 'DATABASE_ERROR', error_code: error instanceof Error ? error.name : 'UnknownError', status: 500 }))
       const token = Deno.env.get('TELEGRAM_BOT_TOKEN')
       const tg = token ? new TelegramClient(token) : null
       const result = await runSubscriptionCron(db, tg)
-      return new Response(JSON.stringify(result), { headers: { 'Content-Type': 'application/json' } })
+      return new Response(JSON.stringify(result), { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } })
     } catch (err) {
-      console.error('subscription-cron error', err)
-      return new Response(JSON.stringify({ error: String(err) }), { status: 500 })
+      logFailure(req, { function_name: 'subscription-cron', operation: 'subscription_maintenance', error_category: 'INTERNAL_ERROR', error_code: err instanceof Error ? err.name : 'UnknownError', status: 500 })
+      return new Response(JSON.stringify({ error: 'Scheduled task failed' }), { status: 500, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } })
     }
   })
 }

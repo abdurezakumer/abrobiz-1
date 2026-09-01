@@ -10,6 +10,7 @@ import { isValidBusinessSlug, slugify } from '../lib/slugify'
 import { listActiveTemplates, mergeTemplateOptions } from '../lib/api/templates'
 import { friendlyError } from '../lib/errors'
 import type { BusinessCategory, Template, TemplateSlug } from '../types'
+import { safeImageUrl } from '../lib/safeUrl'
 
 const DEFAULT_TEMPLATES: Template[] = [
   { id: 'modern-dark', slug: 'modern-dark', name: 'Modern Dark', description: 'Bold, moody, great for evening/nightlife spots', config: { bg: '#111318' }, isBuiltin: true, isActive: true, sortOrder: 10, createdAt: '' },
@@ -197,7 +198,7 @@ export default function SetupWizard() {
                           border: selected ? '1.5px solid #D4A853' : '1.5px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)',
                         }}
                       >
-                        <div style={{ height: 70, background: tpl.previewUrl ? `url(${tpl.previewUrl}) center/cover` : tpl.config.bg ?? '#F6F3EE' }} />
+                        <div style={{ height: 70, background: safeImageUrl(tpl.previewUrl) ? `url("${safeImageUrl(tpl.previewUrl)}") center/cover` : tpl.config.bg ?? '#F6F3EE' }} />
                         <div style={{ padding: 12 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                             <span style={{ fontSize: 13.5, fontWeight: 600, color: '#F0EDE7' }}>{tpl.name}</span>

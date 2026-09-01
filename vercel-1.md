@@ -212,7 +212,7 @@ Supabase CLI).
 ```text
 APP_NAME=AbroBiz
 SITE_URL=https://abrobiz.com
-CORS_ORIGINS=https://abrobiz.com,https://www.abrobiz.com,http://localhost:5173,http://127.0.0.1:5173
+CORS_ALLOWED_ORIGINS=https://abrobiz.com,https://www.abrobiz.com,http://localhost:5173,http://127.0.0.1:5173
 MAIL_SERVER=smtp.gmail.com
 MAIL_PORT=587
 MAIL_USERNAME=oneabdre@gmail.com
@@ -243,7 +243,7 @@ CLI form:
 supabase.cmd secrets set --project-ref $env:SUPABASE_PROJECT_REF `
   APP_NAME="AbroBiz" `
   SITE_URL="https://abrobiz.com" `
-  CORS_ORIGINS="https://abrobiz.com,https://www.abrobiz.com,http://localhost:5173,http://127.0.0.1:5173" `
+  CORS_ALLOWED_ORIGINS="https://abrobiz.com,https://www.abrobiz.com,http://localhost:5173,http://127.0.0.1:5173" `
   MAIL_SERVER="smtp.gmail.com" `
   MAIL_PORT="587" `
   MAIL_USERNAME="oneabdre@gmail.com" `
@@ -260,7 +260,7 @@ supabase.cmd secrets list --project-ref $env:SUPABASE_PROJECT_REF
 ```
 
 The output must contain the names, not values, for `APP_NAME`, `SITE_URL`,
-`CORS_ORIGINS`, `MAIL_SERVER`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`,
+`CORS_ALLOWED_ORIGINS`, `MAIL_SERVER`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`,
 `MAIL_USE_TLS`, and `MAIL_FROM`.
 
 For Resend, it must also contain `RESEND_API_KEY`, `EMAIL_DOMAIN`, and
@@ -448,7 +448,7 @@ rejected the message; inspect the function log without sharing secrets.
 
 ### Vercel works but localhost does not
 
-Confirm `CORS_ORIGINS` contains both localhost origins, redeploy the Supabase
+Confirm `CORS_ALLOWED_ORIGINS` contains both localhost origins, redeploy the Supabase
 functions, and restart the Vite dev server. Vite reads environment values at
 startup/build time.
 

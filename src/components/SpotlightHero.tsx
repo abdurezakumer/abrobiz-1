@@ -1,6 +1,7 @@
 import { useRef, useState, type ReactNode } from 'react'
 import { motion, useMotionValue, useSpring, useMotionTemplate } from 'framer-motion'
 import type { StorefrontVisualStyle, TemplateSlug } from '../types'
+import { safeImageUrl } from '../lib/safeUrl'
 
 const prefersReducedMotion = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
 
@@ -15,6 +16,7 @@ export default function SpotlightHero({
   coverUrl?: string
   heroBg?: string
 }) {
+  const safeCoverUrl = safeImageUrl(coverUrl)
   const ref = useRef<HTMLDivElement>(null)
   const [hovering, setHovering] = useState(false)
   const mx = useMotionValue(50)
@@ -39,11 +41,11 @@ export default function SpotlightHero({
       onMouseLeave={() => setHovering(false)}
       style={{
         position: 'relative', overflow: 'hidden', minHeight,
-        ...(coverUrl && { background: `linear-gradient(rgba(0,0,0,0.4), rgba(0,0,0,0.6)), url(${coverUrl}) center/cover` }),
-        ...(!coverUrl && heroBg && { background: heroBg }),
+        ...(safeCoverUrl && { background: `linear-gradient(rgba(0,0,0,0.4), rgba(0,0,0,0.6)), url("${safeCoverUrl}") center/cover` }),
+        ...(!safeCoverUrl && heroBg && { background: heroBg }),
       }}
     >
-      {!coverUrl && <Backdrop templateSlug={templateSlug} visualStyle={visualStyle} accentColor={accentColor} />}
+      {!safeCoverUrl && <Backdrop templateSlug={templateSlug} visualStyle={visualStyle} accentColor={accentColor} />}
 
       {!prefersReducedMotion && (
         <motion.div

@@ -5,7 +5,7 @@
 -- project, before 0002_policies.sql and 0003_seed.sql.
 -- ============================================================================
 
-create extension if not exists pgcrypto;
+create extension if not exists pgcrypto with schema extensions;
 
 -- ── profiles ────────────────────────────────────────────────────────────────
 -- One row per auth.users row. role drives platform-wide vs single-business
@@ -76,7 +76,7 @@ $$;
 -- without any code changes when a new vertical is added.
 
 create table public.business_categories (
-  id uuid primary key default gen_random_uuid(),
+  id uuid primary key default extensions.gen_random_uuid(),
   slug text not null unique,
   label text not null,
   item_label text not null default 'Item',
@@ -92,7 +92,7 @@ create table public.business_categories (
 -- model; easy to relax later by dropping the unique constraint).
 
 create table public.businesses (
-  id uuid primary key default gen_random_uuid(),
+  id uuid primary key default extensions.gen_random_uuid(),
   owner_id uuid not null unique references public.profiles (id) on delete cascade,
   category_id uuid references public.business_categories (id),
   name text not null,
@@ -150,7 +150,7 @@ create trigger businesses_prevent_owner_unblocking
 -- list, or a retail product catalog alike.
 
 create table public.categories (
-  id uuid primary key default gen_random_uuid(),
+  id uuid primary key default extensions.gen_random_uuid(),
   business_id uuid not null references public.businesses (id) on delete cascade,
   name text not null,
   icon text not null default '',
@@ -163,7 +163,7 @@ create table public.categories (
 create index categories_business_id_idx on public.categories (business_id);
 
 create table public.items (
-  id uuid primary key default gen_random_uuid(),
+  id uuid primary key default extensions.gen_random_uuid(),
   business_id uuid not null references public.businesses (id) on delete cascade,
   category_id uuid not null references public.categories (id) on delete cascade,
   image_url text,
@@ -181,7 +181,7 @@ create index items_category_id_idx on public.items (category_id);
 -- Admin-configurable pricing — no hardcoded plan names/prices in the app.
 
 create table public.plans (
-  id uuid primary key default gen_random_uuid(),
+  id uuid primary key default extensions.gen_random_uuid(),
   slug text not null unique,
   name text not null,
   price_etb numeric(12, 2) not null default 0,
@@ -198,7 +198,7 @@ create table public.plans (
 -- Admin-configurable "where to send money" (Telebirr, bank accounts, etc.)
 
 create table public.payment_methods (
-  id uuid primary key default gen_random_uuid(),
+  id uuid primary key default extensions.gen_random_uuid(),
   name text not null,
   account_name text not null default '',
   account_number text not null default '',
@@ -213,7 +213,7 @@ create table public.payment_methods (
 -- payments/renewals lives in the payments table.
 
 create table public.subscriptions (
-  id uuid primary key default gen_random_uuid(),
+  id uuid primary key default extensions.gen_random_uuid(),
   business_id uuid not null unique references public.businesses (id) on delete cascade,
   plan_id uuid references public.plans (id),
   status text not null default 'trial' check (status in ('trial', 'active', 'expired', 'cancelled')),
@@ -232,7 +232,7 @@ create index subscriptions_end_date_idx on public.subscriptions (end_date);
 -- only the admin flow (approve/reject) may update status.
 
 create table public.payments (
-  id uuid primary key default gen_random_uuid(),
+  id uuid primary key default extensions.gen_random_uuid(),
   business_id uuid not null references public.businesses (id) on delete cascade,
   plan_id uuid not null references public.plans (id),
   billing_cycle text not null default 'month',
@@ -255,18 +255,18 @@ create index payments_status_idx on public.payments (status);
 -- Optional linkage so an owner can submit proof / get notified via the bot.
 
 create table public.business_telegram_links (
-  id uuid primary key default gen_random_uuid(),
+  id uuid primary key default extensions.gen_random_uuid(),
   business_id uuid not null unique references public.businesses (id) on delete cascade,
   telegram_chat_id text,
   telegram_username text,
-  link_token text not null default encode(gen_random_bytes(16), 'hex'),
+  link_token text not null default encode(extensions.gen_random_bytes(16), 'hex'),
   linked_at timestamptz
 );
 
 -- ── notifications ───────────────────────────────────────────────────────────
 
 create table public.notifications (
-  id uuid primary key default gen_random_uuid(),
+  id uuid primary key default extensions.gen_random_uuid(),
   user_id uuid not null references public.profiles (id) on delete cascade,
   type text not null,
   title text not null,
@@ -282,7 +282,7 @@ create index notifications_user_id_idx on public.notifications (user_id, is_read
 -- Lightweight storefront analytics.
 
 create table public.page_views (
-  id uuid primary key default gen_random_uuid(),
+  id uuid primary key default extensions.gen_random_uuid(),
   business_id uuid not null references public.businesses (id) on delete cascade,
   path text not null default '',
   referrer text not null default '',
@@ -295,7 +295,7 @@ create index page_views_business_id_idx on public.page_views (business_id, creat
 -- Audit trail for every admin action (block, approve payment, edit plan…).
 
 create table public.admin_logs (
-  id uuid primary key default gen_random_uuid(),
+  id uuid primary key default extensions.gen_random_uuid(),
   admin_id uuid references public.profiles (id),
   action text not null,
   target_table text,

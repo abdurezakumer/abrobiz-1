@@ -3,6 +3,7 @@ dist
 .env
 .env.local
 *.env
+.env.*
 resend-secrets.env
 !.env.example
 *.log

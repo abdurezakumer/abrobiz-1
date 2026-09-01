@@ -10,6 +10,8 @@ import { listBusinessCategories, createBusinessCategory, updateBusinessCategory 
 import { categoryIcon, CATEGORY_ICONS } from '../../lib/icons'
 import { adminListTemplates, importTemplate, setTemplateActive } from '../../lib/api/templates'
 import type { Plan, PaymentMethod, BusinessCategory, Template } from '../../types'
+import { safeHttpsUrl, safeImageUrl } from '../../lib/safeUrl'
+import { friendlyError } from '../../lib/errors'
 
 type Tab = 'plans' | 'methods' | 'categories' | 'templates'
 
@@ -62,7 +64,7 @@ function TemplatesTab() {
 
   function load() {
     setLoading(true)
-    adminListTemplates().then(setTemplates).catch(err => setError(err instanceof Error ? err.message : 'Could not load templates')).finally(() => setLoading(false))
+    adminListTemplates().then(setTemplates).catch(err => setError(friendlyError(err))).finally(() => setLoading(false))
   }
 
   useEffect(load, [])
@@ -76,7 +78,7 @@ function TemplatesTab() {
       setRepoUrl('')
       load()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not import template')
+      setError(friendlyError(err))
     } finally {
       setImporting(false)
     }
@@ -104,10 +106,10 @@ function TemplatesTab() {
         {loading ? <div style={{ color: 'rgba(10,12,16,0.45)', fontSize: 13 }}>Loading…</div> : templates.map(template => (
           <div key={template.id} style={rowStyle}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{ width: 44, height: 34, borderRadius: 7, background: template.previewUrl ? `url(${template.previewUrl}) center/cover` : template.config.bg ?? '#F6F3EE', border: '1px solid rgba(10,12,16,0.08)' }} />
+              <div style={{ width: 44, height: 34, borderRadius: 7, background: safeImageUrl(template.previewUrl) ? `url("${safeImageUrl(template.previewUrl)}") center/cover` : template.config.bg ?? '#F6F3EE', border: '1px solid rgba(10,12,16,0.08)' }} />
               <div>
                 <div style={{ fontSize: 13.5, fontWeight: 600 }}>{template.name} {template.isBuiltin && <span style={{ fontSize: 10.5, color: 'rgba(10,12,16,0.4)', fontWeight: 400 }}>built-in</span>}</div>
-                <div style={{ fontSize: 11.5, color: 'rgba(10,12,16,0.45)' }}>{template.slug}{template.repoUrl ? <a href={template.repoUrl} target="_blank" rel="noreferrer" style={{ marginLeft: 8, color: '#946F1F' }} aria-label={`Open ${template.name} repository`}><ExternalLink size={11} /></a> : null}</div>
+                <div style={{ fontSize: 11.5, color: 'rgba(10,12,16,0.45)' }}>{template.slug}{safeHttpsUrl(template.repoUrl) ? <a href={safeHttpsUrl(template.repoUrl) ?? undefined} target="_blank" rel="noopener noreferrer" style={{ marginLeft: 8, color: '#946F1F' }} aria-label={`Open ${template.name} repository`}><ExternalLink size={11} /></a> : null}</div>
               </div>
             </div>
             <ToggleActive active={template.isActive} onToggle={async () => { await setTemplateActive(template.id, !template.isActive); load() }} />

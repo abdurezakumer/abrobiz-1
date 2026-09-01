@@ -14,7 +14,7 @@ function mapMethod(row: any): PaymentMethod {
 }
 
 export async function listPaymentMethods(activeOnly = true): Promise<PaymentMethod[]> {
-  let query = supabase.from('payment_methods').select('*').order('sort_order', { ascending: true })
+  let query = supabase.from('payment_methods').select('*').order('sort_order', { ascending: true }).limit(100)
   if (activeOnly) query = query.eq('is_active', true)
   const { data, error } = await query
   if (error) throw error

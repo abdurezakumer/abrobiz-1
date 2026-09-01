@@ -1,8 +1,10 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4'
 import { buildAnnouncementEmail } from './email.ts'
 import { createSenderFromEnv, sendEmail } from '../_shared/mailer.ts'
-import { enforceRateLimit } from '../_shared/rateLimit.ts'
+import { enforceRateLimits } from '../_shared/rateLimit.ts'
 import { corsHeaders } from '../_shared/cors.ts'
+import { isBearerAuthorization, isRecord, readJsonBody } from '../_shared/requestSecurity.ts'
+import { logFailure } from '../_shared/observability.ts'
 
 function json(body: unknown, status = 200, req?: Request): Response {
   return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders(req), 'Content-Type': 'application/json' } })
@@ -11,10 +13,11 @@ function json(body: unknown, status = 200, req?: Request): Response {
 if (import.meta.main) {
   Deno.serve(async req => {
     if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders(req) })
+    if (req.method !== 'POST') return json({ error: 'Method not allowed.' }, 405, req)
 
     try {
       const authHeader = req.headers.get('Authorization') ?? ''
-      if (!authHeader) return json({ error: 'Not authenticated' }, 401, req)
+      if (!isBearerAuthorization(authHeader)) return json({ error: 'Not authenticated' }, 401, req)
 
       // Runs entirely on the calling admin's own session — admins can
       // already read every profile (existing RLS), so no service role is
@@ -29,23 +32,37 @@ if (import.meta.main) {
       const { data: callerProfile } = await client.from('profiles').select('role').eq('id', userData.user.id).single()
       if (callerProfile?.role !== 'admin') return json({ error: 'Admins only' }, 403, req)
 
-      const limited = await enforceRateLimit(req, 'announcement', 10, 3600, userData.user.id)
+      const limited = await enforceRateLimits(req, [
+        { scope: 'announcement-ip', limit: 20, windowSeconds: 3600 },
+        { scope: 'announcement-admin', limit: 10, windowSeconds: 3600, identity: userData.user.id },
+      ])
       if (limited) return limited
 
-      const { subject, body } = await req.json()
+      const parsedBody = await readJsonBody(req, 16 * 1024)
+      if (parsedBody.error) return json({ error: parsedBody.error }, parsedBody.status ?? 400, req)
+      const bodyData = isRecord(parsedBody.data) ? parsedBody.data : {}
+      const subject = bodyData.subject
+      const body = bodyData.body
       if (!subject || typeof subject !== 'string' || !body || typeof body !== 'string') {
         return json({ error: 'subject and body are required' }, 400, req)
       }
+      if (subject.length > 200 || body.length > 10000) {
+        return json({ error: 'The announcement is too long.' }, 400, req)
+      }
 
-      const { data: recipients, error: recipientsError } = await client
+      const { data: recipients, error: recipientsError, count: recipientCount } = await client
         .from('profiles')
-        .select('email, name')
+        .select('email, name', { count: 'exact' })
         .eq('role', 'owner')
         .not('email', 'is', null)
+        .limit(1000)
 
       if (recipientsError) {
-        console.error('Could not load recipients', recipientsError)
+        logFailure(req, { function_name: 'send-announcement', operation: 'load_recipients', error_category: 'DATABASE_ERROR', error_code: recipientsError.code ?? 'unknown', status: 500 })
         return json({ error: 'Could not load recipients' }, 500, req)
+      }
+      if ((recipientCount ?? 0) > 1000) {
+        return json({ error: 'This announcement is too large to send in one request.' }, 413, req)
       }
 
       const appName = Deno.env.get('APP_NAME') ?? 'AbroBiz'
@@ -55,7 +72,7 @@ if (import.meta.main) {
       try {
         sender = createSenderFromEnv(Deno.env)
       } catch (err) {
-        console.error(err)
+        logFailure(req, { function_name: 'send-announcement', operation: 'send_announcement_email', error_category: 'DEPENDENCY_ERROR', error_code: err instanceof Error ? err.name : 'UnknownError', provider: 'email', status: 503 })
         return json({ error: 'Email sending is not configured yet' }, 500, req)
       }
 
@@ -67,7 +84,7 @@ if (import.meta.main) {
         if (result.ok) sent++
         else {
           failed++
-          console.error('Failed to send announcement to', recipient.email, result.error)
+        logFailure(req, { function_name: 'send-announcement', operation: 'send_announcement_email', error_category: 'DEPENDENCY_ERROR', provider: 'email', outcome: 'provider_rejected', status: 502 })
         }
       }
 
@@ -80,8 +97,8 @@ if (import.meta.main) {
 
       return json({ ok: true, sent, failed, total: (recipients ?? []).length }, 200, req)
     } catch (err) {
-      console.error('send-announcement error', err)
-      return json({ error: String(err) }, 500, req)
+      logFailure(req, { function_name: 'send-announcement', operation: 'send_announcement', error_category: 'INTERNAL_ERROR', error_code: err instanceof Error ? err.name : 'UnknownError', status: 500 })
+      return json({ error: 'Could not send the announcement.' }, 500, req)
     }
   })
 }

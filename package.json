@@ -14,10 +14,11 @@
     "@supabase/supabase-js": "^2.45.4",
     "framer-motion": "^11.11.9",
     "lucide-react": "^0.453.0",
+    "nanoid": "^3.3.18",
     "qrcode": "^1.5.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "react-router-dom": "^6.28.0",
+    "react-router-dom": "^7.18.3",
     "sonner": "^1.7.0"
   },
   "devDependencies": {

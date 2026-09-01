@@ -35,7 +35,7 @@ function mapSubscription(row: any): Subscription {
 export async function getSubscription(businessId: string): Promise<Subscription | null> {
   const { data, error } = await supabase
     .from('subscriptions')
-    .select('*, plans(*)')
+    .select('id, business_id, plan_id, status, start_date, end_date, auto_renew, created_at, updated_at, plans(id, slug, name, price_etb, billing_interval, features, feature_flags, is_trial, trial_days, is_active, sort_order)')
     .eq('business_id', businessId)
     .maybeSingle()
   if (error) throw error

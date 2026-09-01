@@ -1,4 +1,5 @@
 import nodemailer from 'npm:nodemailer@6.9.16'
+import { fetchWithTimeout, readJsonResponse } from './external.ts'
 
 export interface EmailContent {
   subject: string
@@ -19,12 +20,12 @@ export interface SendMailFn {
 /** Domain email via Resend — the recommended path once you own a real domain. */
 export function createResendSender(apiKey: string): SendMailFn {
   return async msg => {
-    const res = await fetch('https://api.resend.com/emails', {
+    const res = await fetchWithTimeout('https://api.resend.com/emails', {
       method: 'POST',
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(msg),
     })
-    const data = await res.json().catch(() => ({}))
+    const data = await readJsonResponse(res, 64 * 1024).catch(() => ({}))
     if (!res.ok) throw new Error(data?.message ?? `Resend API error (${res.status})`)
     return { messageId: data?.id }
   }
@@ -35,6 +36,9 @@ export function createGmailSender(gmailUser: string, appPassword: string): SendM
   const transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: { user: gmailUser, pass: appPassword },
+    connectionTimeout: 8000,
+    greetingTimeout: 8000,
+    socketTimeout: 10000,
   })
   return msg => transporter.sendMail(msg)
 }
@@ -56,6 +60,9 @@ export function createSmtpSender(opts: {
     secure: opts.port === 465,
     requireTLS: opts.useTls && opts.port !== 465,
     auth: { user: opts.username, pass: password },
+    connectionTimeout: 8000,
+    greetingTimeout: 8000,
+    socketTimeout: 10000,
   })
   return msg => transporter.sendMail(msg)
 }

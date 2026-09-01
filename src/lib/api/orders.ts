@@ -37,15 +37,12 @@ export async function submitOrder(input: {
   address: string
   notes: string
   items: CartLine[]
+  idempotencyKey?: string
+  turnstileToken?: string | null
 }): Promise<{ id: string; totalEtb: number }> {
-  const { data, error } = await supabase.rpc('submit_order', {
-    p_business_id: input.businessId,
-    p_customer_name: input.customerName,
-    p_phone: input.phone,
-    p_fulfillment_type: input.fulfillmentType,
-    p_address: input.address,
-    p_notes: input.notes,
-    p_items: input.items.map(i => ({ item_id: i.itemId, quantity: i.quantity })),
+  const { data, error } = await supabase.functions.invoke('submit-order', {
+    headers: { 'Idempotency-Key': input.idempotencyKey ?? crypto.randomUUID() },
+    body: input,
   })
   if (error) throw error
   return { id: data.id, totalEtb: Number(data.total_etb) }
@@ -54,9 +51,10 @@ export async function submitOrder(input: {
 export async function listOrders(businessId: string): Promise<Order[]> {
   const { data, error } = await supabase
     .from('orders')
-    .select('*, order_items(*)')
+    .select('id, business_id, customer_name, phone, fulfillment_type, address, notes, status, total_etb, created_at, order_items(id, item_id, item_name, price_etb, quantity)')
     .eq('business_id', businessId)
     .order('created_at', { ascending: false })
+    .limit(200)
   if (error) throw error
   return (data ?? []).map(mapOrder)
 }

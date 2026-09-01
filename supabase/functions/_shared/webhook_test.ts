@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { handleUpdate } from '../telegram-webhook/index.ts'
+import { claimTelegramUpdate, handleUpdate } from '../telegram-webhook/index.ts'
 import { MockSupabase, MockTelegram } from './test_mocks.ts'
 import type { TelegramUpdate } from './types.ts'
 
@@ -119,6 +119,35 @@ Deno.test('approve callback from a linked admin calls the RPC and edits the mess
   assertEquals(db.rpcCalls[0].args.p_payment_id, 'pay1')
   const edit = tg.sent.find(s => s.method === 'editMessageText')
   assertStringIncludes(edit!.text!, 'Approved by @theadmin')
+})
+
+Deno.test('approve callback from a different Telegram user in the admin chat is refused', async () => {
+  const { db, tg } = freshCtx()
+  db.seed('admin_telegram_links', [{ id: 'a1', admin_id: 'admin1', telegram_chat_id: '888', linked_at: '2026-01-01' }])
+
+  await handleUpdate({
+    update_id: 60,
+    callback_query: {
+      id: 'cbq-forged',
+      from: { id: 999, username: 'forged' },
+      message: { message_id: 20, chat: { id: 888, type: 'private' } },
+      data: 'approve:pay1',
+    },
+  }, { db: db as any, tg: tg as any })
+
+  assertEquals(db.rpcCalls.length, 0)
+  assertStringIncludes(tg.sent[0].text!, 'not authorized')
+})
+
+Deno.test('duplicate webhook update IDs are not claimed twice', async () => {
+  const { db } = freshCtx()
+  let claimed = true
+  db.rpcImpl = name => name === 'claim_telegram_update' ? { data: claimed, error: null } : { data: null, error: null }
+
+  assertEquals(await claimTelegramUpdate(db as any, 123), true)
+  claimed = false
+  assertEquals(await claimTelegramUpdate(db as any, 123), false)
+  assertEquals(db.rpcCalls.map(call => call.name), ['claim_telegram_update', 'claim_telegram_update'])
 })
 
 Deno.test('a payment already reviewed by someone else shows a graceful message, not a crash', async () => {

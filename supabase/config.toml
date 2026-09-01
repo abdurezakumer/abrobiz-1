@@ -1,7 +1,10 @@
 # Keep the CLI project aligned with the production VITE_SUPABASE_URL.
 # Change this only when the frontend and hosting environment use the same
 # replacement Supabase project.
-project_id = "ckawqslkbanqolbvdpgf"
+project_id = "qgbvuvxxfogcsvqzncdx"
+
+[functions.health]
+verify_jwt = false
 
 [functions.telegram-webhook]
 verify_jwt = false
@@ -15,6 +18,42 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.reset-password]
+verify_jwt = false
+
+[functions.signup]
+verify_jwt = false
+
+[functions.verify-signup-otp]
+verify_jwt = false
+
+[functions.resend-signup-otp]
+verify_jwt = false
+
+[functions.login]
+verify_jwt = false
+
+[functions.submit-contact]
+verify_jwt = false
+
+[functions.submit-booking]
+verify_jwt = false
+
+[functions.submit-review]
+verify_jwt = false
+
+[functions.submit-order]
+verify_jwt = false
+
+[functions.submit-payment]
+verify_jwt = true
+
+[functions.storage-upload]
+verify_jwt = true
+
+[functions.storage-signed-url]
+verify_jwt = true
+
+[functions.track-page-view]
 verify_jwt = false
 
 # These functions perform their own role/session checks as well, but keeping

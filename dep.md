@@ -61,7 +61,7 @@ The Edge Functions use this allowlist for browser requests. Set it as a
 Supabase secret, not as a Vite variable:
 
 ```text
-CORS_ORIGINS=https://abrobiz.com,https://www.abrobiz.com,http://localhost:5173,http://127.0.0.1:5173
+CORS_ALLOWED_ORIGINS=https://abrobiz.com,https://www.abrobiz.com,http://localhost:5173,http://127.0.0.1:5173
 ```
 
 ## 4. Apply database migrations
@@ -136,7 +136,7 @@ Verify `abrobiz.com` in Resend first, then run:
 supabase.cmd secrets set --project-ref YOUR_PROJECT_REF `
   APP_NAME=AbroBiz `
   SITE_URL=https://abrobiz.com `
-  CORS_ORIGINS="https://abrobiz.com,https://www.abrobiz.com,http://localhost:5173,http://127.0.0.1:5173" `
+  CORS_ALLOWED_ORIGINS="https://abrobiz.com,https://www.abrobiz.com,http://localhost:5173,http://127.0.0.1:5173" `
   EMAIL_DOMAIN=abrobiz.com `
   EMAIL_FROM="AbroBiz <noreply@abrobiz.com>" `
   RESEND_API_KEY=YOUR_RESEND_API_KEY
@@ -150,7 +150,7 @@ Use a Google App Password, not the normal Gmail password:
 supabase.cmd secrets set --project-ref YOUR_PROJECT_REF `
   APP_NAME=AbroBiz `
   SITE_URL=https://abrobiz.com `
-  CORS_ORIGINS="https://abrobiz.com,https://www.abrobiz.com,http://localhost:5173,http://127.0.0.1:5173" `
+  CORS_ALLOWED_ORIGINS="https://abrobiz.com,https://www.abrobiz.com,http://localhost:5173,http://127.0.0.1:5173" `
   MAIL_SERVER=smtp.gmail.com `
   MAIL_PORT=587 `
   MAIL_USERNAME=YOUR_GMAIL_ADDRESS `

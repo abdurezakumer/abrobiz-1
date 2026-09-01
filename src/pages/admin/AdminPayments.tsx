@@ -3,6 +3,7 @@ import { CheckCircle2, XCircle, ImageOff } from 'lucide-react'
 import AdminLayout from '../../components/AdminLayout'
 import { adminListPendingPayments, adminListAllPayments, adminApprovePayment, adminRejectPayment, getPaymentProofUrl } from '../../lib/api/payments'
 import type { Payment } from '../../types'
+import { safeImageUrl } from '../../lib/safeUrl'
 
 export default function AdminPayments() {
   const [pending, setPending] = useState<Payment[]>([])
@@ -61,9 +62,9 @@ export default function AdminPayments() {
           {pending.map(p => (
             <div key={p.id} style={{ background: '#fff', borderRadius: 16, border: '1px solid rgba(10,12,16,0.06)', overflow: 'hidden' }}>
               <div style={{ height: 160, background: '#F6F3EE', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {proofUrls[p.id] ? (
-                  <a href={proofUrls[p.id]} target="_blank" rel="noreferrer" style={{ display: 'block', width: '100%', height: '100%' }}>
-                    <img src={proofUrls[p.id]} alt="Payment proof" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                {safeImageUrl(proofUrls[p.id]) ? (
+                  <a href={safeImageUrl(proofUrls[p.id]) ?? undefined} target="_blank" rel="noopener noreferrer" style={{ display: 'block', width: '100%', height: '100%' }}>
+                    <img src={safeImageUrl(proofUrls[p.id]) ?? undefined} alt="Payment proof" loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   </a>
                 ) : (
                   <ImageOff size={20} color="rgba(10,12,16,0.25)" />

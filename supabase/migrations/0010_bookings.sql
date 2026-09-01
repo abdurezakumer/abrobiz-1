@@ -8,7 +8,7 @@
 -- ============================================================================
 
 create table public.bookings (
-  id uuid primary key default gen_random_uuid(),
+  id uuid primary key default extensions.gen_random_uuid(),
   business_id uuid not null references public.businesses (id) on delete cascade,
   customer_name text not null,
   phone text not null default '',

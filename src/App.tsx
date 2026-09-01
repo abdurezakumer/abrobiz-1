@@ -1,43 +1,50 @@
+import { lazy, Suspense, type ReactNode } from 'react'
 import { Routes, Route } from 'react-router-dom'
-import type { ReactNode } from 'react'
 import { Toaster } from 'sonner'
 import { AuthProvider } from './lib/authContext'
-import { RequireSetup, RequireGuest, RequireOwner, RequireAdmin } from './components/Guards'
+import { RequireAuth, RequireSetup, RequireGuest, RequireOwner, RequireAdmin } from './components/Guards'
 
 import Landing from './pages/Landing'
-import Register from './pages/Register'
-import Login from './pages/Login'
-import VerifyEmail from './pages/VerifyEmail'
-import ResetPassword from './pages/ResetPassword'
 import Terms from './pages/Terms'
 import Privacy from './pages/Privacy'
-import SetupWizard from './pages/SetupWizard'
-import Dashboard from './pages/Dashboard'
-import CatalogEditor from './pages/CatalogEditor'
-import BusinessSettings from './pages/BusinessSettings'
-import QRPage from './pages/QRPage'
-import Billing from './pages/Billing'
-import Messages from './pages/Messages'
-import Bookings from './pages/Bookings'
-import Orders from './pages/Orders'
-import Reviews from './pages/Reviews'
-import StorefrontHome from './pages/storefront/StorefrontHome'
-import AdminOverview from './pages/admin/AdminOverview'
-import AdminBusinesses from './pages/admin/AdminBusinesses'
-import AdminPayments from './pages/admin/AdminPayments'
-import AdminSettings from './pages/admin/AdminSettings'
-import AdminAnnouncements from './pages/admin/AdminAnnouncements'
-import TemplateDemo from './pages/TemplateDemo'
 import { isBusinessSubdomain } from './lib/storefrontUrl'
+
+const Register = lazy(() => import('./pages/Register'))
+const Login = lazy(() => import('./pages/Login'))
+const VerifyEmail = lazy(() => import('./pages/VerifyEmail'))
+const ResetPassword = lazy(() => import('./pages/ResetPassword'))
+const LegalAcceptance = lazy(() => import('./pages/LegalAcceptance'))
+const SetupWizard = lazy(() => import('./pages/SetupWizard'))
+const Dashboard = lazy(() => import('./pages/Dashboard'))
+const CatalogEditor = lazy(() => import('./pages/CatalogEditor'))
+const BusinessSettings = lazy(() => import('./pages/BusinessSettings'))
+const QRPage = lazy(() => import('./pages/QRPage'))
+const Billing = lazy(() => import('./pages/Billing'))
+const Messages = lazy(() => import('./pages/Messages'))
+const Bookings = lazy(() => import('./pages/Bookings'))
+const Orders = lazy(() => import('./pages/Orders'))
+const Reviews = lazy(() => import('./pages/Reviews'))
+const StorefrontHome = lazy(() => import('./pages/storefront/StorefrontHome'))
+const AdminOverview = lazy(() => import('./pages/admin/AdminOverview'))
+const AdminBusinesses = lazy(() => import('./pages/admin/AdminBusinesses'))
+const AdminPayments = lazy(() => import('./pages/admin/AdminPayments'))
+const AdminSettings = lazy(() => import('./pages/admin/AdminSettings'))
+const AdminAnnouncements = lazy(() => import('./pages/admin/AdminAnnouncements'))
+const TemplateDemo = lazy(() => import('./pages/TemplateDemo'))
 
 function HostStorefront({ page }: { page: ReactNode }) {
   return isBusinessSubdomain() ? page : <Landing />
+}
+
+function RouteFallback() {
+  return <div role="status" aria-live="polite" style={{ minHeight: '100vh', background: '#0A0C10', color: '#F0EDE7', display: 'grid', placeItems: 'center', fontFamily: 'Inter, sans-serif' }}>Loading AbroBiz…</div>
 }
 
 export default function App() {
   return (
     <AuthProvider>
       <Toaster position="top-center" richColors />
+      <Suspense fallback={<RouteFallback />}>
       <Routes>
         <Route path="/" element={<HostStorefront page={<StorefrontHome />} />} />
         <Route path="/menu" element={<HostStorefront page={<StorefrontHome />} />} />
@@ -45,6 +52,7 @@ export default function App() {
         <Route path="/contact" element={<HostStorefront page={<StorefrontHome />} />} />
         <Route path="/book" element={<HostStorefront page={<StorefrontHome />} />} />
         <Route path="/verify-email" element={<VerifyEmail />} />
+        <Route path="/legal-acceptance" element={<RequireAuth><LegalAcceptance /></RequireAuth>} />
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/terms" element={<Terms />} />
         <Route path="/privacy" element={<Privacy />} />
@@ -81,6 +89,7 @@ export default function App() {
 
         <Route path="*" element={<Landing />} />
       </Routes>
+      </Suspense>
     </AuthProvider>
   )
 }

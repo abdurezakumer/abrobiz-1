@@ -47,6 +47,9 @@ export interface Profile {
   phone: string
   email?: string // populated client-side from auth session, not stored on profiles
   emailVerifiedAt?: string | null
+  termsAcceptedAt?: string | null
+  privacyAcceptedAt?: string | null
+  legalVersion?: string | null
 }
 
 export interface BusinessCategory {

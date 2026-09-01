@@ -14,12 +14,9 @@ function mapReview(row: any): Review {
 }
 
 /** Public. Always lands unapproved — the business owner moderates before it's visible to anyone else. */
-export async function submitReview(input: { businessId: string; customerName: string; rating: number; comment: string }): Promise<void> {
-  const { error } = await supabase.from('reviews').insert({
-    business_id: input.businessId,
-    customer_name: input.customerName,
-    rating: input.rating,
-    comment: input.comment,
+export async function submitReview(input: { businessId: string; customerName: string; rating: number; comment: string; turnstileToken?: string | null }): Promise<void> {
+  const { error } = await supabase.functions.invoke('submit-review', {
+    body: input,
   })
   if (error) throw error
 }
@@ -28,10 +25,11 @@ export async function submitReview(input: { businessId: string; customerName: st
 export async function listApprovedReviews(businessId: string): Promise<Review[]> {
   const { data, error } = await supabase
     .from('reviews')
-    .select('*')
+    .select('id, business_id, customer_name, rating, comment, is_approved, created_at')
     .eq('business_id', businessId)
     .eq('is_approved', true)
     .order('created_at', { ascending: false })
+    .limit(100)
   if (error) throw error
   return (data ?? []).map(mapReview)
 }
@@ -40,9 +38,10 @@ export async function listApprovedReviews(businessId: string): Promise<Review[]>
 export async function listAllReviewsForOwner(businessId: string): Promise<Review[]> {
   const { data, error } = await supabase
     .from('reviews')
-    .select('*')
+    .select('id, business_id, customer_name, rating, comment, is_approved, created_at')
     .eq('business_id', businessId)
     .order('created_at', { ascending: false })
+    .limit(200)
   if (error) throw error
   return (data ?? []).map(mapReview)
 }

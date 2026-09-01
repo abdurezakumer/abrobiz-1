@@ -2,9 +2,12 @@ import { useState } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { ArrowLeft } from 'lucide-react'
-import { signIn, friendlyAuthError } from '../lib/authActions'
+import { signIn, friendlyAuthError, UnverifiedEmailError } from '../lib/authActions'
 import { requestPasswordReset } from '../lib/api/passwordReset'
 import GoogleSignInButton from '../components/GoogleSignInButton'
+import { safeInternalPath } from '../lib/safeUrl'
+import TurnstileWidget from '../components/TurnstileWidget'
+import { turnstileEnabled } from '../lib/turnstile'
 
 export default function Login() {
   const navigate = useNavigate()
@@ -14,17 +17,31 @@ export default function Login() {
   const [error, setError] = useState('')
   const [info, setInfo] = useState('')
   const [loading, setLoading] = useState(false)
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
+  const [resetToken, setResetToken] = useState<string | null>(null)
+  const [turnstileResetKey, setTurnstileResetKey] = useState(0)
+  const [resetWidgetKey, setResetWidgetKey] = useState(0)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
+    if (turnstileEnabled && !turnstileToken) {
+      setError('Complete the security check to continue.')
+      return
+    }
     setLoading(true)
+    const from = safeInternalPath((location.state as { from?: { pathname?: string } })?.from?.pathname, '/dashboard')
     try {
-      await signIn(email, password)
-      const from = (location.state as { from?: Location })?.from?.pathname
-      navigate(from || '/dashboard')
+      await signIn(email, password, turnstileToken)
+      navigate(from, { replace: true })
     } catch (err) {
-      setError(friendlyAuthError(err))
+      if (err instanceof UnverifiedEmailError) {
+        navigate('/verify-email?email=' + encodeURIComponent(email.trim().toLowerCase()), { state: { from: { pathname: from } }, replace: true })
+      } else {
+        setError(friendlyAuthError(err))
+      }
+      setTurnstileToken(null)
+      setTurnstileResetKey(value => value + 1)
     } finally {
       setLoading(false)
     }
@@ -35,12 +52,20 @@ export default function Login() {
       setError('Enter your email above first, then click "Forgot password?"')
       return
     }
+    if (turnstileEnabled && !resetToken) {
+      setError('Complete the password-reset security check to continue.')
+      return
+    }
     setError('')
     try {
-      await requestPasswordReset(email)
+      await requestPasswordReset(email, resetToken)
+      setResetToken(null)
+      setResetWidgetKey(value => value + 1)
       setInfo('If that email has an account, a reset link is on its way — check your inbox.')
     } catch (err) {
       setError(friendlyAuthError(err))
+      setResetToken(null)
+      setResetWidgetKey(value => value + 1)
     }
   }
 
@@ -88,6 +113,9 @@ export default function Login() {
               Forgot password?
             </button>
 
+            <TurnstileWidget action="login" onToken={setTurnstileToken} resetKey={turnstileResetKey} />
+            <TurnstileWidget action="password-reset" onToken={setResetToken} resetKey={resetWidgetKey} />
+
             {error && (
               <div style={{ color: '#F87171', fontSize: 13, background: 'rgba(248,113,113,0.08)', padding: '10px 12px', borderRadius: 10 }}>
                 {error}
@@ -99,7 +127,7 @@ export default function Login() {
               </div>
             )}
 
-            <button type="submit" disabled={loading} style={submitStyle}>
+            <button type="submit" disabled={loading || (turnstileEnabled && !turnstileToken)} style={submitStyle}>
               {loading ? 'Logging in…' : 'Log in'}
             </button>
           </form>

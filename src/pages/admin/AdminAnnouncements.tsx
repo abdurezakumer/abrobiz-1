@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Send, Megaphone } from 'lucide-react'
 import AdminLayout from '../../components/AdminLayout'
 import { sendAnnouncement, listAnnouncements, type Announcement } from '../../lib/api/announcements'
+import { friendlyError } from '../../lib/errors'
 
 export default function AdminAnnouncements() {
   const [subject, setSubject] = useState('')
@@ -30,7 +31,7 @@ export default function AdminAnnouncements() {
       setBody('')
       load()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong.')
+      setError(friendlyError(err))
     } finally {
       setSending(false)
     }

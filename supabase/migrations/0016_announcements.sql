@@ -7,7 +7,7 @@
 -- ============================================================================
 
 create table public.announcements (
-  id uuid primary key default gen_random_uuid(),
+  id uuid primary key default extensions.gen_random_uuid(),
   admin_id uuid references public.profiles (id),
   subject text not null,
   body text not null,

@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../lib/authContext'
+import { safeInternalPath } from '../lib/safeUrl'
 
 function FullScreenSpinner() {
   return (
@@ -33,6 +34,10 @@ export function RequireSetup({ children }: { children: ReactNode }) {
   const location = useLocation()
   if (loading) return <FullScreenSpinner />
   if (!session) return <Navigate to="/login" state={{ from: location }} replace />
+  if (profile && !profile.emailVerifiedAt) return <Navigate to={'/verify-email?email=' + encodeURIComponent(session.user.email ?? '')} state={{ from: { pathname: safeInternalPath(location.pathname) } }} replace />
+  if (profile && (!profile.termsAcceptedAt || !profile.privacyAcceptedAt || profile.legalVersion !== '2026-01')) {
+    return <Navigate to="/legal-acceptance" state={{ from: location }} replace />
+  }
   if (profile?.role === 'admin') return <Navigate to="/admin" replace />
   if (profile?.role !== 'owner') return <Navigate to="/login" replace />
   if (business) return <Navigate to="/dashboard" replace />
@@ -41,8 +46,11 @@ export function RequireSetup({ children }: { children: ReactNode }) {
 
 export function RequireGuest({ children }: { children: ReactNode }) {
   const { session, profile, business, loading } = useAuth()
+  const location = useLocation()
   if (loading) return <FullScreenSpinner />
   if (session && profile) {
+    if (!profile.emailVerifiedAt) return <Navigate to={'/verify-email?email=' + encodeURIComponent(session.user.email ?? '')} state={{ from: { pathname: safeInternalPath(location.pathname) } }} replace />
+    if (!profile.termsAcceptedAt || !profile.privacyAcceptedAt || profile.legalVersion !== '2026-01') return <Navigate to="/legal-acceptance" replace />
     if (profile.role === 'admin') return <Navigate to="/admin" replace />
     if (business) return <Navigate to="/dashboard" replace />
     return <Navigate to="/setup" replace />
@@ -55,6 +63,8 @@ export function RequireOwner({ children }: { children: ReactNode }) {
   const location = useLocation()
   if (loading) return <FullScreenSpinner />
   if (!session) return <Navigate to="/login" state={{ from: location }} replace />
+  if (profile && !profile.emailVerifiedAt) return <Navigate to={'/verify-email?email=' + encodeURIComponent(session.user.email ?? '')} state={{ from: { pathname: safeInternalPath(location.pathname) } }} replace />
+  if (profile && (!profile.termsAcceptedAt || !profile.privacyAcceptedAt || profile.legalVersion !== '2026-01')) return <Navigate to="/legal-acceptance" state={{ from: location }} replace />
   if (profile?.role === 'admin') return <Navigate to="/admin" replace />
   if (profile?.role !== 'owner') return <Navigate to="/login" replace />
   if (!business) return <Navigate to="/setup" replace />
@@ -66,6 +76,8 @@ export function RequireAdmin({ children }: { children: ReactNode }) {
   const location = useLocation()
   if (loading) return <FullScreenSpinner />
   if (!session) return <Navigate to="/login" state={{ from: location }} replace />
+  if (profile && !profile.emailVerifiedAt) return <Navigate to={'/verify-email?email=' + encodeURIComponent(session.user.email ?? '')} state={{ from: { pathname: safeInternalPath(location.pathname) } }} replace />
+  if (profile && (!profile.termsAcceptedAt || !profile.privacyAcceptedAt || profile.legalVersion !== '2026-01')) return <Navigate to="/legal-acceptance" state={{ from: location }} replace />
   if (profile?.role !== 'admin') return <Navigate to="/dashboard" replace />
   return <>{children}</>
 }

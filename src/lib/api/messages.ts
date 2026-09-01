@@ -15,13 +15,9 @@ function mapMessage(row: any): ContactMessage {
 }
 
 /** Called from the public Contact page — works for anonymous visitors on a published business. */
-export async function submitContactMessage(input: { businessId: string; name: string; email: string; phone: string; message: string }): Promise<void> {
-  const { error } = await supabase.from('contact_messages').insert({
-    business_id: input.businessId,
-    name: input.name,
-    email: input.email,
-    phone: input.phone,
-    message: input.message,
+export async function submitContactMessage(input: { businessId: string; name: string; email: string; phone: string; message: string; turnstileToken?: string | null }): Promise<void> {
+  const { error } = await supabase.functions.invoke('submit-contact', {
+    body: input,
   })
   if (error) throw error
 }
@@ -29,9 +25,10 @@ export async function submitContactMessage(input: { businessId: string; name: st
 export async function listMessages(businessId: string): Promise<ContactMessage[]> {
   const { data, error } = await supabase
     .from('contact_messages')
-    .select('*')
+    .select('id, business_id, name, email, phone, message, is_read, created_at')
     .eq('business_id', businessId)
     .order('created_at', { ascending: false })
+    .limit(200)
   if (error) throw error
   return (data ?? []).map(mapMessage)
 }

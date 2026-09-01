@@ -52,6 +52,16 @@ create policy "categories_update_own" on public.categories
     or exists (select 1 from public.businesses b where b.id = public.categories.business_id and b.owner_id = auth.uid())
   );
 
+drop policy if exists "items_write_own" on public.items;
+create policy "items_write_own" on public.items
+  for insert with check (
+    public.is_admin()
+    or (
+      exists (select 1 from public.businesses b where b.id = public.items.business_id and b.owner_id = auth.uid())
+      and exists (select 1 from public.categories c where c.id = public.items.category_id and c.business_id = public.items.business_id)
+    )
+  );
+
 drop policy if exists "items_update_own" on public.items;
 create policy "items_update_own" on public.items
   for update

@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabaseClient'
 import { listCategories, createCategory, updateCategory, deleteCategory } from '../lib/api/categories'
 import { listItems, createItem, updateItem, deleteItem, uploadItemImage } from '../lib/api/items'
 import type { Category, Item, ItemTranslations, Language } from '../types'
+import { safeImageUrl } from '../lib/safeUrl'
 
 export default function CatalogEditor() {
   const { business } = useAuth()
@@ -180,8 +181,8 @@ function ItemsGrid({
               />
             ) : (
               <div style={{ background: '#fff', borderRadius: 14, border: '1px solid rgba(10,12,16,0.06)', overflow: 'hidden', opacity: item.isAvailable ? 1 : 0.55 }}>
-                <div style={{ height: 120, background: item.imageUrl ? `url(${item.imageUrl}) center/cover` : '#F6F3EE', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
-                  {!item.imageUrl && <ImageIcon size={22} color="rgba(10,12,16,0.2)" />}
+                <div style={{ height: 120, background: safeImageUrl(item.imageUrl) ? `url("${safeImageUrl(item.imageUrl)}") center/cover` : '#F6F3EE', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+                  {!safeImageUrl(item.imageUrl) && <ImageIcon size={22} color="rgba(10,12,16,0.2)" />}
                   {item.isFeatured && (
                     <span style={{ position: 'absolute', top: 8, left: 8, background: '#D4A853', color: '#0A0C10', fontSize: 10, fontWeight: 700, padding: '3px 7px', borderRadius: 6 }}>
                       FEATURED
@@ -315,7 +316,7 @@ function ItemForm({
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
           <input type="number" step="0.01" value={price} onChange={e => setPrice(parseFloat(e.target.value) || 0)} style={{ ...formInput, width: 120 }} placeholder="Price" />
           <label style={{ fontSize: 12.5, color: '#0A0C10', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
-            {imageUrl && <img src={imageUrl} alt="" style={{ width: 32, height: 32, borderRadius: 6, objectFit: 'cover' }} />}
+            {safeImageUrl(imageUrl) && <img src={safeImageUrl(imageUrl) ?? undefined} alt="" width={32} height={32} loading="lazy" decoding="async" style={{ width: 32, height: 32, borderRadius: 6, objectFit: 'cover' }} />}
             <span style={{ padding: '8px 12px', borderRadius: 8, background: '#F6F3EE' }}>{uploading ? 'Uploading…' : imageUrl ? 'Change photo' : 'Add photo'}</span>
             <input type="file" accept="image/*" hidden onChange={e => e.target.files?.[0] && handleImage(e.target.files[0])} />
           </label>

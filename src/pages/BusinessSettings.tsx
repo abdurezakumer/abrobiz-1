@@ -9,6 +9,7 @@ import { friendlyError } from '../lib/errors'
 import { DAY_LABELS } from '../lib/i18n'
 import { listActiveTemplates, mergeTemplateOptions } from '../lib/api/templates'
 import { publicStorefrontUrl } from '../lib/storefrontUrl'
+import { safeImageUrl } from '../lib/safeUrl'
 import type { Business, BusinessCategory, Language, Template, TemplateSlug, WeeklyHours } from '../types'
 
 const ALL_LANGUAGES: { code: Language; label: string }[] = [
@@ -180,7 +181,7 @@ export default function BusinessSettings() {
           <div style={{ flex: 1, minWidth: 220, background: '#F6F3EE', borderRadius: 9, padding: '10px 12px', color: 'rgba(10,12,16,0.65)', fontSize: 13.5 }}>
             {publicStorefrontUrl(form.slug)}
           </div>
-          <a href={publicStorefrontUrl(form.slug)} target="_blank" rel="noreferrer" style={{ color: '#8A6417', fontSize: 13, fontWeight: 600 }}>
+          <a href={publicStorefrontUrl(form.slug)} target="_blank" rel="noopener noreferrer" style={{ color: '#8A6417', fontSize: 13, fontWeight: 600 }}>
             View website ↗
           </a>
         </div>
@@ -242,7 +243,7 @@ export default function BusinessSettings() {
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             {form.galleryUrls.map((url, i) => (
               <div key={url} style={{ position: 'relative', width: 90, height: 90 }}>
-                <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 10 }} />
+                <img src={safeImageUrl(url) ?? undefined} alt="" width={90} height={90} loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 10 }} />
                 <button
                   onClick={() => handleGalleryRemove(i)}
                   style={{ position: 'absolute', top: -6, right: -6, width: 20, height: 20, borderRadius: '50%', background: '#0A0C10', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 12, lineHeight: 1 }}
@@ -307,7 +308,7 @@ export default function BusinessSettings() {
               onClick={() => patch('templateSlug', tpl.slug)}
               style={{ borderRadius: 12, overflow: 'hidden', border: form.templateSlug === tpl.slug ? '2px solid #D4A853' : '2px solid transparent', cursor: 'pointer', width: 130 }}
             >
-              <div style={{ height: 60, background: tpl.previewUrl ? `url(${tpl.previewUrl}) center/cover` : tpl.config.bg ?? '#F6F3EE' }} />
+              <div style={{ height: 60, background: safeImageUrl(tpl.previewUrl) ? `url("${safeImageUrl(tpl.previewUrl)}") center/cover` : tpl.config.bg ?? '#F6F3EE' }} />
               <div style={{ fontSize: 12, padding: '6px 8px', textAlign: 'left' }}>{tpl.name}</div>
             </button>
           ))}
@@ -377,7 +378,7 @@ function ImageUploader({ label, imageUrl, uploading, onUpload, shape }: { label:
           style={{
             width: shape === 'round' ? 84 : 220, height: shape === 'round' ? 84 : 100,
             borderRadius: shape === 'round' ? '50%' : 12,
-            background: imageUrl ? `url(${imageUrl}) center/cover` : '#F6F3EE',
+            background: safeImageUrl(imageUrl) ? `url("${safeImageUrl(imageUrl)}") center/cover` : '#F6F3EE',
             display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed rgba(10,12,16,0.15)',
           }}
         >

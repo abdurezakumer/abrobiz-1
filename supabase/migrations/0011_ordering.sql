@@ -11,7 +11,7 @@
 -- ============================================================================
 
 create table public.orders (
-  id uuid primary key default gen_random_uuid(),
+  id uuid primary key default extensions.gen_random_uuid(),
   business_id uuid not null references public.businesses (id) on delete cascade,
   customer_name text not null,
   phone text not null default '',
@@ -26,7 +26,7 @@ create table public.orders (
 create index orders_business_id_idx on public.orders (business_id, created_at desc);
 
 create table public.order_items (
-  id uuid primary key default gen_random_uuid(),
+  id uuid primary key default extensions.gen_random_uuid(),
   order_id uuid not null references public.orders (id) on delete cascade,
   item_id uuid references public.items (id) on delete set null,
   item_name text not null,

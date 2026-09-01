@@ -8,7 +8,7 @@
 -- ============================================================================
 
 create table public.reviews (
-  id uuid primary key default gen_random_uuid(),
+  id uuid primary key default extensions.gen_random_uuid(),
   business_id uuid not null references public.businesses (id) on delete cascade,
   customer_name text not null,
   rating int not null check (rating between 1 and 5),

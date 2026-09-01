@@ -45,9 +45,9 @@ end;
 $$;
 
 create table public.password_reset_tokens (
-  id uuid primary key default gen_random_uuid(),
+  id uuid primary key default extensions.gen_random_uuid(),
   user_id uuid not null references public.profiles (id) on delete cascade,
-  token text not null unique default encode(gen_random_bytes(24), 'hex'),
+  token text not null unique default encode(extensions.gen_random_bytes(24), 'hex'),
   expires_at timestamptz not null default (now() + interval '1 hour'),
   used_at timestamptz,
   created_at timestamptz not null default now()

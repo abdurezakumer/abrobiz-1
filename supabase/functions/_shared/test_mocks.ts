@@ -13,7 +13,7 @@ export class MockTable {
 export class MockSupabase {
   tables: Record<string, MockTable> = {}
   rpcCalls: { name: string; args: any }[] = []
-  rpcImpl: (name: string, args: any) => { error: { message: string } | null } = () => ({ error: null })
+  rpcImpl: (name: string, args: any) => { data?: unknown; error: { message: string } | null } = () => ({ data: null, error: null })
   storageUploads: { bucket: string; path: string }[] = []
 
   seed(table: string, rows: Row[]) {

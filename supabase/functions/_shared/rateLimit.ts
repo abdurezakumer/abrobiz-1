@@ -1,5 +1,6 @@
 import { createAdminClient } from './db.ts'
 import { corsHeaders } from './cors.ts'
+import { logFailure } from './observability.ts'
 
 function json(body: unknown, status: number, retryAfter?: number, req?: Request): Response {
   return new Response(JSON.stringify(body), {
@@ -37,11 +38,22 @@ export async function enforceRateLimit(
   })
 
   if (error) {
-    console.error('rate-limit check failed', error)
+    logFailure(req, { function_name: 'shared-rate-limit', operation: 'consume_rate_limit', error_category: 'DEPENDENCY_ERROR', error_code: error.code ?? 'unknown', status: 503 })
     return json({ error: 'Service temporarily unavailable. Please try again.' }, 503, undefined, req)
   }
   if (data === false) {
     return json({ error: 'Too many requests. Please try again later.' }, 429, windowSeconds, req)
+  }
+  return null
+}
+
+export async function enforceRateLimits(
+  req: Request,
+  rules: Array<{ scope: string; limit: number; windowSeconds: number; identity?: string }>,
+): Promise<Response | null> {
+  for (const rule of rules) {
+    const blocked = await enforceRateLimit(req, rule.scope, rule.limit, rule.windowSeconds, rule.identity ?? '')
+    if (blocked) return blocked
   }
   return null
 }

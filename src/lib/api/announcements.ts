@@ -27,7 +27,7 @@ export async function sendAnnouncement(subject: string, body: string): Promise<{
 }
 
 export async function listAnnouncements(): Promise<Announcement[]> {
-  const { data, error } = await supabase.from('announcements').select('*').order('created_at', { ascending: false })
+  const { data, error } = await supabase.from('announcements').select('id, subject, body, recipient_count, created_at').order('created_at', { ascending: false }).limit(100)
   if (error) throw error
   return (data ?? []).map(mapAnnouncement)
 }

@@ -1,14 +1,17 @@
 import { supabase } from '../supabaseClient'
 import { edgeFunctionError } from '../errors'
 
-/** Invokes the send-verification-email Edge Function for the currently logged-in user. */
-export async function sendVerificationEmail(): Promise<void> {
-  const { error } = await supabase.functions.invoke('send-verification-email')
+export async function resendVerificationOtp(email: string, turnstileToken?: string | null): Promise<void> {
+  const { data, error } = await supabase.functions.invoke('resend-signup-otp', { body: { email, ...(turnstileToken ? { turnstileToken } : {}) } })
   if (error) throw await edgeFunctionError(error)
+  if (data?.error) throw new Error(data.error)
 }
 
-/** Consumes a token from a verification link — works for anonymous callers, since the token itself is the proof. */
-export async function verifyEmailToken(token: string): Promise<void> {
-  const { error } = await supabase.rpc('verify_email_token', { p_token: token })
-  if (error) throw error
+export async function verifySignupOtp(email: string, token: string): Promise<void> {
+  const { data, error } = await supabase.functions.invoke('verify-signup-otp', { body: { email, token } })
+  if (error) throw await edgeFunctionError(error)
+  if (data?.error) throw new Error(data.error)
+  if (!data?.session) throw new Error('That verification code is invalid or expired.')
+  const { error: sessionError } = await supabase.auth.setSession(data.session)
+  if (sessionError) throw sessionError
 }

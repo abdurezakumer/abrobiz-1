@@ -266,6 +266,15 @@ create policy "public_buckets_owner_update" on storage.objects
         where b.id::text = (storage.foldername(storage.objects.name))[1] and b.owner_id = auth.uid()
       )
     )
+  ) with check (
+    bucket_id in ('logos', 'covers', 'item-images')
+    and (
+      public.is_admin()
+      or exists (
+        select 1 from public.businesses b
+        where b.id::text = (storage.foldername(storage.objects.name))[1] and b.owner_id = auth.uid()
+      )
+    )
   );
 
 create policy "public_buckets_owner_delete" on storage.objects

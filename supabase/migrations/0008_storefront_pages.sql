@@ -12,7 +12,7 @@ alter table public.businesses add column if not exists gallery_urls text[] not n
 alter table public.items add column if not exists is_featured boolean not null default false;
 
 create table public.contact_messages (
-  id uuid primary key default gen_random_uuid(),
+  id uuid primary key default extensions.gen_random_uuid(),
   business_id uuid not null references public.businesses (id) on delete cascade,
   name text not null,
   email text not null default '',

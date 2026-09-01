@@ -88,7 +88,7 @@ end;
 $$;
 
 revoke execute on function public.purge_rate_limits() from public;
-grant execute on function public.purge_rate_limits() to authenticated, service_role;
+grant execute on function public.purge_rate_limits() to service_role;
 
 -- Public form throttles use a business plus customer-provided contact key.
 -- This is intentionally a second layer; Edge Functions additionally limit by

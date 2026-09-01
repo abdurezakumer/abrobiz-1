@@ -63,7 +63,7 @@ export default function AdminBusinesses() {
               </div>
 
               <div style={{ display: 'flex', gap: 8 }}>
-                <a href={publicStorefrontUrl(b.slug)} target="_blank" rel="noreferrer" style={iconBtn}><ExternalLink size={14} /></a>
+                <a href={publicStorefrontUrl(b.slug)} target="_blank" rel="noopener noreferrer" style={iconBtn}><ExternalLink size={14} /></a>
                 <button onClick={() => toggleBlock(b)} style={{ ...iconBtn, color: b.isBlocked ? '#16A34A' : '#DC2626' }} title={b.isBlocked ? 'Unblock' : 'Block'}>
                   {b.isBlocked ? <CheckCircle size={14} /> : <Ban size={14} />}
                 </button>

@@ -1,8 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { ArrowLeft, CheckCircle2 } from 'lucide-react'
 import { resetPassword } from '../lib/api/passwordReset'
+import { passwordStrength, validatePassword } from '../lib/passwordPolicy'
+import { friendlyError } from '../lib/errors'
 
 export default function ResetPassword() {
   const [params] = useSearchParams()
@@ -14,6 +16,12 @@ export default function ResetPassword() {
   const [done, setDone] = useState(false)
   const [error, setError] = useState('')
 
+  useEffect(() => {
+    // Keep the reset token in memory for this page only and remove it from
+    // the visible URL/history immediately after it has been read.
+    if (token) window.history.replaceState(null, document.title, '/reset-password')
+  }, [token])
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
@@ -21,8 +29,9 @@ export default function ResetPassword() {
       setError('This link is missing its reset token.')
       return
     }
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters.')
+    const passwordCheck = validatePassword(password)
+    if (!passwordCheck.valid) {
+      setError(passwordCheck.message ?? 'Choose a stronger password.')
       return
     }
     if (password !== confirm) {
@@ -34,7 +43,7 @@ export default function ResetPassword() {
       await resetPassword(token, password)
       setDone(true)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong.')
+      setError(friendlyError(err))
     } finally {
       setSubmitting(false)
     }
@@ -73,8 +82,9 @@ export default function ResetPassword() {
               <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                 <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   <span style={{ fontSize: 12.5, color: 'rgba(240,237,231,0.5)', fontWeight: 500 }}>New password</span>
-                  <input required type="password" value={password} onChange={e => setPassword(e.target.value)} style={inputStyle} placeholder="At least 6 characters" />
+                  <input required minLength={12} maxLength={128} type="password" value={password} onChange={e => setPassword(e.target.value)} style={inputStyle} placeholder="12+ characters with upper, lower, number and symbol" />
                 </label>
+                {password && <div style={{ marginTop: -7, fontSize: 12, color: passwordStrength(password) === 'Strong' || passwordStrength(password) === 'Very strong' ? '#4ADE80' : '#FACC15' }}>Password strength: {passwordStrength(password)}</div>}
                 <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   <span style={{ fontSize: 12.5, color: 'rgba(240,237,231,0.5)', fontWeight: 500 }}>Confirm password</span>
                   <input required type="password" value={confirm} onChange={e => setConfirm(e.target.value)} style={inputStyle} placeholder="Type it again" />

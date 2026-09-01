@@ -4,6 +4,9 @@ import { MapPin, Phone, Mail, Send, CheckCircle2 } from 'lucide-react'
 import StorefrontPageShell from '../../components/StorefrontPageShell'
 import { submitContactMessage } from '../../lib/api/messages'
 import { DAY_LABELS, t } from '../../lib/i18n'
+import { safeHttpsUrl, safeMailto, safeTel } from '../../lib/safeUrl'
+import TurnstileWidget from '../../components/TurnstileWidget'
+import { turnstileEnabled } from '../../lib/turnstile'
 
 export default function StorefrontContact() {
   return (
@@ -25,13 +28,22 @@ export function ContactSection({ business, lang, theme }: any) {
   const [submitting, setSubmitting] = useState(false)
   const [sent, setSent] = useState(false)
   const [error, setError] = useState('')
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
+  const [turnstileResetKey, setTurnstileResetKey] = useState(0)
+  const mapsUrl = safeHttpsUrl(business.mapsUrl)
+  const phoneUrl = safeTel(business.phone)
+  const emailUrl = safeMailto(business.email)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (turnstileEnabled && !turnstileToken) {
+      setError('Complete the security check to send your message.')
+      return
+    }
     setSubmitting(true)
     setError('')
     try {
-      await submitContactMessage({ businessId: business.id, name, email, phone, message })
+      await submitContactMessage({ businessId: business.id, name, email, phone, message, turnstileToken })
       setSent(true)
       setName(''); setEmail(''); setPhone(''); setMessage('')
     } catch {
@@ -56,17 +68,17 @@ export function ContactSection({ business, lang, theme }: any) {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 32 }} className="contact-grid">
         <div>
           {business.address && (
-            <a href={business.mapsUrl || '#'} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 10, color: theme.text, textDecoration: 'none', fontSize: 14, marginBottom: 14 }}>
+            mapsUrl ? <a href={mapsUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 10, color: theme.text, textDecoration: 'none', fontSize: 14, marginBottom: 14 }}>
               <MapPin size={17} color={business.accentColor} /> {business.address}
-            </a>
+            </a> : <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: theme.text, fontSize: 14, marginBottom: 14 }}><MapPin size={17} color={business.accentColor} /> {business.address}</div>
           )}
-          {business.phone && (
-            <a href={`tel:${business.phone}`} style={{ display: 'flex', alignItems: 'center', gap: 10, color: theme.text, textDecoration: 'none', fontSize: 14, marginBottom: 14 }}>
+          {business.phone && phoneUrl && (
+            <a href={phoneUrl} style={{ display: 'flex', alignItems: 'center', gap: 10, color: theme.text, textDecoration: 'none', fontSize: 14, marginBottom: 14 }}>
               <Phone size={17} color={business.accentColor} /> {business.phone}
             </a>
           )}
-          {business.email && (
-            <a href={`mailto:${business.email}`} style={{ display: 'flex', alignItems: 'center', gap: 10, color: theme.text, textDecoration: 'none', fontSize: 14, marginBottom: 20 }}>
+          {business.email && emailUrl && (
+            <a href={emailUrl} style={{ display: 'flex', alignItems: 'center', gap: 10, color: theme.text, textDecoration: 'none', fontSize: 14, marginBottom: 20 }}>
               <Mail size={17} color={business.accentColor} /> {business.email}
             </a>
           )}
@@ -98,8 +110,9 @@ export function ContactSection({ business, lang, theme }: any) {
               <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Email (optional)" style={inputStyle} />
               <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="Phone (optional)" style={inputStyle} />
               <textarea required value={message} onChange={e => setMessage(e.target.value)} placeholder="Message" rows={4} style={{ ...inputStyle, resize: 'vertical' }} />
+              <TurnstileWidget action="contact" onToken={setTurnstileToken} resetKey={turnstileResetKey} />
               {error && <div style={{ color: '#F87171', fontSize: 12.5 }}>{error}</div>}
-              <button type="submit" disabled={submitting} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: business.accentColor, color: '#0A0C10', border: 'none', borderRadius: 10, padding: '12px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+              <button type="submit" disabled={submitting || (turnstileEnabled && !turnstileToken)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: business.accentColor, color: '#0A0C10', border: 'none', borderRadius: 10, padding: '12px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
                 <Send size={14} /> {submitting ? 'Sending…' : 'Send message'}
               </button>
             </form>

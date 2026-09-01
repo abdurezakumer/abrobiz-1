@@ -4,6 +4,7 @@ import { listCategories } from './api/categories'
 import { listItems } from './api/items'
 import { supabase } from './supabaseClient'
 import type { Business, Category, Item, Language, TemplateConfig } from '../types'
+import { retryRead } from './retry'
 
 export interface StorefrontLabels {
   label: string
@@ -31,10 +32,21 @@ export interface StorefrontData {
 
 const DEFAULT_LABELS: StorefrontLabels = { label: 'Business', itemLabel: 'Item', categoryLabel: 'Category', icon: 'Store' }
 const DEFAULT_ENTITLEMENTS: StorefrontEntitlements = { bookings: false, ordering: false, reviews: false }
+const PUBLIC_CONFIG_TTL = 5 * 60 * 1000
+const templateCache = new Map<string, { config: unknown; expiresAt: number }>()
+const categoryCache = new Map<string, { labels: StorefrontLabels; expiresAt: number }>()
 
 async function loadTemplateConfig(slug: string): Promise<{ data: { config: unknown } | null }> {
+  const cached = templateCache.get(slug)
+  if (cached && cached.expiresAt > Date.now()) return { data: { config: cached.config } }
   try {
-    return await supabase.from('templates').select('config').eq('slug', slug).eq('is_active', true).maybeSingle()
+    const response = await retryRead(async () => {
+      const result = await supabase.from('templates').select('config').eq('slug', slug).eq('is_active', true).maybeSingle()
+      if (result.error) throw result.error
+      return result
+    })
+    if (response.data) templateCache.set(slug, { config: response.data.config, expiresAt: Date.now() + PUBLIC_CONFIG_TTL })
+    return response
   } catch {
     // Keep existing storefronts working until migration 0017 is deployed.
     return { data: null }
@@ -57,21 +69,30 @@ export function useStorefrontData(slug: string | undefined, pagePath: string): S
     }
     const businessSlug = slug
     let cancelled = false
+    let inFlight = false
+    let refreshTimer: number | undefined
+
+    function scheduleNextRefresh() {
+      if (refreshTimer !== undefined) window.clearTimeout(refreshTimer)
+      if (!document.hidden) refreshTimer = window.setTimeout(() => { void load(false) }, 30_000)
+    }
 
     async function load(trackView: boolean) {
+      if (inFlight) return
+      inFlight = true
       try {
-        const biz = await getBusinessBySlug(businessSlug)
+        const biz = await retryRead(() => getBusinessBySlug(businessSlug))
         if (cancelled) return
         setBusiness(biz)
         if (!biz) return
         setLang(previous => biz.languages.includes(previous) ? previous : (biz.languages[0] ?? 'en'))
 
-        const [cats, its, ent, template] = await Promise.all([
+        const [cats, its, ent, template] = await retryRead(() => Promise.all([
           listCategories(biz.id),
           listItems(biz.id),
           getBusinessEntitlements(biz.id),
           loadTemplateConfig(biz.templateSlug),
-        ])
+        ]))
         if (cancelled) return
         setCategories(cats.filter(c => !c.isHidden))
         setItems(its)
@@ -81,23 +102,46 @@ export function useStorefrontData(slug: string | undefined, pagePath: string): S
         if (trackView) void trackPageView(biz.id, pagePath).catch(() => {})
 
         if (biz.categoryId) {
-          const { data } = await supabase.from('business_categories').select('label, item_label, category_label, icon').eq('id', biz.categoryId).maybeSingle()
-          if (data && !cancelled) {
-            setLabels({ label: data.label, itemLabel: data.item_label, categoryLabel: data.category_label, icon: data.icon })
+          const cachedCategory = categoryCache.get(biz.categoryId)
+          if (cachedCategory && cachedCategory.expiresAt > Date.now()) {
+            setLabels(cachedCategory.labels)
+          } else {
+            const { data } = await retryRead(async () => {
+              const result = await supabase.from('business_categories').select('label, item_label, category_label, icon').eq('id', biz.categoryId!).maybeSingle()
+              if (result.error) throw result.error
+              return result
+            }).catch(() => ({ data: null }))
+            if (data && !cancelled) {
+              const nextLabels = { label: data.label, itemLabel: data.item_label, categoryLabel: data.category_label, icon: data.icon }
+              categoryCache.set(biz.categoryId, { labels: nextLabels, expiresAt: Date.now() + PUBLIC_CONFIG_TTL })
+              setLabels(nextLabels)
+            }
           }
         }
       } catch {
         // Keep the last successful storefront visible during a transient poll
         // failure. The next interval will retry automatically.
+      } finally {
+        inFlight = false
+        scheduleNextRefresh()
+      }
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        if (refreshTimer !== undefined) window.clearTimeout(refreshTimer)
+      } else {
+        void load(false)
       }
     }
 
     void load(true)
-    const refreshTimer = window.setInterval(() => { void load(false) }, 30_000)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
 
     return () => {
       cancelled = true
-      window.clearInterval(refreshTimer)
+      if (refreshTimer !== undefined) window.clearTimeout(refreshTimer)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
   }, [slug, pagePath])
 

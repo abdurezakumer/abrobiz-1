@@ -15,6 +15,7 @@ import { MenuSection } from './StorefrontMenu'
 import { AboutSection } from './StorefrontAbout'
 import { ContactSection } from './StorefrontContact'
 import { BookSection } from './StorefrontBook'
+import { safeImageUrl } from '../../lib/safeUrl'
 
 function ctaVerb(itemLabel: string): string {
   if (itemLabel === 'Service') return 'View Services'
@@ -45,10 +46,10 @@ export default function StorefrontHome() {
             {/* Hero */}
             <SpotlightHero templateSlug={business.templateSlug} visualStyle={theme.visualStyle} accentColor={business.accentColor} coverUrl={business.coverUrl} heroBg={theme.layout === 'restaurant-cafe' ? theme.heroBg : undefined} minHeight={theme.visualStyle === 'luxury' || theme.visualStyle === 'aurora' || theme.layout === 'restaurant-cafe' ? 420 : 320}>
               <div style={{ padding: theme.visualStyle === 'luxury' ? '88px 20px 66px' : '64px 20px 48px', textAlign: 'center' }}>
-                {business.logoUrl && (
+                {safeImageUrl(business.logoUrl) && (
                   <motion.img
                     initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.4 }}
-                    src={business.logoUrl} alt={business.name}
+                    src={safeImageUrl(business.logoUrl) ?? undefined} alt={business.name} width={84} height={84} decoding="async"
                     style={{ width: 84, height: 84, borderRadius: '50%', objectFit: 'cover', margin: '0 auto 18px', border: `3px solid ${business.accentColor}` }}
                   />
                 )}
@@ -110,7 +111,7 @@ export default function StorefrontHome() {
                         initial={{ opacity: 0, y: 12 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.3, delay: i * 0.06 }}
                       >
                         <TiltCard style={{ background: theme.card, borderRadius: theme.visualStyle === 'luxury' || theme.visualStyle === 'heritage' ? 20 : 14, border: `1px solid ${theme.border}`, overflow: 'hidden', boxShadow: theme.visualStyle === 'aurora' ? `0 18px 60px ${business.accentColor}12` : undefined }}>
-                          <div style={{ height: 100, background: item.imageUrl ? `url(${item.imageUrl}) center/cover` : theme.heroBg }} />
+                          <div style={{ height: 100, background: safeImageUrl(item.imageUrl) ? `url("${safeImageUrl(item.imageUrl)}") center/cover` : theme.heroBg }} />
                           <div style={{ padding: '10px 12px' }}>
                             <div style={{ fontSize: 13, fontWeight: 600 }}>{tr?.name}</div>
                             <div style={{ fontSize: 12.5, fontWeight: 700, color: business.accentColor, marginTop: 2 }}>{item.price} {business.currency}</div>
@@ -204,7 +205,7 @@ function GallerySection({ images, theme, accentColor }: { images: string[]; them
           {images.map((url, index) => (
             <motion.div key={url} initial={{ opacity: 0, y: 12 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: index * 0.04 }} style={{ breakInside: 'avoid', marginBottom: 14 }}>
               <TiltCard style={{ background: theme.card, border: `1px solid ${theme.border}`, borderRadius: 16, overflow: 'hidden' }}>
-                <img src={url} alt="" style={{ display: 'block', width: '100%', minHeight: index % 3 === 1 ? 220 : 160, objectFit: 'cover' }} />
+                <img src={safeImageUrl(url) ?? undefined} alt="" loading="lazy" decoding="async" style={{ display: 'block', width: '100%', minHeight: index % 3 === 1 ? 220 : 160, objectFit: 'cover' }} />
               </TiltCard>
             </motion.div>
           ))}

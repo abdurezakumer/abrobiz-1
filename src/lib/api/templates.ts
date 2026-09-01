@@ -24,6 +24,7 @@ export async function listActiveTemplates(): Promise<Template[]> {
     .eq('is_active', true)
     .order('sort_order', { ascending: true })
     .order('name', { ascending: true })
+    .limit(100)
   if (error) throw error
   return (data ?? []).map(mapTemplate)
 }
@@ -41,6 +42,7 @@ export async function adminListTemplates(): Promise<Template[]> {
     .select('*')
     .order('sort_order', { ascending: true })
     .order('name', { ascending: true })
+    .limit(100)
   if (error) throw error
   return (data ?? []).map(mapTemplate)
 }

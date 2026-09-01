@@ -1,22 +1,18 @@
 -- ============================================================================
 -- 0007_subscription_cron.sql
--- Adds a column so reminders are sent once, then wires up a daily scheduled
--- job (pg_cron + pg_net, both Supabase-provided) that calls the
--- subscription-cron Edge Function.
+-- Adds a column so reminders are sent once. The daily scheduled job is an
+-- operational setup step (pg_cron + pg_net) and is not part of the core
+-- migration chain because it requires project-specific URL and secret values.
 --
--- pg_cron/pg_net aren't available in a plain local Postgres, so unlike the
--- other migrations this one can only be verified against a real Supabase
--- project, not this sandbox. Run it there.
+-- pg_cron/pg_net are managed Supabase extensions and must be enabled in the
+-- project before the separate scheduling SQL is run.
 -- ============================================================================
 
 alter table public.subscriptions add column if not exists reminder_sent_at timestamptz;
 
-create extension if not exists pg_cron;
-create extension if not exists pg_net;
-
 -- ----------------------------------------------------------------------------
--- After running the block above, schedule the daily job SEPARATELY with your
--- own project ref and secret filled in (see SETUP.md Phase 3.5) — a
+-- Enable pg_cron and pg_net in the Supabase dashboard, then schedule the job
+-- separately with your project ref and secret filled in (see SETUP.md Phase 3.5) — a
 -- migration file is the wrong place for project-specific values and a
 -- secret, so it isn't included here. The snippet to run looks like:
 --

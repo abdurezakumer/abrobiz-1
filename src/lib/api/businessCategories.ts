@@ -19,6 +19,7 @@ export async function listBusinessCategories(): Promise<BusinessCategory[]> {
     .from('business_categories')
     .select('*')
     .order('sort_order', { ascending: true })
+    .limit(100)
   if (error) throw error
   return (data ?? []).map(mapCategory)
 }

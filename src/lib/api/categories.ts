@@ -16,9 +16,10 @@ function mapCategory(row: any): Category {
 export async function listCategories(businessId: string): Promise<Category[]> {
   const { data, error } = await supabase
     .from('categories')
-    .select('*')
+    .select('id, business_id, name, icon, sort_order, is_hidden, translations, created_at')
     .eq('business_id', businessId)
     .order('sort_order', { ascending: true })
+    .limit(100)
   if (error) throw error
   return (data ?? []).map(mapCategory)
 }

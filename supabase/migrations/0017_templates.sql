@@ -4,7 +4,7 @@
 -- the browser or in an Edge Function.
 
 create table if not exists public.templates (
-  id uuid primary key default gen_random_uuid(),
+  id uuid primary key default extensions.gen_random_uuid(),
   slug text not null unique,
   name text not null,
   description text not null default '',

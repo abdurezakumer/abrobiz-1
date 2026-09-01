@@ -3,10 +3,21 @@ import { createAdminClient } from '../_shared/db.ts'
 import { TelegramClient, buildInlineKeyboard } from '../_shared/telegram.ts'
 import { notifyAdminsOfPayment } from '../_shared/notify.ts'
 import type { TelegramUpdate, TelegramMessage, TelegramCallbackQuery, TelegramPhotoSize } from '../_shared/types.ts'
+import { checkSecret } from '../_shared/endpointSecurity.ts'
+import { detectAllowedFile, safeStoragePath } from '../_shared/fileSecurity.ts'
+import { isRecord, readJsonBody } from '../_shared/requestSecurity.ts'
+import { enforceRateLimit } from '../_shared/rateLimit.ts'
+import { logEvent, logFailure } from '../_shared/observability.ts'
 
 export interface Ctx {
   db: SupabaseClient
   tg: TelegramClient
+}
+
+export async function claimTelegramUpdate(db: SupabaseClient, updateId: number): Promise<boolean> {
+  const { data, error } = await db.rpc('claim_telegram_update', { p_update_id: updateId })
+  if (error) throw new Error('Webhook replay protection is unavailable')
+  return data === true
 }
 
 // ── Entry point ──────────────────────────────────────────────────────────
@@ -132,11 +143,16 @@ async function handlePhoto(chatId: string, photos: TelegramPhotoSize[], ctx: Ctx
   const largest = photos[photos.length - 1]
   const file = await ctx.tg.getFile(largest.file_id)
   const bytes = await ctx.tg.downloadFile(file.file_path)
-  const path = `${pending.business_id}/${Date.now()}.jpg`
+  const extension = detectAllowedFile('image/jpeg', bytes)
+  if (extension !== 'jpg') {
+    await ctx.tg.sendMessage(chatId, 'That photo could not be validated. Please send a normal JPEG image.')
+    return
+  }
+  const path = safeStoragePath(pending.business_id, extension)
 
   const { error: uploadError } = await ctx.db.storage.from('payment-proofs').upload(path, bytes, { contentType: 'image/jpeg' })
   if (uploadError) {
-    console.error('Proof upload failed', uploadError)
+    logEvent('error', { service: 'abrobiz-edge', function_name: 'telegram-webhook', operation: 'upload_payment_proof', error_category: 'DEPENDENCY_ERROR', error_code: uploadError.name ?? 'unknown', provider: 'storage', outcome: 'failed' })
     await ctx.tg.sendMessage(chatId, "Something went wrong saving your photo \u2014 please try again.")
     return
   }
@@ -158,7 +174,7 @@ async function handlePhoto(chatId: string, photos: TelegramPhotoSize[], ctx: Ctx
   await ctx.db.from('telegram_pending_actions').delete().eq('telegram_chat_id', chatId)
 
   if (insertError || !payment) {
-    console.error('Payment insert failed', insertError)
+    logEvent('error', { service: 'abrobiz-edge', function_name: 'telegram-webhook', operation: 'insert_payment', error_category: 'DATABASE_ERROR', error_code: insertError?.code ?? 'unknown', outcome: 'failed' })
     await ctx.tg.sendMessage(chatId, "Something went wrong submitting your payment \u2014 please try again or use the dashboard.")
     return
   }
@@ -229,6 +245,11 @@ async function handleApproval(
     return
   }
 
+  if (cb.message?.chat.type !== 'private' || String(cb.from.id) !== adminChatId) {
+    await ctx.tg.sendMessage(adminChatId, 'This approval request is not authorized.')
+    return
+  }
+
   const rpcName = action === 'approve' ? 'admin_approve_payment' : 'admin_reject_payment'
   const rpcArgs = action === 'approve' ? { p_payment_id: paymentId } : { p_payment_id: paymentId, p_reason: 'Rejected via Telegram' }
 
@@ -238,7 +259,7 @@ async function handleApproval(
 
   if (error) {
     const alreadyReviewed = /already reviewed/i.test(error.message)
-    const text = alreadyReviewed ? '\u26A0\uFE0F Already handled by another admin.' : `Something went wrong: ${error.message}`
+    const text = alreadyReviewed ? '\u26A0\uFE0F Already handled by another admin.' : 'Something went wrong. Please use the admin dashboard.'
     if (messageId) await ctx.tg.editMessageText(adminChatId, messageId, text).catch(() => {})
     return
   }
@@ -264,21 +285,38 @@ async function handleApproval(
 // when it's imported by a test.
 if (import.meta.main) {
   Deno.serve(async req => {
-    const expectedSecret = Deno.env.get('TELEGRAM_WEBHOOK_SECRET')
-    if (expectedSecret) {
-      const got = req.headers.get('X-Telegram-Bot-Api-Secret-Token')
-      if (got !== expectedSecret) {
-        return new Response('Unauthorized', { status: 401 })
-      }
+    if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 })
+    const secretStatus = checkSecret(
+      req.headers.get('X-Telegram-Bot-Api-Secret-Token'),
+      Deno.env.get('TELEGRAM_WEBHOOK_SECRET'),
+    )
+    if (secretStatus === 'missing') {
+      return new Response('Service unavailable', { status: 503 })
+    }
+    if (secretStatus === 'invalid') {
+      return new Response('Unauthorized', { status: 401 })
     }
 
     try {
-      const update = (await req.json()) as TelegramUpdate
+      const limited = await enforceRateLimit(req, 'telegram-webhook', 600, 60)
+      if (limited) return limited
+      const parsedBody = await readJsonBody(req, 128 * 1024)
+      if (parsedBody.error || !isRecord(parsedBody.data)) return new Response('Bad request', { status: parsedBody.status ?? 400 })
+      const update = parsedBody.data as unknown as TelegramUpdate
+      if (!Number.isSafeInteger(update.update_id)) return new Response('Bad request', { status: 400 })
       const db = createAdminClient()
+      const claimed = await claimTelegramUpdate(db, update.update_id)
+      if (!claimed) return new Response('ok', { status: 200 })
+      if (update.message?.photo?.length) {
+        const photoChatId = String(update.message.chat.id)
+        const photoLimited = await enforceRateLimit(req, 'telegram-payment-photo', 20, 3600, photoChatId)
+        if (photoLimited) return photoLimited
+      }
       const tg = new TelegramClient(Deno.env.get('TELEGRAM_BOT_TOKEN') ?? '')
       await handleUpdate(update, { db, tg })
     } catch (err) {
-      console.error('telegram-webhook error', err)
+      logFailure(req, { function_name: 'telegram-webhook', operation: 'process_update', error_category: 'INTERNAL_ERROR', error_code: err instanceof Error ? err.name : 'UnknownError', provider: 'telegram', status: 500 })
+      return new Response('Webhook processing failed', { status: 500 })
     }
 
     // Always respond 200 quickly so Telegram doesn't retry-storm on errors.

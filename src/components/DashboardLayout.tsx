@@ -8,9 +8,10 @@ import { useAuth } from '../lib/authContext'
 import { supabase } from '../lib/supabaseClient'
 import { daysRemaining } from '../lib/api/subscriptions'
 import { hasFeature } from '../lib/entitlements'
-import { sendVerificationEmail } from '../lib/api/emailVerification'
+import { resendVerificationOtp } from '../lib/api/emailVerification'
 import { categoryIcon } from '../lib/icons'
 import { publicStorefrontUrl } from '../lib/storefrontUrl'
+import { friendlyError } from '../lib/errors'
 
 interface Notification {
   id: string
@@ -54,7 +55,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     if (!profile) return
     supabase
       .from('notifications')
-      .select('*')
+      .select('id, title, body, link, is_read, created_at')
       .eq('user_id', profile.id)
       .order('created_at', { ascending: false })
       .limit(10)
@@ -167,7 +168,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           <a
             href={publicStorefrontUrl(business.slug)}
             target="_blank"
-            rel="noreferrer"
+            rel="noopener noreferrer"
             style={{
               display: 'flex', alignItems: 'center', gap: 8, margin: '0 8px 12px', padding: '9px 12px',
               borderRadius: 10, fontSize: 13, color: 'rgba(240,237,231,0.7)', textDecoration: 'none',
@@ -374,17 +375,18 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                     setResendState('sending')
                     setResendError('')
                     try {
-                      await sendVerificationEmail()
+                      if (!profile?.email) throw new Error('Your account email is unavailable.')
+                      await resendVerificationOtp(profile.email)
                       setResendState('sent')
                     } catch (err) {
                       setResendState('error')
-                      setResendError(err instanceof Error ? err.message : 'The email could not be sent.')
+                      setResendError(friendlyError(err))
                     }
                   }}
                   disabled={resendState !== 'idle'}
                   style={{ background: 'none', border: 'none', color: '#D4A853', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', padding: 0 }}
                 >
-                  {resendState === 'sending' ? 'Sending…' : resendState === 'sent' ? 'Sent — check your inbox' : resendState === 'error' ? 'Try again' : 'Resend link'}
+                  {resendState === 'sending' ? 'Sending…' : resendState === 'sent' ? 'Sent — check your inbox' : resendState === 'error' ? 'Try again' : 'Resend code'}
                 </button>
                 {resendState === 'error' && <span style={{ fontSize: 12, color: '#DC2626' }}>{resendError}</span>}
                 <button onClick={() => setVerifyBannerDismissed(true)} style={{ background: 'none', border: 'none', color: 'rgba(10,12,16,0.35)', cursor: 'pointer', padding: 0 }}>
