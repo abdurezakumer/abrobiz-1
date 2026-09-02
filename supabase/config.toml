@@ -7,6 +7,8 @@ project_id = "qgbvuvxxfogcsvqzncdx"
 verify_jwt = false
 
 [functions.telegram-webhook]
+# Telegram calls this endpoint directly and cannot provide a Supabase JWT.
+# The handler authenticates Telegram with X-Telegram-Bot-Api-Secret-Token.
 verify_jwt = false
 
 [functions.subscription-cron]

@@ -91,6 +91,10 @@ class QueryBuilder {
     return this
   }
 
+  limit(_count: number) {
+    return this
+  }
+
   insert(row: Row) {
     this.pendingInsert = row
     return this

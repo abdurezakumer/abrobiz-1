@@ -12,6 +12,7 @@ function assertStringIncludes(actual: string, expected: string) {
 
 function freshCtx() {
   const db = new MockSupabase()
+  db.seed('profiles', [{ id: 'admin1', role: 'admin' }])
   const tg = new MockTelegram()
   return { db, tg }
 }
@@ -41,6 +42,48 @@ Deno.test('/start with an invalid token tells the user', async () => {
   }
   await handleUpdate(update, { db: db as any, tg: tg as any })
   assertStringIncludes(tg.sent[0].text!, 'invalid or expired')
+})
+
+Deno.test('/start without a token shows the AbroBiz information menu', async () => {
+  const { db, tg } = freshCtx()
+  await handleUpdate({
+    update_id: 20,
+    message: { message_id: 20, chat: { id: 100, type: 'private' }, text: '/start' },
+  }, { db: db as any, tg: tg as any })
+  assertStringIncludes(tg.sent[0].text!, 'Welcome to AbroBiz')
+  assertStringIncludes(tg.sent[0].text!, '/support')
+})
+
+Deno.test('/plans returns the active paid plans and their current prices', async () => {
+  const { db, tg } = freshCtx()
+  db.seed('plans', [
+    { name: 'Basic', price_etb: 1000, billing_interval: 'month', features: ['Full website'], is_active: true, is_trial: false, sort_order: 1 },
+    { name: 'Business', price_etb: 1500, billing_interval: 'month', features: ['Analytics'], is_active: true, is_trial: false, sort_order: 2 },
+    { name: 'Premium', price_etb: 2000, billing_interval: 'month', features: ['Online ordering'], is_active: true, is_trial: false, sort_order: 3 },
+  ])
+  await handleUpdate({ update_id: 21, message: { message_id: 21, chat: { id: 101, type: 'private' }, text: '/plans' } }, { db: db as any, tg: tg as any })
+  assertStringIncludes(tg.sent[0].text!, 'Basic — 1000 ETB/month')
+  assertStringIncludes(tg.sent[0].text!, 'Business — 1500 ETB/month')
+  assertStringIncludes(tg.sent[0].text!, 'Premium — 2000 ETB/month')
+})
+
+Deno.test('/support returns a safe AbroBiz support contact', async () => {
+  const { db, tg } = freshCtx()
+  await handleUpdate({ update_id: 22, message: { message_id: 22, chat: { id: 102, type: 'private' }, text: '/contact' } }, { db: db as any, tg: tg as any })
+  assertStringIncludes(tg.sent[0].text!, 'AbroBiz Support')
+  assertStringIncludes(tg.sent[0].text!, 'support@abrobiz.com')
+})
+
+Deno.test('/admin is restricted and /pending is available only to linked admins', async () => {
+  const { db, tg } = freshCtx()
+  await handleUpdate({ update_id: 23, message: { message_id: 23, chat: { id: 103, type: 'private' }, text: '/admin' } }, { db: db as any, tg: tg as any })
+  assertStringIncludes(tg.sent[0].text!, 'authorized AbroBiz administrator')
+
+  db.seed('admin_telegram_links', [{ id: 'admin-link', admin_id: 'admin1', telegram_chat_id: '104', linked_at: '2026-01-01' }])
+  db.seed('payments', [{ id: 'payment-1', amount_etb: 1000, status: 'pending', businesses: { name: 'Demo Cafe' }, plans: { name: 'Basic' } }])
+  await handleUpdate({ update_id: 24, message: { message_id: 24, chat: { id: 104, type: 'private' }, text: '/pending' } }, { db: db as any, tg: tg as any })
+  assertStringIncludes(tg.sent[0].text!, 'waiting for review')
+  assertStringIncludes(tg.sent[1].text!, 'Demo Cafe')
 })
 
 Deno.test('/pay from an unlinked chat asks the owner to connect first', async () => {

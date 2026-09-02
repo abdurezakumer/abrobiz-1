@@ -136,8 +136,8 @@ which email provider you want to use and I'll draft the exact template text.
   the feature if the business isn't on Premium
 - Admin: overview stats, business management (block/unblock), payment approval
   queue, plan/payment-method/category configuration, and per-plan feature
-  toggles (Bookings/Ordering/Reviews) — Premium (1000 ETB) has all three by
-  default, Basic/Business have none, and it's all editable from **Admin →
+  toggles (Bookings/Ordering/Reviews) — Basic (1000 ETB), Business (1500 ETB),
+  and Premium (2000 ETB) have configurable feature access, and it's all editable from **Admin →
   Settings → Plans**, not hardcoded
 - Public storefront at `/r/your-slug` — Home / Menu / About / Contact always,
   plus Book (if Premium) and a cart + checkout right on the Menu page (if
@@ -191,13 +191,13 @@ BotFather gives you a **token** that looks like `123456789:AAF...` — save it.
 From the `app/` folder, with the [Supabase CLI](https://supabase.com/docs/guides/cli) installed and linked to your project:
 
 ```bash
-supabase functions deploy telegram-webhook --no-verify-jwt
+supabase functions deploy telegram-webhook
 supabase functions deploy notify-payment-submitted
 ```
 
-`telegram-webhook` needs `--no-verify-jwt` because Telegram calls it directly,
-not through your app's auth — it's protected instead by the secret token set
-up in the next step. `notify-payment-submitted` is called by your logged-in
+`telegram-webhook` has JWT verification disabled in `supabase/config.toml` because
+Telegram calls it directly, not through your app's auth — it is protected instead
+by the secret token set up in the next step. `notify-payment-submitted` is called by your logged-in
 frontend, so it keeps normal JWT verification.
 
 ## 3. Set secrets
@@ -205,6 +205,9 @@ frontend, so it keeps normal JWT verification.
 ```bash
 supabase secrets set TELEGRAM_BOT_TOKEN=123456789:AAF...
 supabase secrets set TELEGRAM_WEBHOOK_SECRET=$(openssl rand -hex 20)
+supabase secrets set SUPPORT_EMAIL=support@abrobiz.com
+# Optional: set the support Telegram username without the @ symbol.
+supabase secrets set SUPPORT_TELEGRAM_USERNAME=your_support_username
 ```
 
 (`SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are already available to every
@@ -217,11 +220,19 @@ and the exact same webhook secret from step 3):
 
 ```bash
 curl "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setWebhook" \
-  -d "url=https://<YOUR_PROJECT_REF>.functions.supabase.co/telegram-webhook" \
+  -d "url=https://<YOUR_PROJECT_REF>.supabase.co/functions/v1/telegram-webhook" \
   -d "secret_token=<YOUR_WEBHOOK_SECRET>"
 ```
 
 You should get back `{"ok":true,"result":true,...}`.
+
+To diagnose delivery without revealing the bot token, call Telegram's
+`getWebhookInfo` method and check that the URL is exactly the one above and
+that `last_error_message` is absent:
+
+```bash
+curl "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getWebhookInfo"
+```
 
 ## 5. Tell the frontend the bot's username
 
@@ -233,6 +244,26 @@ VITE_TELEGRAM_BOT_USERNAME=your_bot_username
 
 (no `@`, no `bot` link prefix — just the username). Restart `npm run dev` /
 redeploy.
+
+The bot also supports `/info`, `/plans`, `/support`, `/contact`, `/pay`, and
+`/cancel`. The `/admin` and `/pending` commands, plus payment approval buttons,
+work only for an admin account linked from **Admin → Settings → Connect
+Telegram**. To show these commands in Telegram's command menu, run this once:
+
+```bash
+curl "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setMyCommands" \
+  --data-urlencode 'commands=[{"command":"start","description":"Connect your AbroBiz account"},{"command":"info","description":"About AbroBiz"},{"command":"plans","description":"View plans and prices"},{"command":"support","description":"Contact AbroBiz support"},{"command":"pay","description":"Submit a payment"},{"command":"cancel","description":"Cancel the current action"}]'
+```
+
+Apply the plan-price migration before testing the new prices:
+
+```bash
+supabase db push
+```
+
+It keeps the free trial unchanged and sets Basic to 1000 ETB/month, Business
+to 1500 ETB/month, and Premium to 2000 ETB/month. The Admin → Settings → Plans
+screen remains the source of truth for later plan changes.
 
 ## 6. Connect your own chat as admin
 
@@ -252,7 +283,8 @@ right in the chat.
 ## How it works (if you want to modify it)
 
 - `supabase/functions/telegram-webhook/index.ts` — all bot conversation logic
-  (`/start`, `/pay`, photo handling, Approve/Reject buttons)
+  (`/start`, `/info`, `/plans`, `/support`, `/admin`, `/pay`, photo handling,
+  Approve/Reject buttons)
 - `supabase/functions/notify-payment-submitted/index.ts` — called by the web
   Billing page right after a proof upload, to ping admins
 - `supabase/functions/_shared/notify.ts` — the actual "send to every linked
