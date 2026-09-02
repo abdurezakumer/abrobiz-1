@@ -31,7 +31,7 @@ export default function Billing() {
     listPaymentMethods().then(ms => {
       setMethods(ms)
       setSelectedMethod(ms[0] ?? null)
-    })
+    }).catch(err => setError(friendlyError(err)))
     if (business) {
       listPaymentsForBusiness(business.id).then(setHistory)
       getOrCreateBusinessTelegramLink(business.id).then(setTelegramLink).catch(() => {})
@@ -41,7 +41,15 @@ export default function Billing() {
   const days = daysRemaining(subscription?.endDate ?? null)
 
   async function handleSubmit() {
-    if (!business || !selectedPlan || !selectedMethod || !proofFile) return
+    if (!business || !selectedPlan) return
+    if (!selectedMethod) {
+      setError('Please select an available payment method before submitting.')
+      return
+    }
+    if (!proofFile) {
+      setError('Please upload your payment receipt before submitting.')
+      return
+    }
     setSubmitting(true)
     setError('')
     try {
@@ -130,13 +138,19 @@ export default function Billing() {
           </div>
 
           <div style={{ fontSize: 12.5, color: 'rgba(10,12,16,0.5)', marginBottom: 8 }}>1. Send payment to:</div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
-            {methods.map(m => (
-              <button key={m.id} onClick={() => setSelectedMethod(m)} style={{ ...methodChip, background: selectedMethod?.id === m.id ? '#0A0C10' : '#F6F3EE', color: selectedMethod?.id === m.id ? '#fff' : '#0A0C10' }}>
-                {m.name}
-              </button>
-            ))}
-          </div>
+          {methods.length > 0 ? (
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+              {methods.map(m => (
+                <button type="button" key={m.id} onClick={() => { setSelectedMethod(m); setError('') }} style={{ ...methodChip, background: selectedMethod?.id === m.id ? '#0A0C10' : '#F6F3EE', color: selectedMethod?.id === m.id ? '#fff' : '#0A0C10' }}>
+                  {m.name}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div style={{ color: '#B45309', fontSize: 13, marginBottom: 16 }}>
+              No active payment method is available yet. Please contact AbroBiz support.
+            </div>
+          )}
           {selectedMethod && (
             <div style={{ background: '#F6F3EE', borderRadius: 12, padding: '12px 16px', marginBottom: 20, fontSize: 13.5 }}>
               <div><strong>{selectedMethod.accountName}</strong> — {selectedMethod.accountNumber}</div>
@@ -163,7 +177,7 @@ export default function Billing() {
 
           {error && <div style={{ color: '#F87171', fontSize: 13, marginBottom: 12 }}>{error}</div>}
 
-          <button onClick={handleSubmit} disabled={!proofFile || submitting} style={{ ...selectBtn, width: '100%', opacity: !proofFile || submitting ? 0.5 : 1 }}>
+          <button type="button" onClick={handleSubmit} disabled={!selectedMethod || !proofFile || submitting} style={{ ...selectBtn, width: '100%', opacity: !selectedMethod || !proofFile || submitting ? 0.5 : 1 }}>
             {submitting ? 'Submitting…' : 'Submit for approval'}
           </button>
         </motion.div>
