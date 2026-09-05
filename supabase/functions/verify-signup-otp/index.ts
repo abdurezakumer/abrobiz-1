@@ -31,7 +31,7 @@ if (import.meta.main) {
       const anonKey = Deno.env.get('SUPABASE_ANON_KEY')
       if (!url || !anonKey) return json({ error: 'Email verification is temporarily unavailable.' }, 503, req)
       const client = createClient(url, anonKey, { auth: { persistSession: false } })
-      const { data, error } = await client.auth.verifyOtp({ email, token, type: 'signup' })
+      const { data, error } = await client.auth.verifyOtp({ email, token, type: 'email' })
       if (error || !data.session) return json({ error: 'That verification code is invalid or expired.' }, 400, req)
 
       return json({

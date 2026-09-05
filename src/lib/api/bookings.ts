@@ -1,5 +1,6 @@
 import { supabase } from '../supabaseClient'
 import type { Booking } from '../../types'
+import { edgeFunctionError } from '../errors'
 
 function mapBooking(row: any): Booking {
   return {
@@ -30,7 +31,7 @@ export async function submitBooking(input: {
   const { error } = await supabase.functions.invoke('submit-booking', {
     body: input,
   })
-  if (error) throw error
+  if (error) throw await edgeFunctionError(error)
 }
 
 export async function listBookings(businessId: string): Promise<Booking[]> {

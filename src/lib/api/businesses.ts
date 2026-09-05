@@ -1,6 +1,7 @@
 import { supabase } from '../supabaseClient'
 import type { Business, WeeklyHours } from '../../types'
 import { isValidBusinessSlug } from '../slugify'
+import { edgeFunctionError } from '../errors'
 
 const DEFAULT_HOURS: WeeklyHours = {
   mon: { open: '08:00', close: '22:00', closed: false },
@@ -142,7 +143,7 @@ export async function uploadBusinessImage(
     body: file,
     headers: { 'X-Upload-Bucket': bucket, 'X-Business-Id': businessId, 'Content-Type': file.type },
   })
-  if (error) throw error
+  if (error) throw await edgeFunctionError(error)
   if (!data?.path) throw new Error('Upload did not return a file path.')
   const { data: publicData } = supabase.storage.from(bucket).getPublicUrl(data.path)
   return publicData.publicUrl

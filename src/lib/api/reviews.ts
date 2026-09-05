@@ -1,5 +1,6 @@
 import { supabase } from '../supabaseClient'
 import type { Review } from '../../types'
+import { edgeFunctionError } from '../errors'
 
 function mapReview(row: any): Review {
   return {
@@ -18,7 +19,7 @@ export async function submitReview(input: { businessId: string; customerName: st
   const { error } = await supabase.functions.invoke('submit-review', {
     body: input,
   })
-  if (error) throw error
+  if (error) throw await edgeFunctionError(error)
 }
 
 /** Public — RLS only returns approved rows to non-owners. */

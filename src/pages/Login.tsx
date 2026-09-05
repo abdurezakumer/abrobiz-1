@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { ArrowLeft } from 'lucide-react'
-import { signIn, friendlyAuthError, UnverifiedEmailError } from '../lib/authActions'
+import { requestLoginOtp, verifyLoginOtp, friendlyAuthError } from '../lib/authActions'
 import { requestPasswordReset } from '../lib/api/passwordReset'
 import GoogleSignInButton from '../components/GoogleSignInButton'
 import { safeInternalPath } from '../lib/safeUrl'
@@ -13,7 +13,8 @@ export default function Login() {
   const navigate = useNavigate()
   const location = useLocation()
   const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
+  const [otp, setOtp] = useState('')
+  const [otpSent, setOtpSent] = useState(false)
   const [error, setError] = useState('')
   const [info, setInfo] = useState('')
   const [loading, setLoading] = useState(false)
@@ -25,21 +26,33 @@ export default function Login() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
-    if (turnstileEnabled && !turnstileToken) {
+    if (!email.trim()) {
+      setError('Enter your email address to continue.')
+      return
+    }
+    if (!otpSent && turnstileEnabled && !turnstileToken) {
       setError('Complete the security check to continue.')
       return
     }
     setLoading(true)
     const from = safeInternalPath((location.state as { from?: { pathname?: string } })?.from?.pathname, '/dashboard')
     try {
-      await signIn(email, password, turnstileToken)
-      navigate(from, { replace: true })
-    } catch (err) {
-      if (err instanceof UnverifiedEmailError) {
-        navigate('/verify-email?email=' + encodeURIComponent(email.trim().toLowerCase()), { state: { from: { pathname: from } }, replace: true })
+      if (!otpSent) {
+        await requestLoginOtp(email, turnstileToken)
+        setOtpSent(true)
+        setInfo('If this email belongs to an AbroBiz account, a six-digit code is on its way. Check your inbox.')
+        setTurnstileToken(null)
+        setTurnstileResetKey(value => value + 1)
       } else {
-        setError(friendlyAuthError(err))
+        if (!/^\d{6}$/.test(otp)) {
+          setError('Enter the six-digit verification code from your email.')
+          return
+        }
+        await verifyLoginOtp(email, otp)
+        navigate(from, { replace: true })
       }
+    } catch (err) {
+      setError(friendlyAuthError(err))
       setTurnstileToken(null)
       setTurnstileResetKey(value => value + 1)
     } finally {
@@ -104,16 +117,18 @@ export default function Login() {
               <span style={{ fontSize: 12.5, color: 'rgba(240,237,231,0.5)', fontWeight: 500 }}>Email</span>
               <input required type="email" value={email} onChange={e => setEmail(e.target.value)} style={inputStyle} placeholder="you@example.com" />
             </label>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <span style={{ fontSize: 12.5, color: 'rgba(240,237,231,0.5)', fontWeight: 500 }}>Password</span>
-              <input required type="password" value={password} onChange={e => setPassword(e.target.value)} style={inputStyle} placeholder="••••••••" />
-            </label>
+            {otpSent && (
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <span style={{ fontSize: 12.5, color: 'rgba(240,237,231,0.5)', fontWeight: 500 }}>Email verification code</span>
+                <input required inputMode="numeric" autoComplete="one-time-code" maxLength={6} pattern="[0-9]{6}" value={otp} onChange={e => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))} style={{ ...inputStyle, letterSpacing: 5, textAlign: 'center' }} placeholder="123456" />
+              </label>
+            )}
 
             <button type="button" onClick={handleForgotPassword} style={{ alignSelf: 'flex-end', background: 'none', border: 'none', color: 'rgba(240,237,231,0.45)', fontSize: 12.5, cursor: 'pointer', padding: 0 }}>
               Forgot password?
             </button>
 
-            <TurnstileWidget action="login" onToken={setTurnstileToken} resetKey={turnstileResetKey} />
+            {!otpSent && <TurnstileWidget action="login" onToken={setTurnstileToken} resetKey={turnstileResetKey} />}
             <TurnstileWidget action="password-reset" onToken={setResetToken} resetKey={resetWidgetKey} />
 
             {error && (
@@ -127,9 +142,14 @@ export default function Login() {
               </div>
             )}
 
-            <button type="submit" disabled={loading || (turnstileEnabled && !turnstileToken)} style={submitStyle}>
-              {loading ? 'Logging in…' : 'Log in'}
+            <button type="submit" disabled={loading || (!otpSent && turnstileEnabled && !turnstileToken)} style={submitStyle}>
+              {loading ? (otpSent ? 'Verifying…' : 'Sending code…') : otpSent ? 'Verify and log in' : 'Send login code'}
             </button>
+            {otpSent && (
+              <button type="button" onClick={() => { setOtpSent(false); setOtp(''); setInfo(''); setError(''); setTurnstileResetKey(value => value + 1) }} style={{ background: 'none', border: 'none', color: 'rgba(240,237,231,0.5)', fontSize: 12.5, cursor: 'pointer' }}>
+                Use a different email
+              </button>
+            )}
           </form>
 
           <p style={{ textAlign: 'center', color: 'rgba(240,237,231,0.45)', fontSize: 13.5, marginTop: 22 }}>

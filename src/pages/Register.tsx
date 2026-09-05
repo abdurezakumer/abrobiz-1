@@ -39,9 +39,11 @@ export default function Register() {
     }
     setLoading(true)
     try {
-      const { session } = await signUp(email, password, name, phone, termsAccepted, privacyAccepted, turnstileToken)
-      if (session) navigate('/setup', { replace: true })
-      else navigate('/verify-email?email=' + encodeURIComponent(email.trim().toLowerCase()), { replace: true })
+      await signUp(email, password, name, phone, termsAccepted, privacyAccepted, turnstileToken)
+      // Email/password registration always completes through the six-digit
+      // OTP screen, even if Supabase is configured to return a temporary
+      // session during sign-up.
+      navigate('/verify-email?email=' + encodeURIComponent(email.trim().toLowerCase()), { replace: true })
     } catch (err) {
       setError(friendlyAuthError(err))
       setTurnstileToken(null)

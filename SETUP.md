@@ -368,12 +368,13 @@ Tests: `cd app/supabase/functions && deno test --node-modules-dir=none _shared/c
 
 ---
 
-# Setup Guide — Phase 5 (Your own email — verification, password reset, announcements)
+# Setup Guide — Phase 5 (AbroBiz email — OTP, password reset, announcements)
 
-Three emails this app sends on its own, never through Supabase's built-in
-system: signup confirmation, password reset, and admin announcements. All
-three go through one shared sender (`supabase/functions/_shared/mailer.ts`),
-which picks a provider automatically:
+Password-reset and admin-announcement emails are sent by AbroBiz through one
+shared sender (`supabase/functions/_shared/mailer.ts`), which picks a provider
+automatically. Signup and login OTP messages are sent by Supabase Auth using
+the SMTP provider configured for the project, with the AbroBiz-branded Auth
+email template described below.
 
 - **`RESEND_API_KEY` set → sends via [Resend](https://resend.com)** using
   your domain (`noreply@abrobiz.com`). This is the recommended path now
@@ -389,15 +390,30 @@ which picks a provider automatically:
 You don't have to choose one forever — set `RESEND_API_KEY` later and every
 function switches over automatically, no code changes.
 
-Verification is **non-blocking by design**: people can use the app
-immediately after signing up, with a dismissible "please confirm your
-email" banner in the dashboard until they do.
+Email OTP verification is required before an email/password user can continue
+to setup or manage a business website. Google sign-ins are already verified by
+Google and continue directly through OAuth.
 
-## 1. Turn off Supabase's built-in confirmation email
+## 1. Configure Supabase Auth OTP email
 
-**Authentication → Providers → Email** in the Supabase dashboard → turn off
-**"Confirm email"**. This makes `signUp()` return a working session
-immediately instead of waiting on Supabase's own email.
+In **Authentication → Providers → Email**, keep Email enabled. Either setting
+for **Confirm email** is supported: when it is enabled, Supabase sends the
+signup OTP; when it is disabled, the AbroBiz signup function requests an OTP
+before returning. In **Authentication → Email Templates**, edit the relevant
+confirmation / magic-link template so it includes `{{ .Token }}`. That makes
+Supabase send a six-digit OTP instead of only a clickable link.
+
+Configure the SMTP provider with the verified AbroBiz sender address. For
+Resend, use the SMTP credentials from Resend's SMTP settings, or configure
+Supabase's supported SMTP provider directly. The Auth template should use
+AbroBiz wording, for example:
+
+```html
+<h2>Your AbroBiz verification code</h2>
+<p>Use this six-digit code to continue:</p>
+<p style="font-size: 28px; font-weight: 700; letter-spacing: 6px;">{{ .Token }}</p>
+<p>This code expires soon. If you did not request it, you can ignore this email.</p>
+```
 
 ## 2. Set up Resend with your domain (recommended)
 
@@ -464,8 +480,8 @@ if you haven't already (in order — each depends on the last).
 
 ## Try it
 
-- **Signup:** land in the dashboard immediately, confirm via the banner at
-  the top (or its **Resend link** button if the email doesn't arrive).
+- **Signup:** enter the six-digit code on the AbroBiz verification screen.
+- **Login:** enter your email, request a code, and verify the six-digit OTP.
 - **Forgot password:** from the login page, "Forgot password?" → check
   inbox → the link opens `/reset-password` to set a new one. The response
   is deliberately identical whether or not the email matched an account, so

@@ -66,7 +66,21 @@ if (import.meta.main) {
         return json(GENERIC_RESPONSE, 200, req)
       }
 
-      return json({ ...GENERIC_RESPONSE, session: data.session, user: data.user ? { id: data.user.id, email: data.user.email } : null }, 200, req)
+      // With email confirmation disabled, signUp() returns a session and would
+      // otherwise bypass the required OTP step. Request a native email OTP in
+      // that case and never return the temporary session to the browser.
+      if (data.session) {
+        const { error: otpError } = await client.auth.signInWithOtp({
+          email,
+          options: { shouldCreateUser: false },
+        })
+        if (otpError) {
+          logFailure(req, { function_name: 'signup', operation: 'send_signup_otp', error_category: 'DEPENDENCY_ERROR', error_code: otpError.name ?? 'unknown', provider: 'supabase-auth', status: 503 })
+          return json({ error: 'AbroBiz verification is temporarily unavailable.' }, 503, req)
+        }
+      }
+
+      return json({ ...GENERIC_RESPONSE, session: null, user: data.user ? { id: data.user.id, email: data.user.email } : null }, 200, req)
     } catch (error) {
       logFailure(req, { function_name: 'signup', operation: 'auth_signup', error_category: 'INTERNAL_ERROR', error_code: error instanceof Error ? error.name : 'UnknownError', status: 503 })
       return json({ error: 'AbroBiz sign-up is temporarily unavailable.' }, 503, req)

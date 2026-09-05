@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -51,17 +51,6 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       })
   }, [business?.categoryId])
 
-  useEffect(() => {
-    if (!profile) return
-    supabase
-      .from('notifications')
-      .select('id, title, body, link, is_read, created_at')
-      .eq('user_id', profile.id)
-      .order('created_at', { ascending: false })
-      .limit(10)
-      .then(({ data }) => setNotifications(data ?? []))
-  }, [profile])
-
   const unreadCount = notifications.filter(n => !n.is_read).length
   const CategoryIcon = categoryIcon(icon)
 
@@ -98,6 +87,27 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     await supabase.from('notifications').update({ is_read: true }).in('id', unreadIds)
     setNotifications(prev => prev.map(n => ({ ...n, is_read: true })))
   }
+
+  const loadNotifications = useCallback(async () => {
+    if (!profile) return
+    const { data } = await supabase
+      .from('notifications')
+      .select('id, title, body, link, is_read, created_at')
+      .eq('user_id', profile.id)
+      .order('created_at', { ascending: false })
+      .limit(10)
+    setNotifications(data ?? [])
+  }, [profile])
+
+  useEffect(() => {
+    if (!profile) {
+      setNotifications([])
+      return
+    }
+    void loadNotifications()
+    const timer = window.setInterval(() => { void loadNotifications() }, 15000)
+    return () => window.clearInterval(timer)
+  }, [profile, loadNotifications])
 
   const Sidebar = (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: '24px 16px 16px' }}>
@@ -342,10 +352,18 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                   </div>
                 ) : (
                   notifications.map(n => (
-                    <div key={n.id} style={{ padding: '12px 16px', borderBottom: '1px solid rgba(10,12,16,0.05)' }}>
+                    <button
+                      type="button"
+                      key={n.id}
+                      onClick={() => {
+                        setNotifOpen(false)
+                        if (n.link) navigate(n.link)
+                      }}
+                      style={{ display: 'block', width: '100%', padding: '12px 16px', border: 'none', borderBottom: '1px solid rgba(10,12,16,0.05)', background: 'transparent', textAlign: 'left', cursor: n.link ? 'pointer' : 'default' }}
+                    >
                       <div style={{ fontSize: 13, fontWeight: 600, color: '#0A0C10' }}>{n.title}</div>
                       <div style={{ fontSize: 12.5, color: 'rgba(10,12,16,0.55)', marginTop: 2 }}>{n.body}</div>
-                    </div>
+                    </button>
                   ))
                 )}
               </motion.div>

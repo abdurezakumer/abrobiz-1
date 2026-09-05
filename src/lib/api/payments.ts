@@ -1,4 +1,5 @@
 import { supabase } from '../supabaseClient'
+import { edgeFunctionError } from '../errors'
 import type { Payment } from '../../types'
 
 function mapPayment(row: any): Payment {
@@ -47,14 +48,14 @@ export async function uploadPaymentProof(businessId: string, file: File): Promis
     body: file,
     headers: { 'X-Upload-Bucket': 'payment-proofs', 'X-Business-Id': businessId, 'Content-Type': file.type },
   })
-  if (error) throw error
+  if (error) throw await edgeFunctionError(error)
   if (!data?.path) throw new Error('Upload did not return a file path.')
   return data.path // private bucket: resolve signed URLs on read
 }
 
 export async function getPaymentProofUrl(path: string): Promise<string> {
   const { data, error } = await supabase.functions.invoke('storage-signed-url', { body: { path } })
-  if (error) throw error
+  if (error) throw await edgeFunctionError(error)
   if (!data?.signedUrl) throw new Error('Could not prepare the file.')
   return data.signedUrl
 }
@@ -73,7 +74,8 @@ export async function submitPayment(input: {
     headers: { 'Idempotency-Key': input.idempotencyKey ?? crypto.randomUUID() },
     body: input,
   })
-  if (error) throw error
+  if (error) throw await edgeFunctionError(error)
+  if (!data?.payment) throw new Error('Could not submit your payment.')
   return mapPayment(data.payment)
 }
 

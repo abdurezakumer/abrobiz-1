@@ -1,5 +1,6 @@
 import { supabase } from '../supabaseClient'
 import type { Order, OrderStatus } from '../../types'
+import { edgeFunctionError } from '../errors'
 
 function mapOrder(row: any): Order {
   return {
@@ -44,7 +45,7 @@ export async function submitOrder(input: {
     headers: { 'Idempotency-Key': input.idempotencyKey ?? crypto.randomUUID() },
     body: input,
   })
-  if (error) throw error
+  if (error) throw await edgeFunctionError(error)
   return { id: data.id, totalEtb: Number(data.total_etb) }
 }
 

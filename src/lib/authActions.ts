@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient'
+import { edgeFunctionError } from './errors'
 
 export class UnverifiedEmailError extends Error {
   constructor() {
@@ -20,10 +21,6 @@ export async function signUp(
     body: { email, password, name, phone, termsAccepted, privacyAccepted, ...(turnstileToken ? { turnstileToken } : {}) },
   })
   if (error) throw error
-  if (data?.session) {
-    const { error: sessionError } = await supabase.auth.setSession(data.session)
-    if (sessionError) throw sessionError
-  }
   return data as { session: import('@supabase/supabase-js').Session | null; user: { id: string; email?: string } | null; requiresVerification?: boolean }
 }
 
@@ -33,6 +30,26 @@ export async function signIn(email: string, password: string, turnstileToken?: s
   })
   if (error) throw error
   if (!data?.session) throw new Error('Unable to sign in with those credentials.')
+  const { error: sessionError } = await supabase.auth.setSession(data.session)
+  if (sessionError) throw sessionError
+  return data
+}
+
+export async function requestLoginOtp(email: string, turnstileToken?: string | null): Promise<void> {
+  const { data, error } = await supabase.functions.invoke('login', {
+    body: { mode: 'send-otp', email, ...(turnstileToken ? { turnstileToken } : {}) },
+  })
+  if (error) throw await edgeFunctionError(error)
+  if (data?.error) throw new Error(data.error)
+}
+
+export async function verifyLoginOtp(email: string, token: string) {
+  const { data, error } = await supabase.functions.invoke('login', {
+    body: { mode: 'verify-otp', email, token },
+  })
+  if (error) throw await edgeFunctionError(error)
+  if (data?.error) throw new Error(data.error)
+  if (!data?.session) throw new Error('That verification code is invalid or expired.')
   const { error: sessionError } = await supabase.auth.setSession(data.session)
   if (sessionError) throw sessionError
   return data

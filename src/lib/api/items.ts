@@ -1,5 +1,6 @@
 import { supabase } from '../supabaseClient'
 import type { Item, ItemTranslations } from '../../types'
+import { edgeFunctionError } from '../errors'
 
 function mapItem(row: any): Item {
   return {
@@ -81,7 +82,7 @@ export async function uploadItemImage(businessId: string, file: File): Promise<s
     body: file,
     headers: { 'X-Upload-Bucket': 'item-images', 'X-Business-Id': businessId, 'Content-Type': file.type },
   })
-  if (error) throw error
+  if (error) throw await edgeFunctionError(error)
   if (!data?.path) throw new Error('Upload did not return a file path.')
   const { data: publicData } = supabase.storage.from('item-images').getPublicUrl(data.path)
   return publicData.publicUrl

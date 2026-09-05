@@ -51,7 +51,7 @@ Deno.test('Phase 1 uses Auth OTP wrappers and never creates a parallel OTP store
   assert.match(signup, /termsAccepted/)
   assert.match(signup, /validatePassword/)
   assert.match(verify, /client\\.auth\\.verifyOtp/)
-  assert.match(verify, /type: 'signup'/)
+  assert.match(verify, /type: 'email'/)
   assert.match(verify, /\\^\\\\d\\{6\\}\\$/)
   assert.match(resend, /client\\.auth\\.resend/)
   assert.match(resend, /resend-signup-otp/)

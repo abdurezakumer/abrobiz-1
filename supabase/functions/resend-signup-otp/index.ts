@@ -34,7 +34,7 @@ if (import.meta.main) {
       const anonKey = Deno.env.get('SUPABASE_ANON_KEY')
       if (!url || !anonKey) return json({ error: 'Email verification is temporarily unavailable.' }, 503, req)
       const client = createClient(url, anonKey, { auth: { persistSession: false } })
-      await client.auth.resend({ type: 'signup', email })
+      await client.auth.signInWithOtp({ email, options: { shouldCreateUser: false } })
       return json(GENERIC_RESPONSE, 200, req)
     } catch (error) {
       logFailure(req, { function_name: 'resend-signup-otp', operation: 'resend_otp', error_category: 'AUTHENTICATION_ERROR', error_code: error instanceof Error ? error.name : 'UnknownError', status: 400 })
