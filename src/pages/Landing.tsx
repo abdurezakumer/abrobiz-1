@@ -7,6 +7,7 @@ import PhoneMockup from '../components/PhoneMockup'
 import CategoryMarquee from '../components/CategoryMarquee'
 import MagneticButton from '../components/MagneticButton'
 import FaqAccordion from '../components/FaqAccordion'
+import AbroBizLogo from '../components/AbroBizLogo'
 import type { Plan } from '../types'
 
 const ROTATING_WORDS = ['restaurants', 'cafés', 'salons', 'shops']
@@ -51,8 +52,7 @@ export default function Landing() {
       {/* Nav */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', maxWidth: 1100, margin: '0 auto' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ width: 30, height: 30, borderRadius: 8, background: '#D4A853', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: '#0A0C10' }}>A</div>
-          <span style={{ fontFamily: 'Outfit, sans-serif', fontWeight: 600, fontSize: 16 }}>AbroBiz</span>
+          <AbroBizLogo size={30} />
         </div>
         <nav style={{ display: 'flex', gap: 22, alignItems: 'center' }} className="landing-nav-links">
           <a href="#how-it-works" style={navLinkStyle}>How it works</a>
@@ -114,7 +114,13 @@ export default function Landing() {
           initial={{ opacity: 0, y: 24, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.6, delay: 0.15 }}
           style={{ display: 'flex', justifyContent: 'center' }}
         >
-          <PhoneMockup activeIndex={wordIndex} />
+          <div style={{ position: 'relative' }}>
+            <div style={{ position: 'absolute', top: 18, left: -68, zIndex: 2, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.13)', borderRadius: 12, padding: '9px 12px', backdropFilter: 'blur(12px)', boxShadow: '0 12px 35px rgba(0,0,0,0.2)' }} className="preview-badge">
+              <div style={{ color: '#D4A853', fontSize: 9.5, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase' }}>Live preview</div>
+              <div style={{ color: 'rgba(240,237,231,0.68)', fontSize: 11.5, marginTop: 3 }}>Your brand, mobile-ready</div>
+            </div>
+            <PhoneMockup activeIndex={wordIndex} />
+          </div>
         </motion.div>
       </div>
 
@@ -223,8 +229,7 @@ export default function Landing() {
         <div style={{ maxWidth: 1000, margin: '0 auto', display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr', gap: 32 }} className="footer-grid">
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-              <div style={{ width: 26, height: 26, borderRadius: 7, background: '#D4A853', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: '#0A0C10', fontSize: 13 }}>A</div>
-              <span style={{ fontFamily: 'Outfit, sans-serif', fontWeight: 600, fontSize: 14.5 }}>AbroBiz</span>
+              <AbroBizLogo size={26} />
             </div>
             <p style={{ fontSize: 12.5, color: 'rgba(240,237,231,0.4)', lineHeight: 1.6, maxWidth: 260 }}>
               A digital storefront platform for restaurants, cafés, salons, retail shops, and more.
@@ -254,6 +259,7 @@ export default function Landing() {
           .hero-grid > div:first-child { display: flex; flex-direction: column; align-items: center; }
           .landing-nav-links { display: none !important; }
           .footer-grid { grid-template-columns: 1fr !important; text-align: center; }
+          .preview-badge { display: none !important; }
         }
       `}</style>
     </div>
