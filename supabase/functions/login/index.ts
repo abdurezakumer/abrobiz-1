@@ -83,7 +83,7 @@ if (import.meta.main) {
       const anonKey = Deno.env.get('SUPABASE_ANON_KEY')
       if (!url || !anonKey) return json({ error: 'AbroBiz sign-in is temporarily unavailable.' }, 503, req)
       const client = createClient(url, anonKey, { auth: { persistSession: false } })
-      const { data, error } = await client.auth.verifyOtp({ email, token, type: 'magiclink' })
+      const { data, error } = await client.auth.verifyOtp({ email, token, type: 'email' })
       if (error || !data.session) {
         logFailure(req, { function_name: 'login', operation: 'verify_login_otp', error_category: 'AUTHENTICATION_ERROR', status: 401 })
         return json({ error: 'That verification code is invalid or expired.' }, 401, req)
