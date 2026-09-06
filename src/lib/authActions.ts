@@ -131,6 +131,8 @@ export function friendlyAuthError(error: unknown): string {
   if (/lowercase|uppercase|number|special character|128 characters/i.test(msg)) return msg
   if (/unsupported provider|provider.*not enabled|external_google_enabled/i.test(msg)) return 'Google sign-in is not available yet. Please try again later or contact AbroBiz support.'
   if (/google sign-in is not configured/i.test(msg)) return 'Google sign-in is not configured for AbroBiz yet. Please contact support.'
+  if (/unacceptable audience|invalid audience|id[_ -]?token|identity token|invalid client|client.*not found/i.test(msg)) return 'Google sign-in needs the same Web Client ID in Vercel and Supabase. Please check both settings and try again.'
+  if (/cancelled|canceled/i.test(msg)) return 'Google sign-in was cancelled. Please try again.'
   if (/redirect_uri_mismatch|redirect uri/i.test(msg)) return 'Google sign-in is not configured for this AbroBiz environment yet. Please contact AbroBiz support.'
   if (/failed to fetch|network error|404|temporarily unavailable|service unavailable/i.test(msg)) return 'AbroBiz sign-in is temporarily unavailable. Please try again in a moment.'
   if (/rate limit|too many requests/i.test(msg)) return 'Too many attempts. Please wait a moment and try again.'
