@@ -1,4 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4'
+import { createAdminClient } from '../_shared/db.ts'
+import { sendAuthOtpEmail } from '../_shared/authOtpEmail.ts'
 import { corsHeaders } from '../_shared/cors.ts'
 import { enforceRateLimits } from '../_shared/rateLimit.ts'
 import { isRecord, readJsonBody, validEmail } from '../_shared/requestSecurity.ts'
@@ -24,11 +26,6 @@ if (import.meta.main) {
       const mode = body.mode
       if (!validEmail(email)) return json({ error: 'Enter a valid email address.' }, 400, req)
 
-      const url = Deno.env.get('SUPABASE_URL')
-      const anonKey = Deno.env.get('SUPABASE_ANON_KEY')
-      if (!url || !anonKey) return json({ error: 'AbroBiz sign-in is temporarily unavailable.' }, 503, req)
-
-      const client = createClient(url, anonKey, { auth: { persistSession: false } })
       if (mode === 'send-otp') {
         const limited = await enforceRateLimits(req, [
           { scope: 'login-otp-ip', limit: 10, windowSeconds: 900 },
@@ -38,17 +35,38 @@ if (import.meta.main) {
         const turnstileFailure = await requireTurnstile(req, body.turnstileToken, 'login')
         if (turnstileFailure) return turnstileFailure
 
-        const { error } = await client.auth.signInWithOtp({
+        const adminClient = createAdminClient()
+        const { data: profile, error: profileError } = await adminClient
+          .from('profiles')
+          .select('name')
+          .eq('email', email)
+          .maybeSingle()
+
+        if (profileError) {
+          logFailure(req, { function_name: 'login', operation: 'find_login_account', error_category: 'DATABASE_ERROR', error_code: profileError.code ?? 'unknown', status: 503 })
+          return json(GENERIC_SEND_RESPONSE, 200, req)
+        }
+
+        // Do not let magiclink generation create an account for an unknown
+        // address. The lookup is server-side and the response stays generic.
+        if (!profile) return json(GENERIC_SEND_RESPONSE, 200, req)
+
+        const { data, error } = await adminClient.auth.admin.generateLink({
+          type: 'magiclink',
           email,
           options: {
-            shouldCreateUser: false,
-            emailRedirectTo: `${(Deno.env.get('SITE_URL') ?? 'https://abrobiz.com').replace(/\/$/, '')}/setup`,
+            redirectTo: `${(Deno.env.get('SITE_URL') ?? 'https://abrobiz.com').replace(/\/$/, '')}/setup`,
           },
         })
-        if (error) {
-          // Keep account existence and provider details out of the response.
-          logFailure(req, { function_name: 'login', operation: 'send_login_otp', error_category: 'AUTHENTICATION_ERROR', status: 200 })
+
+        const code = data?.properties?.email_otp
+        if (error || !code || !/^\d{6}$/.test(code)) {
+          logFailure(req, { function_name: 'login', operation: 'generate_login_otp', error_category: 'AUTHENTICATION_ERROR', error_code: error?.name ?? 'unknown', status: 200 })
+          return json(GENERIC_SEND_RESPONSE, 200, req)
         }
+
+        const emailResult = await sendAuthOtpEmail({ email, code, name: profile.name ?? '', purpose: 'login' })
+        if (!emailResult.ok) logFailure(req, { function_name: 'login', operation: 'send_login_otp', error_category: 'DEPENDENCY_ERROR', error_code: 'email_delivery_failed', provider: 'email', status: 503 })
         return json(GENERIC_SEND_RESPONSE, 200, req)
       }
 
@@ -61,7 +79,11 @@ if (import.meta.main) {
       ])
       if (limited) return limited
 
-      const { data, error } = await client.auth.verifyOtp({ email, token, type: 'email' })
+      const url = Deno.env.get('SUPABASE_URL')
+      const anonKey = Deno.env.get('SUPABASE_ANON_KEY')
+      if (!url || !anonKey) return json({ error: 'AbroBiz sign-in is temporarily unavailable.' }, 503, req)
+      const client = createClient(url, anonKey, { auth: { persistSession: false } })
+      const { data, error } = await client.auth.verifyOtp({ email, token, type: 'magiclink' })
       if (error || !data.session) {
         logFailure(req, { function_name: 'login', operation: 'verify_login_otp', error_category: 'AUTHENTICATION_ERROR', status: 401 })
         return json({ error: 'That verification code is invalid or expired.' }, 401, req)

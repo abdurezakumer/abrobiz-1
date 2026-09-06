@@ -56,15 +56,70 @@ export async function verifyLoginOtp(email: string, token: string) {
 }
 
 export async function signInWithGoogle() {
-  // Keep local development on the local origin while production can pin this
-  // to https://abrobiz.com through VITE_SITE_URL.
-  const isLocal = /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname)
-  const siteUrl = !isLocal && import.meta.env.VITE_SITE_URL ? import.meta.env.VITE_SITE_URL.replace(/\/$/, '') : window.location.origin
-  const { error } = await supabase.auth.signInWithOAuth({
-    provider: 'google',
-    options: { redirectTo: `${siteUrl}/setup` },
+  const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID?.trim()
+  if (!clientId) throw new Error('Google sign-in is not configured for AbroBiz yet.')
+  await loadGoogleIdentityServices()
+
+  await new Promise<void>((resolve, reject) => {
+    const google = window.google
+    if (!google?.accounts?.id) {
+      reject(new Error('Google sign-in is temporarily unavailable.'))
+      return
+    }
+
+    let settled = false
+    const finish = (error?: Error) => {
+      if (settled) return
+      settled = true
+      error ? reject(error) : resolve()
+    }
+
+    google.accounts.id.initialize({
+      client_id: clientId,
+      ux_mode: 'popup',
+      auto_select: false,
+      cancel_on_tap_outside: true,
+      callback: async response => {
+        if (!response.credential) {
+          finish(new Error('Google did not return a sign-in credential.'))
+          return
+        }
+        const { error } = await supabase.auth.signInWithIdToken({ provider: 'google', token: response.credential })
+        finish(error ?? undefined)
+      },
+    })
+
+    google.accounts.id.prompt(notification => {
+      if (notification.isNotDisplayed() || notification.isSkippedMoment() || notification.isDismissedMoment()) {
+        finish(new Error('Google sign-in was cancelled.'))
+      }
+    })
   })
-  if (error) throw error
+}
+
+let googleIdentityPromise: Promise<void> | null = null
+
+function loadGoogleIdentityServices(): Promise<void> {
+  if (window.google?.accounts?.id) return Promise.resolve()
+  if (googleIdentityPromise) return googleIdentityPromise
+
+  googleIdentityPromise = new Promise((resolve, reject) => {
+    const existing = document.querySelector<HTMLScriptElement>('script[src="https://accounts.google.com/gsi/client"]')
+    if (existing) {
+      existing.addEventListener('load', () => window.google?.accounts?.id ? resolve() : reject(new Error('Google sign-in is temporarily unavailable.')), { once: true })
+      existing.addEventListener('error', () => reject(new Error('Google sign-in is temporarily unavailable.')), { once: true })
+      return
+    }
+
+    const script = document.createElement('script')
+    script.src = 'https://accounts.google.com/gsi/client'
+    script.async = true
+    script.defer = true
+    script.onload = () => window.google?.accounts?.id ? resolve() : reject(new Error('Google sign-in is temporarily unavailable.'))
+    script.onerror = () => reject(new Error('Google sign-in is temporarily unavailable.'))
+    document.head.appendChild(script)
+  })
+  return googleIdentityPromise
 }
 
 /** Supabase's default auth error messages are technical — map the common ones to friendly text. */
@@ -75,6 +130,7 @@ export function friendlyAuthError(error: unknown): string {
   if (/password must be at least|password should be at least/i.test(msg)) return 'Password must be at least 12 characters.'
   if (/lowercase|uppercase|number|special character|128 characters/i.test(msg)) return msg
   if (/unsupported provider|provider.*not enabled|external_google_enabled/i.test(msg)) return 'Google sign-in is not available yet. Please try again later or contact AbroBiz support.'
+  if (/google sign-in is not configured/i.test(msg)) return 'Google sign-in is not configured for AbroBiz yet. Please contact support.'
   if (/redirect_uri_mismatch|redirect uri/i.test(msg)) return 'Google sign-in is not configured for this AbroBiz environment yet. Please contact AbroBiz support.'
   if (/failed to fetch|network error|404|temporarily unavailable|service unavailable/i.test(msg)) return 'AbroBiz sign-in is temporarily unavailable. Please try again in a moment.'
   if (/rate limit|too many requests/i.test(msg)) return 'Too many attempts. Please wait a moment and try again.'

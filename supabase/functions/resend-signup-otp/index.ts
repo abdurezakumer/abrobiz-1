@@ -1,4 +1,5 @@
-import { createClient } from 'npm:@supabase/supabase-js@2.45.4'
+import { createAdminClient } from '../_shared/db.ts'
+import { sendAuthOtpEmail } from '../_shared/authOtpEmail.ts'
 import { corsHeaders } from '../_shared/cors.ts'
 import { enforceRateLimits } from '../_shared/rateLimit.ts'
 import { isRecord, readJsonBody } from '../_shared/requestSecurity.ts'
@@ -30,11 +31,26 @@ if (import.meta.main) {
       const turnstileFailure = await requireTurnstile(req, body.turnstileToken, 'otp-resend')
       if (turnstileFailure) return turnstileFailure
 
-      const url = Deno.env.get('SUPABASE_URL')
-      const anonKey = Deno.env.get('SUPABASE_ANON_KEY')
-      if (!url || !anonKey) return json({ error: 'Email verification is temporarily unavailable.' }, 503, req)
-      const client = createClient(url, anonKey, { auth: { persistSession: false } })
-      await client.auth.signInWithOtp({ email, options: { shouldCreateUser: false } })
+      const adminClient = createAdminClient()
+      const { data: profile, error: profileError } = await adminClient
+        .from('profiles')
+        .select('name')
+        .eq('email', email)
+        .maybeSingle()
+      if (profileError || !profile) return json(GENERIC_RESPONSE, 200, req)
+
+      const { data, error } = await adminClient.auth.admin.generateLink({
+        type: 'magiclink',
+        email,
+        options: { redirectTo: `${(Deno.env.get('SITE_URL') ?? 'https://abrobiz.com').replace(/\/$/, '')}/setup` },
+      })
+      const code = data?.properties?.email_otp
+      if (error || !code || !/^\d{6}$/.test(code)) {
+        logFailure(req, { function_name: 'resend-signup-otp', operation: 'generate_otp', error_category: 'AUTHENTICATION_ERROR', error_code: error?.name ?? 'unknown', status: 200 })
+        return json(GENERIC_RESPONSE, 200, req)
+      }
+      const emailResult = await sendAuthOtpEmail({ email, code, name: profile.name ?? '', purpose: 'signup' })
+      if (!emailResult.ok) logFailure(req, { function_name: 'resend-signup-otp', operation: 'send_otp', error_category: 'DEPENDENCY_ERROR', error_code: 'email_delivery_failed', provider: 'email', status: 503 })
       return json(GENERIC_RESPONSE, 200, req)
     } catch (error) {
       logFailure(req, { function_name: 'resend-signup-otp', operation: 'resend_otp', error_category: 'AUTHENTICATION_ERROR', error_code: error instanceof Error ? error.name : 'UnknownError', status: 400 })

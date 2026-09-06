@@ -8,7 +8,6 @@ export default function GoogleSignInButton({ onError, disabled = false }: { onEr
     setLoading(true)
     try {
       await signInWithGoogle()
-      // Supabase redirects the browser away to Google — nothing more to do here.
     } catch (err) {
       onError(friendlyAuthError(err))
       setLoading(false)
@@ -27,7 +26,7 @@ export default function GoogleSignInButton({ onError, disabled = false }: { onEr
       }}
     >
       <GoogleLogo />
-      {loading ? 'Redirecting…' : 'Continue with Google'}
+      {loading ? 'Opening Google...' : 'Continue with Google'}
     </button>
   )
 }

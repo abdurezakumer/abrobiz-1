@@ -31,7 +31,12 @@ if (import.meta.main) {
       const anonKey = Deno.env.get('SUPABASE_ANON_KEY')
       if (!url || !anonKey) return json({ error: 'Email verification is temporarily unavailable.' }, 503, req)
       const client = createClient(url, anonKey, { auth: { persistSession: false } })
-      const { data, error } = await client.auth.verifyOtp({ email, token, type: 'email' })
+      // New registrations use a signup OTP. Resends use a magiclink OTP
+      // because the password is intentionally never retained by this endpoint.
+      const firstAttempt = await client.auth.verifyOtp({ email, token, type: 'signup' })
+      const { data, error } = firstAttempt.error
+        ? await client.auth.verifyOtp({ email, token, type: 'magiclink' })
+        : firstAttempt
       if (error || !data.session) return json({ error: 'That verification code is invalid or expired.' }, 400, req)
 
       return json({

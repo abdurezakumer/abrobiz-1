@@ -1,4 +1,5 @@
-import { createClient } from 'npm:@supabase/supabase-js@2.45.4'
+import { createAdminClient } from '../_shared/db.ts'
+import { sendAuthOtpEmail } from '../_shared/authOtpEmail.ts'
 import { corsHeaders } from '../_shared/cors.ts'
 import { enforceRateLimits } from '../_shared/rateLimit.ts'
 import { validatePassword } from '../_shared/passwordPolicy.ts'
@@ -44,12 +45,11 @@ if (import.meta.main) {
       const turnstileFailure = await requireTurnstile(req, body.turnstileToken, 'signup')
       if (turnstileFailure) return turnstileFailure
 
-      const url = Deno.env.get('SUPABASE_URL')
-      const anonKey = Deno.env.get('SUPABASE_ANON_KEY')
-      if (!url || !anonKey) return json({ error: 'AbroBiz sign-up is temporarily unavailable.' }, 503, req)
-
-      const client = createClient(url, anonKey, { auth: { persistSession: false } })
-      const { data, error } = await client.auth.signUp({
+      const adminClient = createAdminClient()
+      // Generate the Auth OTP without asking Supabase to send its own email.
+      // The returned code is delivered by the AbroBiz mailer below.
+      const { data, error } = await adminClient.auth.admin.generateLink({
+        type: 'signup',
         email,
         password,
         options: {
@@ -57,6 +57,7 @@ if (import.meta.main) {
             name,
             phone,
           },
+          redirectTo: `${(Deno.env.get('SITE_URL') ?? 'https://abrobiz.com').replace(/\/$/, '')}/setup`,
         },
       })
 
@@ -66,18 +67,16 @@ if (import.meta.main) {
         return json(GENERIC_RESPONSE, 200, req)
       }
 
-      // With email confirmation disabled, signUp() returns a session and would
-      // otherwise bypass the required OTP step. Request a native email OTP in
-      // that case and never return the temporary session to the browser.
-      if (data.session) {
-        const { error: otpError } = await client.auth.signInWithOtp({
-          email,
-          options: { shouldCreateUser: false },
-        })
-        if (otpError) {
-          logFailure(req, { function_name: 'signup', operation: 'send_signup_otp', error_category: 'DEPENDENCY_ERROR', error_code: otpError.name ?? 'unknown', provider: 'supabase-auth', status: 503 })
-          return json({ error: 'AbroBiz verification is temporarily unavailable.' }, 503, req)
-        }
+      const code = data?.properties?.email_otp
+      if (!code || !/^\d{6}$/.test(code)) {
+        logFailure(req, { function_name: 'signup', operation: 'generate_signup_otp', error_category: 'DEPENDENCY_ERROR', provider: 'supabase-auth', status: 503 })
+        return json({ error: 'AbroBiz verification is temporarily unavailable.' }, 503, req)
+      }
+
+      const emailResult = await sendAuthOtpEmail({ email, code, name, purpose: 'signup' })
+      if (!emailResult.ok) {
+        logFailure(req, { function_name: 'signup', operation: 'send_signup_otp', error_category: 'DEPENDENCY_ERROR', error_code: 'email_delivery_failed', provider: 'email', status: 503 })
+        return json({ error: 'AbroBiz verification email could not be sent.' }, 503, req)
       }
 
       return json({ ...GENERIC_RESPONSE, session: null, user: data.user ? { id: data.user.id, email: data.user.email } : null }, 200, req)
