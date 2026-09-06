@@ -55,51 +55,44 @@ export async function verifyLoginOtp(email: string, token: string) {
   return data
 }
 
-export async function signInWithGoogle() {
+export async function initializeGoogleSignInButton(container: HTMLElement, onCredential: (credential: string) => void): Promise<() => void> {
   const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID?.trim()
   if (!clientId) throw new Error('Google sign-in is not configured for AbroBiz yet.')
   await loadGoogleIdentityServices()
+  const google = window.google
+  if (!google?.accounts?.id) throw new Error('Google sign-in is temporarily unavailable.')
 
-  await new Promise<void>((resolve, reject) => {
-    const google = window.google
-    if (!google?.accounts?.id) {
-      reject(new Error('Google sign-in is temporarily unavailable.'))
-      return
-    }
-
-    let settled = false
-    const finish = (error?: Error) => {
-      if (settled) return
-      settled = true
-      error ? reject(error) : resolve()
-    }
-
-    google.accounts.id.initialize({
-      client_id: clientId,
-      ux_mode: 'popup',
-      auto_select: false,
-      cancel_on_tap_outside: true,
-      callback: async response => {
-        if (!response.credential) {
-          finish(new Error('Google did not return a sign-in credential.'))
-          return
-        }
-        const { error } = await supabase.auth.signInWithIdToken({ provider: 'google', token: response.credential })
-        finish(error ?? undefined)
-      },
-    })
-
-    google.accounts.id.prompt(notification => {
-      if (notification.isNotDisplayed() || notification.isSkippedMoment() || notification.isDismissedMoment()) {
-        finish(new Error('Google sign-in was cancelled.'))
-      }
-    })
+  google.accounts.id.initialize({
+    client_id: clientId,
+    ux_mode: 'popup',
+    auto_select: false,
+    cancel_on_tap_outside: true,
+    callback: response => {
+      if (!response.credential) return
+      onCredential(response.credential)
+    },
   })
+  google.accounts.id.renderButton(container, {
+    type: 'standard',
+    theme: 'outline',
+    size: 'large',
+    text: 'continue_with',
+    shape: 'rectangular',
+    logo_alignment: 'left',
+    width: Math.max(260, Math.floor(container.getBoundingClientRect().width || 360)),
+  })
+
+  return () => { container.replaceChildren() }
+}
+
+export async function signInWithGoogleCredential(credential: string): Promise<void> {
+  const { error } = await supabase.auth.signInWithIdToken({ provider: 'google', token: credential })
+  if (error) throw error
 }
 
 let googleIdentityPromise: Promise<void> | null = null
 
-function loadGoogleIdentityServices(): Promise<void> {
+export function loadGoogleIdentityServices(): Promise<void> {
   if (window.google?.accounts?.id) return Promise.resolve()
   if (googleIdentityPromise) return googleIdentityPromise
 

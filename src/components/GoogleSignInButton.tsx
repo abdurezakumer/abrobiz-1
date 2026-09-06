@@ -1,32 +1,60 @@
-import { useState } from 'react'
-import { signInWithGoogle, friendlyAuthError } from '../lib/authActions'
+import { useEffect, useRef, useState } from 'react'
+import { friendlyAuthError, initializeGoogleSignInButton, signInWithGoogleCredential } from '../lib/authActions'
 
 export default function GoogleSignInButton({ onError, disabled = false }: { onError: (msg: string) => void; disabled?: boolean }) {
   const [loading, setLoading] = useState(false)
+  const buttonRef = useRef<HTMLDivElement>(null)
+  const onErrorRef = useRef(onError)
+  onErrorRef.current = onError
 
-  async function handleClick() {
+  useEffect(() => {
+    if (disabled || !buttonRef.current) return
+    let disposed = false
+    let cleanup: (() => void) | undefined
     setLoading(true)
-    try {
-      await signInWithGoogle()
-    } catch (err) {
-      onError(friendlyAuthError(err))
-      setLoading(false)
+
+    initializeGoogleSignInButton(buttonRef.current, async credential => {
+      if (disposed) return
+      setLoading(true)
+      try {
+        await signInWithGoogleCredential(credential)
+      } catch (err) {
+        onErrorRef.current(friendlyAuthError(err))
+      } finally {
+        if (!disposed) setLoading(false)
+      }
+    }).then(value => {
+      cleanup = value
+      if (!disposed) setLoading(false)
+    }).catch(err => {
+      if (!disposed) {
+        onErrorRef.current(friendlyAuthError(err))
+        setLoading(false)
+      }
+    })
+
+    return () => {
+      disposed = true
+      cleanup?.()
     }
+  }, [disabled])
+
+  if (!disabled) {
+    return <div ref={buttonRef} aria-label="Continue with Google" style={{ minHeight: 44, display: 'flex', justifyContent: 'center', opacity: loading ? 0.65 : 1 }} />
   }
 
   return (
     <button
       type="button"
-      onClick={handleClick}
-      disabled={loading || disabled}
+      disabled
       style={{
         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, width: '100%',
         background: '#fff', color: '#1f1f1f', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 10,
-        padding: '11px', fontSize: 14, fontWeight: 600, cursor: loading || disabled ? 'default' : 'pointer', opacity: loading || disabled ? 0.55 : 1,
+        padding: '11px', fontSize: 14, fontWeight: 600, cursor: 'default', opacity: 0.55,
       }}
     >
       <GoogleLogo />
-      {loading ? 'Opening Google...' : 'Continue with Google'}
+      Continue with Google
     </button>
   )
 }
