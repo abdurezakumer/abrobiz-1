@@ -67,22 +67,38 @@ if (import.meta.main) {
         return json(GENERIC_RESPONSE, 200, req)
       }
 
-      const code = data?.properties?.email_otp
+      let code = data?.properties?.email_otp
+      // Some Auth configurations return the created user but omit the OTP
+      // properties for a signup link. A magic-link generation for that same
+      // account still produces the email OTP needed by verifyOtp(type=email).
+      if (!code && data?.user?.email) {
+        const fallback = await adminClient.auth.admin.generateLink({
+          type: 'magiclink',
+          email,
+          options: {
+            redirectTo: `${(Deno.env.get('SITE_URL') ?? 'https://abrobiz.com').replace(/\/$/, '')}/setup`,
+          },
+        })
+        code = fallback.data?.properties?.email_otp
+        if (fallback.error) {
+          logFailure(req, { function_name: 'signup', operation: 'generate_signup_otp_fallback', error_category: 'AUTHENTICATION_ERROR', error_code: fallback.error.name ?? 'unknown', status: 503 })
+        }
+      }
       if (!code || !/^\d{6}$/.test(code)) {
         logFailure(req, { function_name: 'signup', operation: 'generate_signup_otp', error_category: 'DEPENDENCY_ERROR', provider: 'supabase-auth', status: 503 })
-        return json({ error: 'AbroBiz verification is temporarily unavailable.' }, 503, req)
+        return json({ error: 'AbroBiz could not prepare your verification code. Please try again.' }, 503, req)
       }
 
       const emailResult = await sendAuthOtpEmail({ email, code, name, purpose: 'signup' })
       if (!emailResult.ok) {
         logFailure(req, { function_name: 'signup', operation: 'send_signup_otp', error_category: 'DEPENDENCY_ERROR', error_code: 'email_delivery_failed', provider: 'email', status: 503 })
-        return json({ error: 'AbroBiz verification email could not be sent.' }, 503, req)
+        return json({ error: 'AbroBiz could not send your verification email. Please try again.' }, 503, req)
       }
 
       return json({ ...GENERIC_RESPONSE, session: null, user: data.user ? { id: data.user.id, email: data.user.email } : null }, 200, req)
     } catch (error) {
       logFailure(req, { function_name: 'signup', operation: 'auth_signup', error_category: 'INTERNAL_ERROR', error_code: error instanceof Error ? error.name : 'UnknownError', status: 503 })
-      return json({ error: 'AbroBiz sign-up is temporarily unavailable.' }, 503, req)
+      return json({ error: 'AbroBiz sign-up is temporarily unavailable. Please try again.' }, 503, req)
     }
   })
 }

@@ -99,6 +99,7 @@ export function loadGoogleIdentityServices(): Promise<void> {
 export function friendlyAuthError(error: unknown): string {
   const msg = error instanceof Error ? error.message : String(error)
   if (/already registered/i.test(msg)) return 'We could not create the account with those details. Please check them or try logging in.'
+  if (/verification (email|code)|sign-up/i.test(msg)) return 'We could not complete AbroBiz sign-up. Please try again.'
   if (/invalid login credentials|invalid credentials/i.test(msg)) return 'Incorrect email or password.'
   if (/password must be at least|password should be at least/i.test(msg)) return 'Password must be at least 12 characters.'
   if (/lowercase|uppercase|number|special character|128 characters/i.test(msg)) return msg
@@ -107,7 +108,7 @@ export function friendlyAuthError(error: unknown): string {
   if (/unacceptable audience|invalid audience|id[_ -]?token|identity token|invalid client|client.*not found/i.test(msg)) return 'Google sign-in needs the same Web Client ID in Vercel and Supabase. Please check both settings and try again.'
   if (/cancelled|canceled/i.test(msg)) return 'Google sign-in was cancelled. Please try again.'
   if (/redirect_uri_mismatch|redirect uri/i.test(msg)) return 'Google sign-in is not configured for this AbroBiz environment yet. Please contact AbroBiz support.'
-  if (/failed to fetch|network error|404|temporarily unavailable|service unavailable/i.test(msg)) return 'AbroBiz sign-in is temporarily unavailable. Please try again in a moment.'
+  if (/failed to fetch|network error|404|temporarily unavailable|service unavailable/i.test(msg)) return 'AbroBiz is temporarily unavailable. Please try again in a moment.'
   if (/rate limit|too many requests/i.test(msg)) return 'Too many attempts. Please wait a moment and try again.'
   if (/email.*not confirmed|email_not_confirmed|email.*confirm/i.test(msg)) return 'Please verify your email address before signing in.'
   if (/confirmation|verification code|expired|invalid.*code/i.test(msg)) return 'That verification code is invalid or expired.'
