@@ -65,10 +65,7 @@ export default function Register() {
           <h1 style={headingStyle}>Create your account</h1>
           <p style={mutedStyle}>Set up your business's digital presence in minutes.</p>
 
-          <GoogleSignInButton onError={setError} disabled={!termsAccepted || !privacyAccepted} />
-          <p style={{ ...mutedStyle, fontSize: 11.5, lineHeight: 1.5, marginTop: -8 }}>
-            Accept both AbroBiz legal documents below to enable Google sign-up.
-          </p>
+          <GoogleSignInButton onError={setError} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '18px 0' }}>
             <div style={ruleStyle} /><span style={{ fontSize: 12, color: 'rgba(240,237,231,0.35)' }}>or</span><div style={ruleStyle} />
           </div>

@@ -20,7 +20,7 @@ export async function signUp(
   const { data, error } = await supabase.functions.invoke('signup', {
     body: { email, password, name, phone, termsAccepted, privacyAccepted, ...(turnstileToken ? { turnstileToken } : {}) },
   })
-  if (error) throw error
+  if (error) throw await edgeFunctionError(error)
   return data as { session: import('@supabase/supabase-js').Session | null; user: { id: string; email?: string } | null; requiresVerification?: boolean }
 }
 
@@ -28,28 +28,8 @@ export async function signIn(email: string, password: string, turnstileToken?: s
   const { data, error } = await supabase.functions.invoke('login', {
     body: { email, password, ...(turnstileToken ? { turnstileToken } : {}) },
   })
-  if (error) throw error
+  if (error) throw await edgeFunctionError(error)
   if (!data?.session) throw new Error('Unable to sign in with those credentials.')
-  const { error: sessionError } = await supabase.auth.setSession(data.session)
-  if (sessionError) throw sessionError
-  return data
-}
-
-export async function requestLoginOtp(email: string, turnstileToken?: string | null): Promise<void> {
-  const { data, error } = await supabase.functions.invoke('login', {
-    body: { mode: 'send-otp', email, ...(turnstileToken ? { turnstileToken } : {}) },
-  })
-  if (error) throw await edgeFunctionError(error)
-  if (data?.error) throw new Error(data.error)
-}
-
-export async function verifyLoginOtp(email: string, token: string) {
-  const { data, error } = await supabase.functions.invoke('login', {
-    body: { mode: 'verify-otp', email, token },
-  })
-  if (error) throw await edgeFunctionError(error)
-  if (data?.error) throw new Error(data.error)
-  if (!data?.session) throw new Error('That verification code is invalid or expired.')
   const { error: sessionError } = await supabase.auth.setSession(data.session)
   if (sessionError) throw sessionError
   return data
@@ -129,6 +109,7 @@ export function friendlyAuthError(error: unknown): string {
   if (/redirect_uri_mismatch|redirect uri/i.test(msg)) return 'Google sign-in is not configured for this AbroBiz environment yet. Please contact AbroBiz support.'
   if (/failed to fetch|network error|404|temporarily unavailable|service unavailable/i.test(msg)) return 'AbroBiz sign-in is temporarily unavailable. Please try again in a moment.'
   if (/rate limit|too many requests/i.test(msg)) return 'Too many attempts. Please wait a moment and try again.'
+  if (/email.*not confirmed|email_not_confirmed|email.*confirm/i.test(msg)) return 'Please verify your email address before signing in.'
   if (/confirmation|verification code|expired|invalid.*code/i.test(msg)) return 'That verification code is invalid or expired.'
   return 'We could not complete that request. Please try again.'
 }
