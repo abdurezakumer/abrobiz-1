@@ -11,6 +11,13 @@ function json(body: unknown, status = 200, req?: Request): Response {
   return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders(req), 'Content-Type': 'application/json' } })
 }
 
+// Email addresses are normalized before authentication, but older accounts
+// may have been stored with mixed-case addresses. Escape PostgREST LIKE
+// metacharacters so the case-insensitive lookup remains an exact email match.
+function emailLookupPattern(email: string): string {
+  return email.replace(/[\\%_]/g, '\\$&')
+}
+
 const GENERIC_SEND_RESPONSE = { ok: true, requiresOtp: true, message: 'If the account is eligible, a verification code is on its way.' }
 
 if (import.meta.main) {
@@ -39,7 +46,7 @@ if (import.meta.main) {
         const { data: profile, error: profileError } = await adminClient
           .from('profiles')
           .select('name')
-          .eq('email', email)
+          .ilike('email', emailLookupPattern(email))
           .maybeSingle()
 
         if (profileError) {

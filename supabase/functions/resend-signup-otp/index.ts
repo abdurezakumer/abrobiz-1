@@ -10,6 +10,12 @@ function json(body: unknown, status = 200, req?: Request): Response {
   return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders(req), 'Content-Type': 'application/json' } })
 }
 
+// Keep this an exact, case-insensitive email lookup. The escape prevents
+// PostgREST LIKE metacharacters from turning the address into a wildcard.
+function emailLookupPattern(email: string): string {
+  return email.replace(/[\\%_]/g, '\\$&')
+}
+
 const GENERIC_RESPONSE = { ok: true, message: 'If that account needs verification, a new code is on its way.' }
 
 if (import.meta.main) {
@@ -35,7 +41,7 @@ if (import.meta.main) {
       const { data: profile, error: profileError } = await adminClient
         .from('profiles')
         .select('name')
-        .eq('email', email)
+        .ilike('email', emailLookupPattern(email))
         .maybeSingle()
       if (profileError || !profile) return json(GENERIC_RESPONSE, 200, req)
 
