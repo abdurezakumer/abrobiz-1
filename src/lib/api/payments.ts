@@ -1,6 +1,7 @@
 import { supabase } from '../supabaseClient'
 import { edgeFunctionError } from '../errors'
 import type { Payment } from '../../types'
+import { prepareImageForUpload } from '../fileUpload'
 
 function mapPayment(row: any): Payment {
   return {
@@ -41,12 +42,13 @@ function mapPayment(row: any): Payment {
 }
 
 export async function uploadPaymentProof(businessId: string, file: File): Promise<string> {
-  if (file.size > 10 * 1024 * 1024 || !['image/jpeg', 'image/png', 'image/webp', 'application/pdf'].includes(file.type)) {
+  const uploadFile = file.type === 'application/pdf' ? file : await prepareImageForUpload(file, 10 * 1024 * 1024)
+  if (uploadFile.size > 10 * 1024 * 1024 || !['image/jpeg', 'image/png', 'image/webp', 'application/pdf'].includes(uploadFile.type)) {
     throw new Error('Use a JPEG, PNG, WebP, or PDF file up to 10 MB.')
   }
   const { data, error } = await supabase.functions.invoke('storage-upload', {
-    body: file,
-    headers: { 'X-Upload-Bucket': 'payment-proofs', 'X-Business-Id': businessId, 'Content-Type': file.type },
+    body: uploadFile,
+    headers: { 'X-Upload-Bucket': 'payment-proofs', 'X-Business-Id': businessId, 'Content-Type': uploadFile.type },
   })
   if (error) throw await edgeFunctionError(error)
   if (!data?.path) throw new Error('Upload did not return a file path.')

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Check, Upload, Clock, CheckCircle2, XCircle } from 'lucide-react'
+import { ArrowUp, Check, Upload, Clock, CheckCircle2, XCircle } from 'lucide-react'
 import DashboardLayout from '../components/DashboardLayout'
 import TelegramConnectCard from '../components/TelegramConnectCard'
 import { useAuth } from '../lib/authContext'
@@ -11,6 +11,7 @@ import { daysRemaining } from '../lib/api/subscriptions'
 import { getOrCreateBusinessTelegramLink, telegramDeepLink, notifyAdminsOfPayment, type TelegramLinkStatus } from '../lib/api/telegram'
 import { friendlyError } from '../lib/errors'
 import type { Plan, PaymentMethod, Payment } from '../types'
+import { PAYMENT_UPLOAD_ACCEPT, takeSelectedFile } from '../lib/fileUpload'
 
 export default function Billing() {
   const { business, subscription, refreshBusiness } = useAuth()
@@ -165,12 +166,19 @@ export default function Billing() {
                 <span style={{ fontSize: 13.5, color: '#0A0C10' }}>{proofFile.name}</span>
               ) : (
                 <>
-                  <Upload size={18} color="rgba(10,12,16,0.35)" style={{ marginBottom: 6 }} />
+                  <motion.div
+                    animate={{ y: [0, -5, 0] }}
+                    transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
+                    style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', marginBottom: 6 }}
+                  >
+                    <ArrowUp size={15} color="#D4A853" strokeWidth={2.5} />
+                    <Upload size={18} color="rgba(10,12,16,0.35)" />
+                  </motion.div>
                   <div style={{ fontSize: 13, color: 'rgba(10,12,16,0.45)' }}>Click to upload proof</div>
                 </>
               )}
             </div>
-            <input type="file" accept="image/*,.pdf" hidden onChange={e => e.target.files?.[0] && setProofFile(e.target.files[0])} />
+            <input type="file" accept={PAYMENT_UPLOAD_ACCEPT} hidden onChange={e => setProofFile(takeSelectedFile(e.currentTarget))} />
           </label>
 
           <textarea value={note} onChange={e => setNote(e.target.value)} placeholder="Note for admin (optional)" rows={2} style={{ width: '100%', border: '1px solid rgba(10,12,16,0.1)', borderRadius: 9, padding: '9px 11px', fontSize: 13.5, outline: 'none', fontFamily: 'inherit', resize: 'vertical', marginBottom: 16 }} />

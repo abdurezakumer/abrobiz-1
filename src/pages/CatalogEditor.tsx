@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Trash2, Eye, EyeOff, Image as ImageIcon, X, Pencil } from 'lucide-react'
+import { ArrowUp, Plus, Trash2, Eye, EyeOff, Image as ImageIcon, X, Pencil } from 'lucide-react'
 import DashboardLayout from '../components/DashboardLayout'
 import { useAuth } from '../lib/authContext'
 import { supabase } from '../lib/supabaseClient'
@@ -8,6 +8,8 @@ import { listCategories, createCategory, updateCategory, deleteCategory } from '
 import { listItems, createItem, updateItem, deleteItem, uploadItemImage } from '../lib/api/items'
 import type { Category, Item, ItemTranslations, Language } from '../types'
 import { safeImageUrl } from '../lib/safeUrl'
+import { friendlyError } from '../lib/errors'
+import { IMAGE_UPLOAD_ACCEPT, takeSelectedFile } from '../lib/fileUpload'
 
 export default function CatalogEditor() {
   const { business } = useAuth()
@@ -244,13 +246,17 @@ function ItemForm({
   const [imageUrl, setImageUrl] = useState(existing?.imageUrl)
   const [isFeatured, setIsFeatured] = useState(existing?.isFeatured ?? false)
   const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState('')
   const [saving, setSaving] = useState(false)
 
   async function handleImage(file: File) {
     setUploading(true)
+    setUploadError('')
     try {
       const url = await uploadItemImage(businessId, file)
       setImageUrl(url)
+    } catch (error) {
+      setUploadError(friendlyError(error))
     } finally {
       setUploading(false)
     }
@@ -317,10 +323,14 @@ function ItemForm({
           <input type="number" step="0.01" value={price} onChange={e => setPrice(parseFloat(e.target.value) || 0)} style={{ ...formInput, width: 120 }} placeholder="Price" />
           <label style={{ fontSize: 12.5, color: '#0A0C10', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
             {safeImageUrl(imageUrl) && <img src={safeImageUrl(imageUrl) ?? undefined} alt="" width={32} height={32} loading="lazy" decoding="async" style={{ width: 32, height: 32, borderRadius: 6, objectFit: 'cover' }} />}
-            <span style={{ padding: '8px 12px', borderRadius: 8, background: '#F6F3EE' }}>{uploading ? 'Uploading…' : imageUrl ? 'Change photo' : 'Add photo'}</span>
-            <input type="file" accept="image/*" hidden onChange={e => e.target.files?.[0] && handleImage(e.target.files[0])} />
+            <span style={{ padding: '8px 12px', borderRadius: 8, background: '#F6F3EE', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+              {!uploading && <motion.span animate={{ y: [0, -3, 0] }} transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }} style={{ display: 'inline-flex' }}><ArrowUp size={13} /></motion.span>}
+              {uploading ? 'Uploading…' : imageUrl ? 'Change photo' : 'Add photo'}
+            </span>
+            <input type="file" accept={IMAGE_UPLOAD_ACCEPT} hidden onChange={e => { const file = takeSelectedFile(e.currentTarget); if (file) void handleImage(file) }} />
           </label>
         </div>
+        {uploadError && <div style={{ color: '#B91C1C', fontSize: 12.5 }}>{uploadError}</div>}
         <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: '#0A0C10', cursor: 'pointer' }}>
           <input type="checkbox" checked={isFeatured} onChange={e => setIsFeatured(e.target.checked)} style={{ width: 15, height: 15 }} />
           Feature on homepage

@@ -2,6 +2,7 @@ import { supabase } from '../supabaseClient'
 import type { Business, WeeklyHours } from '../../types'
 import { isValidBusinessSlug } from '../slugify'
 import { edgeFunctionError } from '../errors'
+import { prepareImageForUpload } from '../fileUpload'
 
 const DEFAULT_HOURS: WeeklyHours = {
   mon: { open: '08:00', close: '22:00', closed: false },
@@ -136,12 +137,10 @@ export async function uploadBusinessImage(
   businessId: string,
   file: File
 ): Promise<string> {
-  if (file.size > 5 * 1024 * 1024 || !['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-    throw new Error('Use a JPEG, PNG, or WebP image up to 5 MB.')
-  }
+  const uploadFile = await prepareImageForUpload(file, 5 * 1024 * 1024)
   const { data, error } = await supabase.functions.invoke('storage-upload', {
-    body: file,
-    headers: { 'X-Upload-Bucket': bucket, 'X-Business-Id': businessId, 'Content-Type': file.type },
+    body: uploadFile,
+    headers: { 'X-Upload-Bucket': bucket, 'X-Business-Id': businessId, 'Content-Type': uploadFile.type },
   })
   if (error) throw await edgeFunctionError(error)
   if (!data?.path) throw new Error('Upload did not return a file path.')

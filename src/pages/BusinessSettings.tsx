@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Check, Upload } from 'lucide-react'
+import { ArrowUp, Check, Upload } from 'lucide-react'
 import DashboardLayout from '../components/DashboardLayout'
 import { useAuth } from '../lib/authContext'
 import { updateBusiness, uploadBusinessImage } from '../lib/api/businesses'
@@ -11,6 +11,7 @@ import { listActiveTemplates, mergeTemplateOptions } from '../lib/api/templates'
 import { publicStorefrontUrl } from '../lib/storefrontUrl'
 import { safeImageUrl } from '../lib/safeUrl'
 import type { Business, BusinessCategory, Language, Template, TemplateSlug, WeeklyHours } from '../types'
+import { IMAGE_UPLOAD_ACCEPT, takeSelectedFile } from '../lib/fileUpload'
 
 const ALL_LANGUAGES: { code: Language; label: string }[] = [
   { code: 'en', label: 'English' },
@@ -254,8 +255,17 @@ export default function BusinessSettings() {
             ))}
             {form.galleryUrls.length < 8 && (
               <label style={{ width: 90, height: 90, borderRadius: 10, border: '1px dashed rgba(10,12,16,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: '#F6F3EE' }}>
-                {uploadingGallery ? <span style={{ fontSize: 11, color: 'rgba(10,12,16,0.4)' }}>…</span> : <Upload size={16} color="rgba(10,12,16,0.3)" />}
-                <input type="file" accept="image/*" hidden onChange={e => e.target.files?.[0] && handleGalleryUpload(e.target.files[0])} />
+                {uploadingGallery ? <span style={{ fontSize: 11, color: 'rgba(10,12,16,0.4)' }}>…</span> : (
+                  <motion.div
+                    animate={{ y: [0, -4, 0] }}
+                    transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
+                    style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center' }}
+                  >
+                    <ArrowUp size={12} color="#D4A853" strokeWidth={2.5} />
+                    <Upload size={16} color="rgba(10,12,16,0.3)" />
+                  </motion.div>
+                )}
+                <input type="file" accept={IMAGE_UPLOAD_ACCEPT} hidden onChange={e => { const file = takeSelectedFile(e.currentTarget); if (file) void handleGalleryUpload(file) }} />
               </label>
             )}
           </div>
@@ -382,9 +392,18 @@ function ImageUploader({ label, imageUrl, uploading, onUpload, shape }: { label:
             display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed rgba(10,12,16,0.15)',
           }}
         >
-          {!imageUrl && <Upload size={18} color="rgba(10,12,16,0.3)" />}
+          {!imageUrl && (
+            <motion.div
+              animate={{ y: [0, -4, 0] }}
+              transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
+              style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center' }}
+            >
+              <ArrowUp size={14} color="#D4A853" strokeWidth={2.5} />
+              <Upload size={18} color="rgba(10,12,16,0.3)" />
+            </motion.div>
+          )}
         </div>
-        <input type="file" accept="image/*" hidden onChange={e => e.target.files?.[0] && onUpload(e.target.files[0])} />
+        <input type="file" accept={IMAGE_UPLOAD_ACCEPT} hidden onChange={e => { const file = takeSelectedFile(e.currentTarget); if (file) void onUpload(file) }} />
         <span style={{ fontSize: 11.5, color: '#D4A853', marginTop: 4, display: 'block' }}>{uploading ? 'Uploading…' : 'Click to change'}</span>
       </label>
     </div>
