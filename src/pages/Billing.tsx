@@ -8,10 +8,11 @@ import { listPlans } from '../lib/api/plans'
 import { listPaymentMethods } from '../lib/api/paymentMethods'
 import { uploadPaymentProof, submitPayment, listPaymentsForBusiness } from '../lib/api/payments'
 import { daysRemaining } from '../lib/api/subscriptions'
-import { getOrCreateBusinessTelegramLink, telegramDeepLink, notifyAdminsOfPayment, type TelegramLinkStatus } from '../lib/api/telegram'
+import { getOrCreateBusinessTelegramLink, telegramPaymentDeepLink, notifyAdminsOfPayment, type TelegramLinkStatus } from '../lib/api/telegram'
 import { friendlyError } from '../lib/errors'
 import type { Plan, PaymentMethod, Payment } from '../types'
 import { PAYMENT_UPLOAD_ACCEPT, isPdfFile, prepareImageForUpload, takeSelectedFile } from '../lib/fileUpload'
+import { clearCachedPaymentProof, readCachedPaymentProof, saveCachedPaymentProof } from '../lib/paymentProofCache'
 
 export default function Billing() {
   const { business, subscription, refreshBusiness } = useAuth()
@@ -21,7 +22,9 @@ export default function Billing() {
   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null)
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod | null>(null)
   const [proofFile, setProofFile] = useState<File | null>(null)
+  const [pendingProofFile, setPendingProofFile] = useState<File | null>(null)
   const [preparingProof, setPreparingProof] = useState(false)
+  const [savingProof, setSavingProof] = useState(false)
   const [note, setNote] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
@@ -38,6 +41,7 @@ export default function Billing() {
     if (business) {
       listPaymentsForBusiness(business.id).then(setHistory)
       getOrCreateBusinessTelegramLink(business.id).then(setTelegramLink).catch(() => {})
+      readCachedPaymentProof(business.id).then(setProofFile).catch(() => {})
     }
   }, [business])
 
@@ -55,11 +59,26 @@ export default function Billing() {
       if (prepared.size > 10 * 1024 * 1024) {
         throw new Error('Use a JPEG, PNG, WebP, or PDF file up to 10 MB.')
       }
-      setProofFile(prepared)
+      setPendingProofFile(prepared)
     } catch (err) {
       setError(friendlyError(err))
     } finally {
       setPreparingProof(false)
+    }
+  }
+
+  async function handleSaveProof() {
+    if (!business || !pendingProofFile) return
+    setSavingProof(true)
+    setError('')
+    try {
+      await saveCachedPaymentProof(business.id, pendingProofFile)
+      setProofFile(pendingProofFile)
+      setPendingProofFile(null)
+    } catch (err) {
+      setError(friendlyError(err))
+    } finally {
+      setSavingProof(false)
     }
   }
 
@@ -93,6 +112,7 @@ export default function Billing() {
       setNote('')
       const updated = await listPaymentsForBusiness(business.id)
       setHistory(updated)
+      await clearCachedPaymentProof(business.id).catch(() => {})
       await refreshBusiness()
     } catch (err) {
       setError(friendlyError(err))
@@ -181,19 +201,21 @@ export default function Billing() {
             </div>
           )}
 
-          <div style={{ fontSize: 12.5, color: 'rgba(10,12,16,0.5)', marginBottom: 8 }}>2. Upload your payment screenshot/receipt:</div>
+          <div style={{ fontSize: 12.5, color: 'rgba(10,12,16,0.5)', marginBottom: 8 }}>2. Browse your payment screenshot/receipt:</div>
           <button
             type="button"
             onClick={() => proofInputRef.current?.click()}
-            disabled={preparingProof || submitting}
+            disabled={preparingProof || savingProof || submitting}
             aria-label="Upload payment proof"
-            style={{ ...uploadSurface, opacity: preparingProof || submitting ? 0.65 : 1 }}
+            style={{ ...uploadSurface, opacity: preparingProof || savingProof || submitting ? 0.65 : 1 }}
           >
             <div style={{ border: '1.5px dashed rgba(10,12,16,0.2)', borderRadius: 12, padding: '22px', textAlign: 'center' }}>
               {preparingProof ? (
                 <span style={{ fontSize: 13.5, color: 'rgba(10,12,16,0.55)' }}>Preparing image…</span>
+              ) : pendingProofFile ? (
+                <span style={{ fontSize: 13.5, color: '#0A0C10' }}>{pendingProofFile.name}</span>
               ) : proofFile ? (
-                <span style={{ fontSize: 13.5, color: '#0A0C10' }}>{proofFile.name}</span>
+                <span style={{ fontSize: 13.5, color: '#166534' }}>Saved on this device: {proofFile.name}</span>
               ) : (
                 <>
                   <motion.div
@@ -217,13 +239,25 @@ export default function Billing() {
             onChange={e => void handleProofSelection(takeSelectedFile(e.currentTarget))}
           />
 
+          {pendingProofFile && (
+            <button type="button" onClick={handleSaveProof} disabled={savingProof} style={{ ...cacheBtn, opacity: savingProof ? 0.6 : 1 }}>
+              {savingProof ? 'Saving on this device…' : 'Save on this device'}
+            </button>
+          )}
+
           <textarea value={note} onChange={e => setNote(e.target.value)} placeholder="Note for admin (optional)" rows={2} style={{ width: '100%', border: '1px solid rgba(10,12,16,0.1)', borderRadius: 9, padding: '9px 11px', fontSize: 13.5, outline: 'none', fontFamily: 'inherit', resize: 'vertical', marginBottom: 16 }} />
 
           {error && <div style={{ color: '#F87171', fontSize: 13, marginBottom: 12 }}>{error}</div>}
 
-          <button type="button" onClick={handleSubmit} disabled={!selectedMethod || !proofFile || submitting} style={{ ...selectBtn, width: '100%', opacity: !selectedMethod || !proofFile || submitting ? 0.5 : 1 }}>
+          <div style={{ fontSize: 12.5, color: 'rgba(10,12,16,0.5)', marginBottom: 8 }}>3. Submit your saved proof:</div>
+          <button type="button" onClick={handleSubmit} disabled={!selectedMethod || !proofFile || pendingProofFile !== null || savingProof || submitting} style={{ ...selectBtn, width: '100%', opacity: !selectedMethod || !proofFile || pendingProofFile !== null || savingProof || submitting ? 0.5 : 1 }}>
             {submitting ? 'Submitting…' : 'Submit for approval'}
           </button>
+          {telegramLink && telegramPaymentDeepLink(telegramLink.linkToken) && (
+            <a href={telegramPaymentDeepLink(telegramLink.linkToken) ?? undefined} target="_blank" rel="noopener noreferrer" style={telegramPayBtn}>
+              Submit through Telegram instead
+            </a>
+          )}
         </motion.div>
       )}
 
@@ -264,3 +298,5 @@ function StatusBadge({ status, reason }: { status: Payment['status']; reason?: s
 const selectBtn: React.CSSProperties = { background: '#D4A853', color: '#0A0C10', border: 'none', borderRadius: 10, padding: '10px 18px', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', width: '100%' }
 const methodChip: React.CSSProperties = { border: 'none', borderRadius: 8, padding: '8px 14px', fontSize: 13, cursor: 'pointer', fontWeight: 500 }
 const uploadSurface: React.CSSProperties = { display: 'block', width: '100%', padding: 0, marginBottom: 14, border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left' }
+const cacheBtn: React.CSSProperties = { display: 'block', width: '100%', background: '#F6F3EE', color: '#0A0C10', border: '1px solid rgba(10,12,16,0.1)', borderRadius: 10, padding: '10px 18px', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', marginBottom: 16 }
+const telegramPayBtn: React.CSSProperties = { display: 'block', width: '100%', textAlign: 'center', background: '#26A5E4', color: '#fff', borderRadius: 10, padding: '10px 18px', fontSize: 13.5, fontWeight: 600, textDecoration: 'none', marginTop: 10 }

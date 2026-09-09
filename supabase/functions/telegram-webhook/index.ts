@@ -212,13 +212,18 @@ async function handleStart(chatId: string, username: string | undefined, token: 
     return
   }
 
-  const { data: businessLink } = await ctx.db.from('business_telegram_links').select('id, business_id').eq('link_token', token).maybeSingle()
+  const startsPayment = token.startsWith('pay_')
+  const connectionToken = startsPayment ? token.slice(4) : token
+  const { data: businessLink } = await ctx.db.from('business_telegram_links').select('id, business_id').eq('link_token', connectionToken).maybeSingle()
   if (businessLink) {
     await ctx.db
       .from('business_telegram_links')
       .update({ telegram_chat_id: chatId, telegram_username: username ?? null, linked_at: new Date().toISOString() })
       .eq('id', businessLink.id)
-    await ctx.tg.sendMessage(chatId, '\u2705 Connected! You\u2019ll get updates here when your payments are reviewed. Send /pay anytime to submit a new payment.')
+    await ctx.tg.sendMessage(chatId, startsPayment
+      ? '\u2705 Connected! Let\u2019s prepare your payment submission.'
+      : '\u2705 Connected! You\u2019ll get updates here when your payments are reviewed. Send /pay anytime to submit a new payment.')
+    if (startsPayment) return handlePayCommand(chatId, ctx)
     return
   }
 

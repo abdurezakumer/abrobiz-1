@@ -14,6 +14,12 @@ export function telegramDeepLink(linkToken: string): string | null {
   return safeHttpsUrl(`https://t.me/${BOT_USERNAME}?start=${encodeURIComponent(linkToken)}`)
 }
 
+/** Opens the bot, connects the business if needed, and starts /pay. */
+export function telegramPaymentDeepLink(linkToken: string): string | null {
+  if (!BOT_USERNAME || !/^[A-Za-z0-9_]{5,32}$/.test(BOT_USERNAME) || !linkToken) return null
+  return safeHttpsUrl(`https://t.me/${BOT_USERNAME}?start=${encodeURIComponent(`pay_${linkToken}`)}`)
+}
+
 export async function getOrCreateBusinessTelegramLink(businessId: string): Promise<TelegramLinkStatus> {
   const { data: existing } = await supabase
     .from('business_telegram_links')
