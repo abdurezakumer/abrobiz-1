@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { buildFromAddress, sendEmail, createSenderFromEnv, type SendMailFn } from './mailer.ts'
+import { buildFromAddress, sendEmail, createSenderFromEnv, createSmtpSenderFromEnv, type SendMailFn } from './mailer.ts'
 import { buildVerificationEmail } from '../send-verification-email/email.ts'
 
 function assertOk(cond: boolean, msg: string) {
@@ -48,6 +48,21 @@ Deno.test('createSenderFromEnv accepts the MAIL_* SMTP settings', () => {
   })
   const sender = createSenderFromEnv(env)
   assert.equal(sender.from, 'Abdre <oneabdre@gmail.com>')
+})
+
+Deno.test('createSmtpSenderFromEnv requires MAIL_* SMTP even when Resend is configured', () => {
+  const env = fakeEnv({
+    APP_NAME: 'AbroBiz', RESEND_API_KEY: 're_test', EMAIL_DOMAIN: 'abrobiz.com',
+    MAIL_SERVER: 'smtp.gmail.com', MAIL_PORT: '587', MAIL_USERNAME: 'oneabdre@gmail.com',
+    MAIL_PASSWORD: 'app-pw', MAIL_USE_TLS: 'true', MAIL_FROM: 'AbroBiz <oneabdre@gmail.com>',
+  })
+  const sender = createSmtpSenderFromEnv(env)
+  assert.equal(sender.from, 'AbroBiz <oneabdre@gmail.com>')
+})
+
+Deno.test('createSmtpSenderFromEnv fails clearly when SMTP is missing', () => {
+  const env = fakeEnv({ RESEND_API_KEY: 're_test', EMAIL_DOMAIN: 'abrobiz.com' })
+  assert.throws(() => createSmtpSenderFromEnv(env), /SMTP email is not configured/)
 })
 
 Deno.test('createSenderFromEnv throws a clear error when nothing is configured, instead of failing mysteriously later', () => {

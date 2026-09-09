@@ -1,5 +1,5 @@
 import { brandedEmail } from './emailLayout.ts'
-import { escapeHtml, sendEmail, createSenderFromEnv, type SendResult } from './mailer.ts'
+import { escapeHtml, sendEmail, createSmtpSenderFromEnv, type SendResult } from './mailer.ts'
 
 export async function sendAuthOtpEmail({
   email,
@@ -27,7 +27,9 @@ export async function sendAuthOtpEmail({
   })
 
   try {
-    const sender = createSenderFromEnv(Deno.env)
+    // Signup and resend OTPs must use the configured SMTP account. Do not
+    // silently switch to Resend (or another provider) when both are present.
+    const sender = createSmtpSenderFromEnv(Deno.env)
     return await sendEmail(sender.sendMail, { from: sender.from, to: email, content })
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) }

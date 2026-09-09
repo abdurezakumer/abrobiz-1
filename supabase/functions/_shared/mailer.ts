@@ -92,6 +92,38 @@ export function buildFromAddress(appName: string, opts: { override?: string; dom
   return `"${appName}" <noreply@example.com>`
 }
 
+/** Builds the explicitly configured MAIL_* SMTP sender.
+ *
+ * This is intentionally separate from createSenderFromEnv so authentication
+ * messages can require SMTP and never silently fall back to another provider.
+ */
+export function createSmtpSenderFromEnv(env: { get(key: string): string | undefined }): { sendMail: SendMailFn; from: string } {
+  const appName = env.get('APP_NAME') ?? 'AbroBiz'
+  const mailServer = env.get('MAIL_SERVER')
+  const mailUsername = env.get('MAIL_USERNAME')
+  const mailPassword = env.get('MAIL_PASSWORD')
+
+  if (!mailServer || !mailUsername || !mailPassword) {
+    throw new Error('SMTP email is not configured — set MAIL_SERVER, MAIL_PORT, MAIL_USERNAME, and MAIL_PASSWORD')
+  }
+
+  const mailPort = Number(env.get('MAIL_PORT') ?? '587')
+  return {
+    sendMail: createSmtpSender({
+      server: mailServer,
+      port: Number.isFinite(mailPort) && mailPort > 0 ? mailPort : 587,
+      username: mailUsername,
+      password: mailPassword,
+      useTls: envBoolean(env.get('MAIL_USE_TLS'), true),
+    }),
+    from: buildFromAddress(appName, {
+      override: env.get('MAIL_FROM') ?? env.get('EMAIL_FROM') ?? undefined,
+      domain: env.get('EMAIL_DOMAIN') ?? undefined,
+      gmailUser: mailUsername,
+    }),
+  }
+}
+
 /** Picks Resend, then generic MAIL_* SMTP, then legacy Gmail vars automatically. */
 export function createSenderFromEnv(env: { get(key: string): string | undefined }): { sendMail: SendMailFn; from: string } {
   const appName = env.get('APP_NAME') ?? 'AbroBiz'

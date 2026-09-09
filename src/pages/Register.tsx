@@ -65,11 +65,6 @@ export default function Register() {
           <h1 style={headingStyle}>Create your account</h1>
           <p style={mutedStyle}>Set up your business's digital presence in minutes.</p>
 
-          <GoogleSignInButton onError={setError} />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '18px 0' }}>
-            <div style={ruleStyle} /><span style={{ fontSize: 12, color: 'rgba(240,237,231,0.35)' }}>or</span><div style={ruleStyle} />
-          </div>
-
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <Field label="Full name"><input required value={name} onChange={e => setName(e.target.value)} style={inputStyle} placeholder="Abebe Kebede" /></Field>
             <Field label="Phone number"><input required value={phone} onChange={e => setPhone(e.target.value)} style={inputStyle} placeholder="09XXXXXXXX" /></Field>
@@ -90,6 +85,11 @@ export default function Register() {
             {error && <div style={errorStyle}>{error}</div>}
             <button type="submit" disabled={loading || (turnstileEnabled && !turnstileToken)} style={submitStyle}>{loading ? 'Creating account...' : 'Create account'}</button>
           </form>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '22px 0 18px' }}>
+            <div style={ruleStyle} /><span style={{ fontSize: 12, color: 'rgba(240,237,231,0.35)' }}>or</span><div style={ruleStyle} />
+          </div>
+          <GoogleSignInButton onError={setError} />
+
           <p style={{ textAlign: 'center', color: 'rgba(240,237,231,0.45)', fontSize: 13.5, marginTop: 22 }}>
             Already have an account? <Link to="/login" style={linkStyle}>Log in</Link>
           </p>

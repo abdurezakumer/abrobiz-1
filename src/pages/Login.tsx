@@ -92,13 +92,6 @@ export default function Login() {
           </h1>
           <p style={{ color: 'rgba(240,237,231,0.5)', fontSize: 14, marginBottom: 26 }}>Log in to manage your business.</p>
 
-          <GoogleSignInButton onError={setError} />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '18px 0' }}>
-            <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.08)' }} />
-            <span style={{ fontSize: 12, color: 'rgba(240,237,231,0.35)' }}>or</span>
-            <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.08)' }} />
-          </div>
-
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <span style={{ fontSize: 12.5, color: 'rgba(240,237,231,0.5)', fontWeight: 500 }}>Email</span>
@@ -131,6 +124,13 @@ export default function Login() {
               {loading ? 'Signing in…' : 'Sign in'}
             </button>
           </form>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '22px 0 18px' }}>
+            <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.08)' }} />
+            <span style={{ fontSize: 12, color: 'rgba(240,237,231,0.35)' }}>or</span>
+            <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.08)' }} />
+          </div>
+          <GoogleSignInButton onError={setError} />
 
           <p style={{ textAlign: 'center', color: 'rgba(240,237,231,0.45)', fontSize: 13.5, marginTop: 22 }}>
             Don't have an account?{' '}
