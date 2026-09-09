@@ -11,7 +11,7 @@ import { daysRemaining } from '../lib/api/subscriptions'
 import { getOrCreateBusinessTelegramLink, telegramPaymentDeepLink, notifyAdminsOfPayment, type TelegramLinkStatus } from '../lib/api/telegram'
 import { friendlyError } from '../lib/errors'
 import type { Plan, PaymentMethod, Payment } from '../types'
-import { PAYMENT_UPLOAD_ACCEPT, isPdfFile, prepareImageForUpload, takeSelectedFile } from '../lib/fileUpload'
+import { PAYMENT_UPLOAD_ACCEPT, detectedUploadType, takeSelectedFile } from '../lib/fileUpload'
 import { clearCachedPaymentProof, readCachedPaymentProof, saveCachedPaymentProof } from '../lib/paymentProofCache'
 
 export default function Billing() {
@@ -22,8 +22,6 @@ export default function Billing() {
   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null)
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod | null>(null)
   const [proofFile, setProofFile] = useState<File | null>(null)
-  const [pendingProofFile, setPendingProofFile] = useState<File | null>(null)
-  const [preparingProof, setPreparingProof] = useState(false)
   const [savingProof, setSavingProof] = useState(false)
   const [note, setNote] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -44,42 +42,37 @@ export default function Billing() {
     }
   }, [business])
 
+  useEffect(() => {
+    const preventLossWhileWorking = (event: BeforeUnloadEvent) => {
+      if (!savingProof && !submitting) return
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', preventLossWhileWorking)
+    return () => window.removeEventListener('beforeunload', preventLossWhileWorking)
+  }, [savingProof, submitting])
+
   const days = daysRemaining(subscription?.endDate ?? null)
 
   async function handleProofSelection(file: File | null) {
     if (!file) return
     setError('')
     setProofFile(null)
-    setPreparingProof(true)
+    setSavingProof(true)
     try {
-      const prepared = isPdfFile(file)
-        ? (file.type === 'application/pdf' ? file : new File([file], file.name, { type: 'application/pdf' }))
-        : await prepareImageForUpload(file, 10 * 1024 * 1024)
-      if (prepared.size > 10 * 1024 * 1024) {
+      const detectedType = detectedUploadType(file)
+      if (!detectedType || (!detectedType.startsWith('image/') && detectedType !== 'application/pdf')) {
         throw new Error('Use a JPEG, PNG, WebP, or PDF file up to 10 MB.')
       }
-      setPendingProofFile(prepared)
+      // Cache the original immediately. Compression and network upload happen
+      // only after Submit, so a phone refresh cannot lose the photo.
+      await saveCachedPaymentProof(business?.id ?? '', file)
+      setProofFile(file)
     } catch (err) {
       // Some private/mobile browser modes disable IndexedDB. Keep the file in
       // memory so the user can still submit it during this session.
-      setProofFile(pendingProofFile)
-      setPendingProofFile(null)
-      setError(`Saved for this session, but this browser could not keep a refresh cache. ${friendlyError(err)}`)
-    } finally {
-      setPreparingProof(false)
-    }
-  }
-
-  async function handleSaveProof() {
-    if (!business || !pendingProofFile) return
-    setSavingProof(true)
-    setError('')
-    try {
-      await saveCachedPaymentProof(business.id, pendingProofFile)
-      setProofFile(pendingProofFile)
-      setPendingProofFile(null)
-    } catch (err) {
-      setError(friendlyError(err))
+      setProofFile(file)
+      setError(`Photo ready for this session, but refresh-safe saving failed. ${friendlyError(err)}`)
     } finally {
       setSavingProof(false)
     }
@@ -205,12 +198,10 @@ export default function Billing() {
           )}
 
           <div style={{ fontSize: 12.5, color: 'rgba(10,12,16,0.5)', marginBottom: 8 }}>2. Browse your payment screenshot/receipt:</div>
-          <div style={{ ...uploadSurface, opacity: preparingProof || savingProof || submitting ? 0.65 : 1, position: 'relative' }}>
+          <div style={{ ...uploadSurface, opacity: savingProof || submitting ? 0.65 : 1, position: 'relative' }}>
             <div style={{ border: '1.5px dashed rgba(10,12,16,0.2)', borderRadius: 12, padding: '22px', textAlign: 'center' }}>
-              {preparingProof ? (
-                <span style={{ fontSize: 13.5, color: 'rgba(10,12,16,0.55)' }}>Preparing image…</span>
-              ) : pendingProofFile ? (
-                <span style={{ fontSize: 13.5, color: '#0A0C10' }}>{pendingProofFile.name}</span>
+              {savingProof ? (
+                <span style={{ fontSize: 13.5, color: 'rgba(10,12,16,0.55)' }}>Saving photo on this device…</span>
               ) : proofFile ? (
                 <span style={{ fontSize: 13.5, color: '#166534' }}>Saved on this device: {proofFile.name}</span>
               ) : (
@@ -231,24 +222,18 @@ export default function Billing() {
               type="file"
               accept={PAYMENT_UPLOAD_ACCEPT}
               aria-label="Browse payment proof"
-              disabled={preparingProof || savingProof || submitting}
+              disabled={savingProof || submitting}
               style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer' }}
               onChange={e => void handleProofSelection(takeSelectedFile(e.currentTarget))}
             />
           </div>
-
-          {pendingProofFile && (
-            <button type="button" onClick={handleSaveProof} disabled={savingProof} style={{ ...cacheBtn, opacity: savingProof ? 0.6 : 1 }}>
-              {savingProof ? 'Saving on this device…' : 'Save on this device'}
-            </button>
-          )}
 
           <textarea value={note} onChange={e => setNote(e.target.value)} placeholder="Note for admin (optional)" rows={2} style={{ width: '100%', border: '1px solid rgba(10,12,16,0.1)', borderRadius: 9, padding: '9px 11px', fontSize: 13.5, outline: 'none', fontFamily: 'inherit', resize: 'vertical', marginBottom: 16 }} />
 
           {error && <div style={{ color: '#F87171', fontSize: 13, marginBottom: 12 }}>{error}</div>}
 
           <div style={{ fontSize: 12.5, color: 'rgba(10,12,16,0.5)', marginBottom: 8 }}>3. Submit your saved proof:</div>
-          <button type="button" onClick={handleSubmit} disabled={!selectedMethod || !proofFile || pendingProofFile !== null || savingProof || submitting} style={{ ...selectBtn, width: '100%', opacity: !selectedMethod || !proofFile || pendingProofFile !== null || savingProof || submitting ? 0.5 : 1 }}>
+          <button type="button" onClick={handleSubmit} disabled={!selectedMethod || !proofFile || savingProof || submitting} style={{ ...selectBtn, width: '100%', opacity: !selectedMethod || !proofFile || savingProof || submitting ? 0.5 : 1 }}>
             {submitting ? 'Submitting…' : 'Submit for approval'}
           </button>
           {telegramLink && telegramPaymentDeepLink(telegramLink.linkToken) && (
@@ -296,5 +281,4 @@ function StatusBadge({ status, reason }: { status: Payment['status']; reason?: s
 const selectBtn: React.CSSProperties = { background: '#D4A853', color: '#0A0C10', border: 'none', borderRadius: 10, padding: '10px 18px', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', width: '100%' }
 const methodChip: React.CSSProperties = { border: 'none', borderRadius: 8, padding: '8px 14px', fontSize: 13, cursor: 'pointer', fontWeight: 500 }
 const uploadSurface: React.CSSProperties = { display: 'block', width: '100%', padding: 0, marginBottom: 14, background: 'transparent', cursor: 'pointer', textAlign: 'left' }
-const cacheBtn: React.CSSProperties = { display: 'block', width: '100%', background: '#F6F3EE', color: '#0A0C10', border: '1px solid rgba(10,12,16,0.1)', borderRadius: 10, padding: '10px 18px', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', marginBottom: 16 }
 const telegramPayBtn: React.CSSProperties = { display: 'block', width: '100%', textAlign: 'center', background: '#26A5E4', color: '#fff', borderRadius: 10, padding: '10px 18px', fontSize: 13.5, fontWeight: 600, textDecoration: 'none', marginTop: 10 }
