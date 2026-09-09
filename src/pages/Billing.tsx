@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { ArrowUp, Check, Upload, Clock, CheckCircle2, XCircle } from 'lucide-react'
 import DashboardLayout from '../components/DashboardLayout'
@@ -11,7 +11,7 @@ import { daysRemaining } from '../lib/api/subscriptions'
 import { getOrCreateBusinessTelegramLink, telegramDeepLink, notifyAdminsOfPayment, type TelegramLinkStatus } from '../lib/api/telegram'
 import { friendlyError } from '../lib/errors'
 import type { Plan, PaymentMethod, Payment } from '../types'
-import { PAYMENT_UPLOAD_ACCEPT, takeSelectedFile } from '../lib/fileUpload'
+import { PAYMENT_UPLOAD_ACCEPT, prepareImageForUpload, takeSelectedFile } from '../lib/fileUpload'
 
 export default function Billing() {
   const { business, subscription, refreshBusiness } = useAuth()
@@ -21,11 +21,13 @@ export default function Billing() {
   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null)
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod | null>(null)
   const [proofFile, setProofFile] = useState<File | null>(null)
+  const [preparingProof, setPreparingProof] = useState(false)
   const [note, setNote] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [error, setError] = useState('')
   const [telegramLink, setTelegramLink] = useState<TelegramLinkStatus | null>(null)
+  const proofInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     listPlans().then(setPlans)
@@ -40,6 +42,26 @@ export default function Billing() {
   }, [business])
 
   const days = daysRemaining(subscription?.endDate ?? null)
+
+  async function handleProofSelection(file: File | null) {
+    if (!file) return
+    setError('')
+    setProofFile(null)
+    setPreparingProof(true)
+    try {
+      const prepared = file.type === 'application/pdf'
+        ? file
+        : await prepareImageForUpload(file, 10 * 1024 * 1024)
+      if (prepared.size > 10 * 1024 * 1024) {
+        throw new Error('Use a JPEG, PNG, WebP, or PDF file up to 10 MB.')
+      }
+      setProofFile(prepared)
+    } catch (err) {
+      setError(friendlyError(err))
+    } finally {
+      setPreparingProof(false)
+    }
+  }
 
   async function handleSubmit() {
     if (!business || !selectedPlan) return
@@ -160,9 +182,17 @@ export default function Billing() {
           )}
 
           <div style={{ fontSize: 12.5, color: 'rgba(10,12,16,0.5)', marginBottom: 8 }}>2. Upload your payment screenshot/receipt:</div>
-          <label style={{ display: 'block', cursor: 'pointer', marginBottom: 14 }}>
+          <button
+            type="button"
+            onClick={() => proofInputRef.current?.click()}
+            disabled={preparingProof || submitting}
+            aria-label="Upload payment proof"
+            style={{ ...uploadSurface, opacity: preparingProof || submitting ? 0.65 : 1 }}
+          >
             <div style={{ border: '1.5px dashed rgba(10,12,16,0.2)', borderRadius: 12, padding: '22px', textAlign: 'center' }}>
-              {proofFile ? (
+              {preparingProof ? (
+                <span style={{ fontSize: 13.5, color: 'rgba(10,12,16,0.55)' }}>Preparing image…</span>
+              ) : proofFile ? (
                 <span style={{ fontSize: 13.5, color: '#0A0C10' }}>{proofFile.name}</span>
               ) : (
                 <>
@@ -178,8 +208,14 @@ export default function Billing() {
                 </>
               )}
             </div>
-            <input type="file" accept={PAYMENT_UPLOAD_ACCEPT} hidden onChange={e => setProofFile(takeSelectedFile(e.currentTarget))} />
-          </label>
+          </button>
+          <input
+            ref={proofInputRef}
+            type="file"
+            accept={PAYMENT_UPLOAD_ACCEPT}
+            style={{ display: 'none' }}
+            onChange={e => void handleProofSelection(takeSelectedFile(e.currentTarget))}
+          />
 
           <textarea value={note} onChange={e => setNote(e.target.value)} placeholder="Note for admin (optional)" rows={2} style={{ width: '100%', border: '1px solid rgba(10,12,16,0.1)', borderRadius: 9, padding: '9px 11px', fontSize: 13.5, outline: 'none', fontFamily: 'inherit', resize: 'vertical', marginBottom: 16 }} />
 
@@ -227,3 +263,4 @@ function StatusBadge({ status, reason }: { status: Payment['status']; reason?: s
 
 const selectBtn: React.CSSProperties = { background: '#D4A853', color: '#0A0C10', border: 'none', borderRadius: 10, padding: '10px 18px', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', width: '100%' }
 const methodChip: React.CSSProperties = { border: 'none', borderRadius: 8, padding: '8px 14px', fontSize: 13, cursor: 'pointer', fontWeight: 500 }
+const uploadSurface: React.CSSProperties = { display: 'block', width: '100%', padding: 0, marginBottom: 14, border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left' }
