@@ -1,7 +1,7 @@
 import { supabase } from '../supabaseClient'
 import { edgeFunctionError } from '../errors'
 import type { Payment } from '../../types'
-import { prepareImageForUpload } from '../fileUpload'
+import { isPdfFile, prepareImageForUpload } from '../fileUpload'
 
 function mapPayment(row: any): Payment {
   return {
@@ -42,7 +42,9 @@ function mapPayment(row: any): Payment {
 }
 
 export async function uploadPaymentProof(businessId: string, file: File): Promise<string> {
-  const uploadFile = file.type === 'application/pdf' ? file : await prepareImageForUpload(file, 10 * 1024 * 1024)
+  const uploadFile = isPdfFile(file)
+    ? (file.type === 'application/pdf' ? file : new File([file], file.name, { type: 'application/pdf' }))
+    : await prepareImageForUpload(file, 10 * 1024 * 1024)
   if (uploadFile.size > 10 * 1024 * 1024 || !['image/jpeg', 'image/png', 'image/webp', 'application/pdf'].includes(uploadFile.type)) {
     throw new Error('Use a JPEG, PNG, WebP, or PDF file up to 10 MB.')
   }

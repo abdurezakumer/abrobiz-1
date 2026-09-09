@@ -1,5 +1,26 @@
-export const IMAGE_UPLOAD_ACCEPT = 'image/jpeg,image/png,image/webp'
+export const IMAGE_UPLOAD_ACCEPT = 'image/jpeg,image/png,image/webp,image/heic,image/heif'
 export const PAYMENT_UPLOAD_ACCEPT = `${IMAGE_UPLOAD_ACCEPT},application/pdf`
+
+const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'])
+
+/** Mobile browsers do not all report the same MIME type for camera photos. */
+export function detectedUploadType(file: File): string {
+  const type = file.type.trim().toLowerCase()
+  if (type === 'image/jpg') return 'image/jpeg'
+  if (IMAGE_TYPES.has(type) || type === 'application/pdf') return type
+  const extension = file.name.split('.').pop()?.toLowerCase()
+  if (extension === 'jpg' || extension === 'jpeg') return 'image/jpeg'
+  if (extension === 'png') return 'image/png'
+  if (extension === 'webp') return 'image/webp'
+  if (extension === 'heic') return 'image/heic'
+  if (extension === 'heif') return 'image/heif'
+  if (extension === 'pdf') return 'application/pdf'
+  return ''
+}
+
+export function isPdfFile(file: File): boolean {
+  return detectedUploadType(file) === 'application/pdf'
+}
 
 /**
  * Read a file input once and clear it immediately. Clearing the input lets a
@@ -18,10 +39,13 @@ export function takeSelectedFile(input: HTMLInputElement): File | null {
  * request small enough for mobile networks and the upload function.
  */
 export async function prepareImageForUpload(file: File, maxBytes: number): Promise<File> {
-  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+  const detectedType = detectedUploadType(file)
+  if (!IMAGE_TYPES.has(detectedType)) {
     throw new Error('Please choose a JPEG, PNG, or WebP image.')
   }
-  if (file.size <= maxBytes) return file
+  const mustConvert = detectedType === 'image/heic' || detectedType === 'image/heif'
+  if (!mustConvert && file.size <= maxBytes && file.type === detectedType) return file
+  if (!mustConvert && file.size <= maxBytes) return new File([file], file.name, { type: detectedType })
 
   const image = await decodeImage(file)
   const maxDimension = 2400

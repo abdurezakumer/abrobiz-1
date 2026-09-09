@@ -11,7 +11,7 @@ import { daysRemaining } from '../lib/api/subscriptions'
 import { getOrCreateBusinessTelegramLink, telegramDeepLink, notifyAdminsOfPayment, type TelegramLinkStatus } from '../lib/api/telegram'
 import { friendlyError } from '../lib/errors'
 import type { Plan, PaymentMethod, Payment } from '../types'
-import { PAYMENT_UPLOAD_ACCEPT, prepareImageForUpload, takeSelectedFile } from '../lib/fileUpload'
+import { PAYMENT_UPLOAD_ACCEPT, isPdfFile, prepareImageForUpload, takeSelectedFile } from '../lib/fileUpload'
 
 export default function Billing() {
   const { business, subscription, refreshBusiness } = useAuth()
@@ -49,8 +49,8 @@ export default function Billing() {
     setProofFile(null)
     setPreparingProof(true)
     try {
-      const prepared = file.type === 'application/pdf'
-        ? file
+      const prepared = isPdfFile(file)
+        ? (file.type === 'application/pdf' ? file : new File([file], file.name, { type: 'application/pdf' }))
         : await prepareImageForUpload(file, 10 * 1024 * 1024)
       if (prepared.size > 10 * 1024 * 1024) {
         throw new Error('Use a JPEG, PNG, WebP, or PDF file up to 10 MB.')
