@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { ArrowUp, Check, Upload, Clock, CheckCircle2, XCircle } from 'lucide-react'
 import DashboardLayout from '../components/DashboardLayout'
@@ -30,7 +30,6 @@ export default function Billing() {
   const [submitted, setSubmitted] = useState(false)
   const [error, setError] = useState('')
   const [telegramLink, setTelegramLink] = useState<TelegramLinkStatus | null>(null)
-  const proofInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     listPlans().then(setPlans)
@@ -61,7 +60,11 @@ export default function Billing() {
       }
       setPendingProofFile(prepared)
     } catch (err) {
-      setError(friendlyError(err))
+      // Some private/mobile browser modes disable IndexedDB. Keep the file in
+      // memory so the user can still submit it during this session.
+      setProofFile(pendingProofFile)
+      setPendingProofFile(null)
+      setError(`Saved for this session, but this browser could not keep a refresh cache. ${friendlyError(err)}`)
     } finally {
       setPreparingProof(false)
     }
@@ -202,13 +205,7 @@ export default function Billing() {
           )}
 
           <div style={{ fontSize: 12.5, color: 'rgba(10,12,16,0.5)', marginBottom: 8 }}>2. Browse your payment screenshot/receipt:</div>
-          <button
-            type="button"
-            onClick={() => proofInputRef.current?.click()}
-            disabled={preparingProof || savingProof || submitting}
-            aria-label="Upload payment proof"
-            style={{ ...uploadSurface, opacity: preparingProof || savingProof || submitting ? 0.65 : 1 }}
-          >
+          <div style={{ ...uploadSurface, opacity: preparingProof || savingProof || submitting ? 0.65 : 1, position: 'relative' }}>
             <div style={{ border: '1.5px dashed rgba(10,12,16,0.2)', borderRadius: 12, padding: '22px', textAlign: 'center' }}>
               {preparingProof ? (
                 <span style={{ fontSize: 13.5, color: 'rgba(10,12,16,0.55)' }}>Preparing image…</span>
@@ -230,14 +227,15 @@ export default function Billing() {
                 </>
               )}
             </div>
-          </button>
-          <input
-            ref={proofInputRef}
-            type="file"
-            accept={PAYMENT_UPLOAD_ACCEPT}
-            style={{ display: 'none' }}
-            onChange={e => void handleProofSelection(takeSelectedFile(e.currentTarget))}
-          />
+            <input
+              type="file"
+              accept={PAYMENT_UPLOAD_ACCEPT}
+              aria-label="Browse payment proof"
+              disabled={preparingProof || savingProof || submitting}
+              style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer' }}
+              onChange={e => void handleProofSelection(takeSelectedFile(e.currentTarget))}
+            />
+          </div>
 
           {pendingProofFile && (
             <button type="button" onClick={handleSaveProof} disabled={savingProof} style={{ ...cacheBtn, opacity: savingProof ? 0.6 : 1 }}>
@@ -297,6 +295,6 @@ function StatusBadge({ status, reason }: { status: Payment['status']; reason?: s
 
 const selectBtn: React.CSSProperties = { background: '#D4A853', color: '#0A0C10', border: 'none', borderRadius: 10, padding: '10px 18px', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', width: '100%' }
 const methodChip: React.CSSProperties = { border: 'none', borderRadius: 8, padding: '8px 14px', fontSize: 13, cursor: 'pointer', fontWeight: 500 }
-const uploadSurface: React.CSSProperties = { display: 'block', width: '100%', padding: 0, marginBottom: 14, border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left' }
+const uploadSurface: React.CSSProperties = { display: 'block', width: '100%', padding: 0, marginBottom: 14, background: 'transparent', cursor: 'pointer', textAlign: 'left' }
 const cacheBtn: React.CSSProperties = { display: 'block', width: '100%', background: '#F6F3EE', color: '#0A0C10', border: '1px solid rgba(10,12,16,0.1)', borderRadius: 10, padding: '10px 18px', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', marginBottom: 16 }
 const telegramPayBtn: React.CSSProperties = { display: 'block', width: '100%', textAlign: 'center', background: '#26A5E4', color: '#fff', borderRadius: 10, padding: '10px 18px', fontSize: 13.5, fontWeight: 600, textDecoration: 'none', marginTop: 10 }
