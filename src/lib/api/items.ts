@@ -79,8 +79,9 @@ export async function deleteItem(id: string): Promise<void> {
 
 export async function uploadItemImage(businessId: string, file: File): Promise<string> {
   const uploadFile = await prepareImageForUpload(file, 5 * 1024 * 1024)
+  const uploadBytes = await uploadFile.arrayBuffer()
   const { data, error } = await supabase.functions.invoke('storage-upload', {
-    body: uploadFile,
+    body: uploadBytes,
     headers: { 'X-Upload-Bucket': 'item-images', 'X-Business-Id': businessId, 'Content-Type': uploadFile.type },
   })
   if (error) throw await edgeFunctionError(error)

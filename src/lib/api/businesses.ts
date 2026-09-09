@@ -138,8 +138,9 @@ export async function uploadBusinessImage(
   file: File
 ): Promise<string> {
   const uploadFile = await prepareImageForUpload(file, 5 * 1024 * 1024)
+  const uploadBytes = await uploadFile.arrayBuffer()
   const { data, error } = await supabase.functions.invoke('storage-upload', {
-    body: uploadFile,
+    body: uploadBytes,
     headers: { 'X-Upload-Bucket': bucket, 'X-Business-Id': businessId, 'Content-Type': uploadFile.type },
   })
   if (error) throw await edgeFunctionError(error)

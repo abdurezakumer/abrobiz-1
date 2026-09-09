@@ -48,8 +48,9 @@ export async function uploadPaymentProof(businessId: string, file: File): Promis
   if (uploadFile.size > 10 * 1024 * 1024 || !['image/jpeg', 'image/png', 'image/webp', 'application/pdf'].includes(uploadFile.type)) {
     throw new Error('Use a JPEG, PNG, WebP, or PDF file up to 10 MB.')
   }
+  const uploadBytes = await uploadFile.arrayBuffer()
   const { data, error } = await supabase.functions.invoke('storage-upload', {
-    body: uploadFile,
+    body: uploadBytes,
     headers: { 'X-Upload-Bucket': 'payment-proofs', 'X-Business-Id': businessId, 'Content-Type': uploadFile.type },
   })
   if (error) throw await edgeFunctionError(error)
