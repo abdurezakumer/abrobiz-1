@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
-import { ArrowUp, Check, Upload, Clock, CheckCircle2, XCircle } from 'lucide-react'
+import { ArrowUp, Check, Upload, Clock, CheckCircle2, XCircle, RefreshCw } from 'lucide-react'
 import DashboardLayout from '../components/DashboardLayout'
 import TelegramConnectCard from '../components/TelegramConnectCard'
 import { useAuth } from '../lib/authContext'
@@ -26,6 +26,7 @@ export default function Billing() {
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [submittedPaymentId, setSubmittedPaymentId] = useState<string | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState('')
   const [telegramLink, setTelegramLink] = useState<TelegramLinkStatus | null>(null)
   const paymentIdempotencyKey = useRef<string | null>(null)
@@ -78,6 +79,23 @@ export default function Billing() {
   }, [business?.id, submittedPaymentId])
 
   const days = daysRemaining(subscription?.endDate ?? null)
+
+  async function refreshBilling() {
+    if (!business) return
+    setRefreshing(true)
+    setError('')
+    try {
+      const [payments] = await Promise.all([
+        listPaymentsForBusiness(business.id),
+        refreshBusiness(),
+      ])
+      setHistory(payments)
+    } catch (err) {
+      setError(friendlyError(err))
+    } finally {
+      setRefreshing(false)
+    }
+  }
 
   async function handleProofSelection(file: File | null) {
     if (!file) return
@@ -166,8 +184,17 @@ export default function Billing() {
 
   return (
     <DashboardLayout>
-      <h1 style={{ fontFamily: 'Outfit, sans-serif', fontSize: 24, fontWeight: 600, color: '#0A0C10', marginBottom: 4 }}>Billing</h1>
-      <p style={{ color: 'rgba(10,12,16,0.5)', fontSize: 14, marginBottom: 22 }}>Manage your subscription and payments.</p>
+      <style>{'@keyframes abrobiz-spin { to { transform: rotate(360deg); } }'}</style>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap', marginBottom: 22 }}>
+        <div>
+          <h1 style={{ fontFamily: 'Outfit, sans-serif', fontSize: 24, fontWeight: 600, color: '#0A0C10', margin: '0 0 4px' }}>Billing</h1>
+          <p style={{ color: 'rgba(10,12,16,0.5)', fontSize: 14, margin: 0 }}>Manage your subscription and payments.</p>
+        </div>
+        <button type="button" onClick={() => void refreshBilling()} disabled={refreshing || savingProof || submitting} style={refreshBtn}>
+          <RefreshCw size={14} style={{ animation: refreshing ? 'abrobiz-spin 0.8s linear infinite' : 'none' }} />
+          {refreshing ? 'Refreshing…' : 'Refresh'}
+        </button>
+      </div>
 
       <div style={{ background: '#fff', borderRadius: 16, border: '1px solid rgba(10,12,16,0.06)', padding: '18px 22px', marginBottom: 22, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
         <div>
@@ -345,3 +372,4 @@ const methodChip: React.CSSProperties = { border: 'none', borderRadius: 8, paddi
 const uploadSurface: React.CSSProperties = { display: 'block', width: '100%', padding: 0, marginBottom: 14, background: 'transparent', cursor: 'pointer', textAlign: 'left' }
 const telegramPayBtn: React.CSSProperties = { display: 'block', width: '100%', textAlign: 'center', background: '#26A5E4', color: '#fff', borderRadius: 10, padding: '10px 18px', fontSize: 13.5, fontWeight: 600, textDecoration: 'none', marginTop: 10 }
 const planBadge: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', borderRadius: 999, padding: '4px 9px', background: 'rgba(212,168,83,0.16)', border: '1px solid rgba(212,168,83,0.35)', color: '#8A6417', fontSize: 11, fontWeight: 700, letterSpacing: 0.3, textTransform: 'uppercase' }
+const refreshBtn: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 7, border: '1px solid rgba(10,12,16,0.12)', borderRadius: 9, padding: '8px 12px', background: '#fff', color: '#0A0C10', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { CheckCircle2, XCircle, ImageOff } from 'lucide-react'
+import { CheckCircle2, XCircle, ImageOff, RefreshCw } from 'lucide-react'
 import AdminLayout from '../../components/AdminLayout'
 import { adminListPendingPayments, adminListAllPayments, adminApprovePayment, adminRejectPayment, getPaymentProofUrl } from '../../lib/api/payments'
 import type { Payment } from '../../types'
@@ -10,6 +10,7 @@ export default function AdminPayments() {
   const [history, setHistory] = useState<Payment[]>([])
   const [proofUrls, setProofUrls] = useState<Record<string, string>>({})
   const [busyId, setBusyId] = useState<string | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
 
   async function load() {
     const [p, h] = await Promise.all([adminListPendingPayments(), adminListAllPayments()])
@@ -19,6 +20,15 @@ export default function AdminPayments() {
       if (payment.proofUrl && !proofUrls[payment.id]) {
         getPaymentProofUrl(payment.proofUrl).then(url => setProofUrls(prev => ({ ...prev, [payment.id]: url }))).catch(() => {})
       }
+    }
+  }
+
+  async function refreshPayments() {
+    setRefreshing(true)
+    try {
+      await load()
+    } finally {
+      setRefreshing(false)
     }
   }
 
@@ -54,10 +64,19 @@ export default function AdminPayments() {
 
   return (
     <AdminLayout>
-      <h1 style={{ fontFamily: 'Outfit, sans-serif', fontSize: 24, fontWeight: 600, color: '#0A0C10', marginBottom: 4 }}>Payments</h1>
-      <p style={{ color: 'rgba(10,12,16,0.5)', fontSize: 14, marginBottom: 22 }}>
-        {pending.length} awaiting review.
-      </p>
+      <style>{'@keyframes abrobiz-spin { to { transform: rotate(360deg); } }'}</style>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap', marginBottom: 22 }}>
+        <div>
+          <h1 style={{ fontFamily: 'Outfit, sans-serif', fontSize: 24, fontWeight: 600, color: '#0A0C10', margin: '0 0 4px' }}>Payments</h1>
+          <p style={{ color: 'rgba(10,12,16,0.5)', fontSize: 14, margin: 0 }}>
+            {pending.length} awaiting review.
+          </p>
+        </div>
+        <button type="button" onClick={() => void refreshPayments()} disabled={refreshing || busyId !== null} style={refreshBtn}>
+          <RefreshCw size={14} style={{ animation: refreshing ? 'abrobiz-spin 0.8s linear infinite' : 'none' }} />
+          {refreshing ? 'Refreshing…' : 'Refresh'}
+        </button>
+      </div>
 
       {pending.length === 0 ? (
         <div style={{ background: '#fff', borderRadius: 16, border: '1px solid rgba(10,12,16,0.06)', padding: 30, textAlign: 'center', fontSize: 13.5, color: 'rgba(10,12,16,0.4)', marginBottom: 30 }}>
@@ -118,3 +137,4 @@ export default function AdminPayments() {
 
 const approveBtn: React.CSSProperties = { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: '#16A34A', color: '#fff', border: 'none', borderRadius: 9, padding: '9px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }
 const rejectBtn: React.CSSProperties = { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: '#FEE2E2', color: '#DC2626', border: 'none', borderRadius: 9, padding: '9px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }
+const refreshBtn: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 7, border: '1px solid rgba(10,12,16,0.12)', borderRadius: 9, padding: '8px 12px', background: '#fff', color: '#0A0C10', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }
