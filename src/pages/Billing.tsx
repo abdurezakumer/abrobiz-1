@@ -198,12 +198,16 @@ export default function Billing() {
           )}
 
           <div style={{ fontSize: 12.5, color: 'rgba(10,12,16,0.5)', marginBottom: 8 }}>2. Browse your payment screenshot/receipt:</div>
-          <div style={{ ...uploadSurface, opacity: savingProof || submitting ? 0.65 : 1, position: 'relative' }}>
-            <div style={{ border: '1.5px dashed rgba(10,12,16,0.2)', borderRadius: 12, padding: '22px', textAlign: 'center' }}>
+          <label style={{ ...uploadSurface, opacity: savingProof || submitting ? 0.65 : 1, cursor: savingProof || submitting ? 'not-allowed' : 'pointer' }}>
+            <div style={{ border: '1.5px dashed rgba(10,12,16,0.2)', borderRadius: 12, padding: '22px', textAlign: 'center', background: '#F6F3EE' }}>
               {savingProof ? (
                 <span style={{ fontSize: 13.5, color: 'rgba(10,12,16,0.55)' }}>Saving photo on this device…</span>
               ) : proofFile ? (
-                <span style={{ fontSize: 13.5, color: '#166534' }}>Saved on this device: {proofFile.name}</span>
+                <>
+                  <CheckCircle2 size={22} color="#166534" style={{ display: 'block', margin: '0 auto 6px' }} />
+                  <span style={{ fontSize: 13.5, color: '#166534', wordBreak: 'break-word' }}>Saved on this device: {proofFile.name}</span>
+                  <span style={{ display: 'block', fontSize: 11.5, color: 'rgba(10,12,16,0.45)', marginTop: 5 }}>Tap to choose a different file</span>
+                </>
               ) : (
                 <>
                   <motion.div
@@ -214,7 +218,8 @@ export default function Billing() {
                     <ArrowUp size={15} color="#D4A853" strokeWidth={2.5} />
                     <Upload size={18} color="rgba(10,12,16,0.35)" />
                   </motion.div>
-                  <div style={{ fontSize: 13, color: 'rgba(10,12,16,0.45)' }}>Click to upload proof</div>
+                  <div style={{ fontSize: 13, color: 'rgba(10,12,16,0.45)' }}>Click to browse your receipt photo</div>
+                  <div style={{ fontSize: 11.5, color: 'rgba(10,12,16,0.35)', marginTop: 5 }}>JPEG, PNG, WebP, or PDF up to 10 MB</div>
                 </>
               )}
             </div>
@@ -223,10 +228,11 @@ export default function Billing() {
               accept={PAYMENT_UPLOAD_ACCEPT}
               aria-label="Browse payment proof"
               disabled={savingProof || submitting}
-              style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer' }}
+              hidden
               onChange={e => void handleProofSelection(takeSelectedFile(e.currentTarget))}
             />
-          </div>
+            <span style={{ fontSize: 11.5, color: '#D4A853', marginTop: 4, display: 'block' }}>{savingProof ? 'Savingâ€¦' : proofFile ? 'Click to change' : 'Choose a file'}</span>
+          </label>
 
           <textarea value={note} onChange={e => setNote(e.target.value)} placeholder="Note for admin (optional)" rows={2} style={{ width: '100%', border: '1px solid rgba(10,12,16,0.1)', borderRadius: 9, padding: '9px 11px', fontSize: 13.5, outline: 'none', fontFamily: 'inherit', resize: 'vertical', marginBottom: 16 }} />
 
