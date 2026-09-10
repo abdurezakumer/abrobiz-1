@@ -44,7 +44,9 @@ function mapPayment(row: any): Payment {
 export async function uploadPaymentProof(businessId: string, file: File): Promise<string> {
   const uploadFile = isPdfFile(file)
     ? (file.type === 'application/pdf' ? file : new File([file], file.name, { type: 'application/pdf' }))
-    : await prepareImageForUpload(file, 10 * 1024 * 1024)
+    // Keep payment photos within the same mobile-friendly size used by the
+    // logo uploader. Large camera images are resized before the request.
+    : await prepareImageForUpload(file, 5 * 1024 * 1024)
   if (uploadFile.size > 10 * 1024 * 1024 || !['image/jpeg', 'image/png', 'image/webp', 'application/pdf'].includes(uploadFile.type)) {
     throw new Error('Use a JPEG, PNG, WebP, or PDF file up to 10 MB.')
   }

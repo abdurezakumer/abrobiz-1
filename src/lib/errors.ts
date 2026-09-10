@@ -8,7 +8,10 @@ export function friendlyError(error: unknown): string {
   }
   if (/too many requests|rate limit/i.test(msg)) return 'Too many requests. Please wait a few minutes and try again.'
   if (/JWT expired/i.test(msg)) return 'Your session expired — please log in again.'
-  if (/exceeded the maximum/i.test(msg) || /Payload too large/i.test(msg)) return 'That file is too large.'
+  if (/exceeded the maximum/i.test(msg) || /Payload too large/i.test(msg) || /file is too large/i.test(msg)) return 'That file is too large. Choose a smaller photo and try again.'
+  if (/unsupported or malformed/i.test(msg)) return 'This photo format is not supported. Please choose a JPG, PNG, or WebP photo.'
+  if (/browser could not (prepare|read) the image|could not prepare the image/i.test(msg)) return 'This phone photo could not be read. Choose a JPG or PNG photo and try again.'
+  if (/could not save the file|upload service is temporarily unavailable|upload did not return/i.test(msg)) return 'The photo could not be uploaded. Check your connection and try the upload again.'
   if (/Bucket not found/i.test(msg)) return "Storage isn't set up correctly yet — contact support."
   if (/use a (JPEG|PNG|WebP)|file type/i.test(msg)) return 'That file type or size is not supported.'
   if (/not authenticated|admins only|permission denied/i.test(msg)) return 'Please sign in again and try once more.'
