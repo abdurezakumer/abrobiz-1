@@ -91,8 +91,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const refreshBusiness = useCallback(async () => {
-    await loadForSession(session)
-  }, [session, loadForSession])
+    // Refresh in place. Clearing business first makes RequireOwner briefly
+    // see a missing business and redirect a user away from the current page
+    // (for example, immediately after submitting a payment).
+    if (!session) return
+    const biz = await getMyBusiness()
+    setBusiness(biz)
+    if (biz) {
+      const sub = await getSubscription(biz.id)
+      setSubscription(sub)
+    } else {
+      setSubscription(null)
+    }
+  }, [session])
 
   const refreshProfile = useCallback(async () => {
     const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
