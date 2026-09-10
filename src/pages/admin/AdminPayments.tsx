@@ -22,7 +22,13 @@ export default function AdminPayments() {
     }
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    void load().catch(() => {})
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void load().catch(() => {})
+    }, 10000)
+    return () => window.clearInterval(timer)
+  }, [])
 
   async function handleApprove(id: string) {
     setBusyId(id)

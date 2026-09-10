@@ -25,6 +25,7 @@ export default function Billing() {
   const [note, setNote] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
+  const [submittedPaymentId, setSubmittedPaymentId] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [telegramLink, setTelegramLink] = useState<TelegramLinkStatus | null>(null)
   const paymentIdempotencyKey = useRef<string | null>(null)
@@ -51,6 +52,30 @@ export default function Billing() {
     window.addEventListener('beforeunload', preventLossWhileWorking)
     return () => window.removeEventListener('beforeunload', preventLossWhileWorking)
   }, [savingProof, submitting])
+
+  // Keep the payment result current while the admin reviews it. The normal
+  // notification bell also refreshes automatically, but this makes the
+  // payment history and confirmation message update without a page reload.
+  useEffect(() => {
+    if (!business || !submittedPaymentId) return
+    let active = true
+    const refreshPaymentStatus = async () => {
+      try {
+        const payments = await listPaymentsForBusiness(business.id)
+        if (!active) return
+        setHistory(payments)
+        const reviewedPayment = payments.find(payment => payment.id === submittedPaymentId)
+        if (reviewedPayment && reviewedPayment.status !== 'pending') setSubmittedPaymentId(null)
+      } catch {
+        // Keep the current pending state if a background refresh is delayed.
+      }
+    }
+    const timer = window.setInterval(() => void refreshPaymentStatus(), 10000)
+    return () => {
+      active = false
+      window.clearInterval(timer)
+    }
+  }, [business?.id, submittedPaymentId])
 
   const days = daysRemaining(subscription?.endDate ?? null)
 
@@ -111,6 +136,8 @@ export default function Billing() {
       notifyAdminsOfPayment(payment.id)
       paymentIdempotencyKey.current = null
       paymentProofPath.current = null
+      setHistory(previous => [payment, ...previous.filter(item => item.id !== payment.id)])
+      setSubmittedPaymentId(payment.id)
       setSubmitted(true)
       setSelectedPlan(null)
       setProofFile(null)
@@ -127,6 +154,8 @@ export default function Billing() {
   }
 
   if (!business) return null
+
+  const submittedPayment = submittedPaymentId ? history.find(payment => payment.id === submittedPaymentId) : undefined
 
   return (
     <DashboardLayout>
@@ -149,8 +178,14 @@ export default function Billing() {
       </div>
 
       {submitted && (
-        <div style={{ background: 'rgba(74,222,128,0.1)', border: '1px solid rgba(74,222,128,0.3)', borderRadius: 14, padding: '14px 18px', marginBottom: 20, fontSize: 14, color: '#166534' }}>
-          Payment proof submitted! We'll review it and activate your plan shortly.
+        <div role="status" aria-live="polite" style={{ background: submittedPayment?.status === 'rejected' ? 'rgba(220,38,38,0.08)' : 'rgba(74,222,128,0.1)', border: `1px solid ${submittedPayment?.status === 'rejected' ? 'rgba(220,38,38,0.25)' : 'rgba(74,222,128,0.3)'}`, borderRadius: 14, padding: '14px 18px', marginBottom: 20, fontSize: 14, color: submittedPayment?.status === 'rejected' ? '#991B1B' : '#166534' }}>
+          {submittedPayment?.status === 'approved' ? (
+            <>Payment confirmed by AbroBiz admin. Your subscription is now active.</>
+          ) : submittedPayment?.status === 'rejected' ? (
+            <>Your payment was reviewed but rejected{submittedPayment.rejectionReason ? `: ${submittedPayment.rejectionReason}` : '.'} You can submit a new proof.</>
+          ) : (
+            <>Payment submitted successfully. It is pending admin confirmation. This page will update automatically when it is reviewed.</>
+          )}
         </div>
       )}
 
@@ -173,7 +208,7 @@ export default function Billing() {
                     </li>
                   ))}
                 </ul>
-                <button onClick={() => setSelectedPlan(plan)} style={selectBtn}>Select</button>
+                <button onClick={() => { setSelectedPlan(plan); setSubmitted(false); setSubmittedPaymentId(null); setError('') }} style={selectBtn}>Select</button>
               </div>
             ))}
           </div>
