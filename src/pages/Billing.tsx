@@ -116,6 +116,13 @@ export default function Billing() {
       setError('Please upload your payment receipt before submitting.')
       return
     }
+    const pendingPayment = history.find(payment => payment.status === 'pending')
+    if (pendingPayment) {
+      setSubmittedPaymentId(pendingPayment.id)
+      setSubmitted(true)
+      setError('Your payment is already waiting for admin confirmation. Please wait for the review notification.')
+      return
+    }
     setSubmitting(true)
     setError('')
     try {

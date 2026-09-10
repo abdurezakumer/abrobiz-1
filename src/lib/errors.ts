@@ -12,6 +12,10 @@ export function friendlyError(error: unknown): string {
   if (/Bucket not found/i.test(msg)) return "Storage isn't set up correctly yet — contact support."
   if (/use a (JPEG|PNG|WebP)|file type/i.test(msg)) return 'That file type or size is not supported.'
   if (/not authenticated|admins only|permission denied/i.test(msg)) return 'Please sign in again and try once more.'
+  if (/already awaiting review|already waiting for admin review|already.*pending/i.test(msg)) return 'Your payment is already waiting for admin confirmation. Please wait for the review notification.'
+  if (/payment proof was not found|proof path is invalid/i.test(msg)) return 'Your receipt upload is no longer available. Please choose the receipt photo again.'
+  if (/payment plan details are invalid/i.test(msg)) return 'That plan is no longer available at this price. Please choose the plan again.'
+  if (/payment method is unavailable/i.test(msg)) return 'That payment method is no longer available. Please choose another method.'
   if (/subdomain.*(taken|reserved)|slug.*(taken|reserved)/i.test(msg)) return 'That website address is unavailable. Please choose another.'
   if (/github|repository|template/i.test(msg)) return 'That template could not be imported. Check the public GitHub repository link.'
   if (/email.*(service|send)|verification.*email/i.test(msg)) return 'The AbroBiz email service is temporarily unavailable. Please try again later.'

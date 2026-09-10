@@ -9,6 +9,26 @@ function json(body: unknown, status = 200, req?: Request): Response {
   return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders(req), 'Content-Type': 'application/json' } })
 }
 
+function safeDatabaseError(error: { code?: string; message?: string } | null): { message: string; status: number } {
+  const message = error?.message ?? ''
+  if (/already awaiting review/i.test(message)) {
+    return { message: 'A payment is already awaiting admin review. Please wait for confirmation before submitting another.', status: 409 }
+  }
+  if (/payment proof path is invalid/i.test(message)) {
+    return { message: 'Payment proof is no longer available. Please upload the receipt again.', status: 400 }
+  }
+  if (/payment plan details are invalid/i.test(message)) {
+    return { message: 'The selected payment plan is no longer available at that price. Please choose the plan again.', status: 400 }
+  }
+  if (/payment method is unavailable/i.test(message)) {
+    return { message: 'The selected payment method is no longer available. Please choose another method.', status: 400 }
+  }
+  if (/request is already being processed/i.test(message)) {
+    return { message: 'This payment is already being processed. Please wait a moment and check your payment history.', status: 409 }
+  }
+  return { message: 'Could not submit your payment.', status: error?.code === '23505' ? 409 : 400 }
+}
+
 if (import.meta.main) {
   Deno.serve(async req => {
     if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders(req) })
@@ -72,7 +92,8 @@ if (import.meta.main) {
       })
       if (error || !data) {
         logFailure(req, { function_name: 'submit-payment', operation: 'create_payment', error_category: error?.code === '23505' ? 'CONFLICT' : 'DATABASE_ERROR', error_code: error?.code ?? 'unknown', status: error?.code === '23505' ? 409 : 400 })
-        return json({ error: 'Could not submit your payment.' }, 400, req)
+        const safeError = safeDatabaseError(error)
+        return json({ error: safeError.message }, safeError.status, req)
       }
       return json({ payment: data }, 200, req)
     } catch (error) {
