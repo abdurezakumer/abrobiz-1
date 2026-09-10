@@ -12,7 +12,6 @@ import { getOrCreateBusinessTelegramLink, telegramPaymentDeepLink, notifyAdminsO
 import { friendlyError } from '../lib/errors'
 import type { Plan, PaymentMethod, Payment } from '../types'
 import { PAYMENT_UPLOAD_ACCEPT, detectedUploadType, takeSelectedFile } from '../lib/fileUpload'
-import { clearCachedPaymentProof, readCachedPaymentProof, saveCachedPaymentProof } from '../lib/paymentProofCache'
 
 export default function Billing() {
   const { business, subscription, refreshBusiness } = useAuth()
@@ -40,7 +39,6 @@ export default function Billing() {
     if (business) {
       listPaymentsForBusiness(business.id).then(setHistory)
       getOrCreateBusinessTelegramLink(business.id).then(setTelegramLink).catch(() => {})
-      readCachedPaymentProof(business.id).then(setProofFile).catch(() => {})
     }
   }, [business])
 
@@ -68,15 +66,16 @@ export default function Billing() {
       if (!detectedType || !detectedType.startsWith('image/')) {
         throw new Error('Use a JPEG, PNG, WebP, or phone photo up to 10 MB.')
       }
-      // Cache the original immediately. Compression and network upload happen
-      // only after Submit, so a phone refresh cannot lose the photo.
-      await saveCachedPaymentProof(business?.id ?? '', file)
+      if (!business) throw new Error('Your business account is not ready yet.')
+      // Upload directly after selection, just like the logo uploader. The
+      // receipt is kept in secure storage; no device cache is used.
+      const proofPath = await uploadPaymentProof(business.id, file)
+      paymentProofPath.current = proofPath
       setProofFile(file)
     } catch (err) {
-      // Some private/mobile browser modes disable IndexedDB. Keep the file in
-      // memory so the user can still submit it during this session.
-      setProofFile(file)
-      setError(`Photo ready for this session, but refresh-safe saving failed. ${friendlyError(err)}`)
+      paymentProofPath.current = null
+      setProofFile(null)
+      setError(friendlyError(err))
     } finally {
       setSavingProof(false)
     }
@@ -97,8 +96,8 @@ export default function Billing() {
     try {
       paymentIdempotencyKey.current ??= crypto.randomUUID()
       const idempotencyKey = paymentIdempotencyKey.current
-      const proofPath = paymentProofPath.current ?? await uploadPaymentProof(business.id, proofFile)
-      paymentProofPath.current = proofPath
+      const proofPath = paymentProofPath.current
+      if (!proofPath) throw new Error('Please upload your payment receipt before submitting.')
       const payment = await submitPayment({
         businessId: business.id,
         planId: selectedPlan.id,
@@ -116,7 +115,6 @@ export default function Billing() {
       setSelectedPlan(null)
       setProofFile(null)
       setNote('')
-      await clearCachedPaymentProof(business.id).catch(() => {})
       // A successful payment must not be shown as failed just because a
       // follow-up dashboard refresh is temporarily unavailable.
       await listPaymentsForBusiness(business.id).then(setHistory).catch(() => {})
@@ -212,11 +210,11 @@ export default function Billing() {
           <label style={{ ...uploadSurface, opacity: savingProof || submitting ? 0.65 : 1, cursor: savingProof || submitting ? 'not-allowed' : 'pointer' }}>
             <div style={{ border: '1.5px dashed rgba(10,12,16,0.2)', borderRadius: 12, padding: '22px', textAlign: 'center', background: '#F6F3EE' }}>
               {savingProof ? (
-                <span style={{ fontSize: 13.5, color: 'rgba(10,12,16,0.55)' }}>Saving photo on this device…</span>
+                <span style={{ fontSize: 13.5, color: 'rgba(10,12,16,0.55)' }}>Uploading photo…</span>
               ) : proofFile ? (
                 <>
                   <CheckCircle2 size={22} color="#166534" style={{ display: 'block', margin: '0 auto 6px' }} />
-                  <span style={{ fontSize: 13.5, color: '#166534', wordBreak: 'break-word' }}>Saved on this device: {proofFile.name}</span>
+                  <span style={{ fontSize: 13.5, color: '#166534', wordBreak: 'break-word' }}>Uploaded: {proofFile.name}</span>
                   <span style={{ display: 'block', fontSize: 11.5, color: 'rgba(10,12,16,0.45)', marginTop: 5 }}>Tap to choose a different file</span>
                 </>
               ) : (
@@ -242,14 +240,14 @@ export default function Billing() {
               hidden
               onChange={e => void handleProofSelection(takeSelectedFile(e.currentTarget))}
             />
-            <span style={{ fontSize: 11.5, color: '#D4A853', marginTop: 4, display: 'block' }}>{savingProof ? 'Savingâ€¦' : proofFile ? 'Click to change' : 'Choose a file'}</span>
+            <span style={{ fontSize: 11.5, color: '#D4A853', marginTop: 4, display: 'block' }}>{savingProof ? 'Uploading…' : proofFile ? 'Click to change' : 'Choose a file'}</span>
           </label>
 
           <textarea value={note} onChange={e => setNote(e.target.value)} placeholder="Note for admin (optional)" rows={2} style={{ width: '100%', border: '1px solid rgba(10,12,16,0.1)', borderRadius: 9, padding: '9px 11px', fontSize: 13.5, outline: 'none', fontFamily: 'inherit', resize: 'vertical', marginBottom: 16 }} />
 
           {error && <div style={{ color: '#F87171', fontSize: 13, marginBottom: 12 }}>{error}</div>}
 
-          <div style={{ fontSize: 12.5, color: 'rgba(10,12,16,0.5)', marginBottom: 8 }}>3. Submit your saved proof:</div>
+          <div style={{ fontSize: 12.5, color: 'rgba(10,12,16,0.5)', marginBottom: 8 }}>3. Submit your uploaded proof:</div>
           <button type="button" onClick={handleSubmit} disabled={!selectedMethod || !proofFile || savingProof || submitting} style={{ ...selectBtn, width: '100%', opacity: !selectedMethod || !proofFile || savingProof || submitting ? 0.5 : 1 }}>
             {submitting ? 'Submitting…' : 'Submit for approval'}
           </button>
