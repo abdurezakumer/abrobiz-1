@@ -12,8 +12,10 @@ import { useAuth } from '../lib/authContext'
 export default function VerifyEmail() {
   const [params] = useSearchParams()
   const navigate = useNavigate()
+  const configuredLength = Number(params.get('length'))
+  const otpLength = Number.isInteger(configuredLength) && configuredLength >= 6 && configuredLength <= 10 ? configuredLength : 8
   const [email, setEmail] = useState(params.get('email') ?? '')
-  const [code, setCode] = useState(['', '', '', '', '', ''])
+  const [code, setCode] = useState(() => Array.from({ length: otpLength }, () => ''))
   const [cooldown, setCooldown] = useState(60)
   const [submitting, setSubmitting] = useState(false)
   const [resending, setResending] = useState(false)
@@ -39,28 +41,28 @@ export default function VerifyEmail() {
       next[index] = digit
       return next
     })
-    if (digit && index < 5) inputs.current[index + 1]?.focus()
+    if (digit && index < code.length - 1) inputs.current[index + 1]?.focus()
   }
 
   function handleKeyDown(index: number, event: React.KeyboardEvent<HTMLInputElement>) {
     if (event.key === 'Backspace' && !code[index] && index > 0) inputs.current[index - 1]?.focus()
     if (event.key === 'ArrowLeft' && index > 0) inputs.current[index - 1]?.focus()
-    if (event.key === 'ArrowRight' && index < 5) inputs.current[index + 1]?.focus()
+    if (event.key === 'ArrowRight' && index < code.length - 1) inputs.current[index + 1]?.focus()
   }
 
   function handlePaste(event: React.ClipboardEvent<HTMLInputElement>) {
     event.preventDefault()
-    const digits = event.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6).split('')
+    const digits = event.clipboardData.getData('text').replace(/\D/g, '').slice(0, code.length).split('')
     if (!digits.length) return
-    setCode([...digits, '', '', '', '', '', ''].slice(0, 6))
-    inputs.current[Math.min(digits.length, 5)]?.focus()
+    setCode([...digits, ...Array.from({ length: code.length }, () => '')].slice(0, code.length))
+    inputs.current[Math.min(digits.length, code.length - 1)]?.focus()
   }
 
   async function handleVerify(event: React.FormEvent) {
     event.preventDefault()
     setError('')
-    if (!email.trim() || token.length !== 6) {
-      setError('Enter the email address and all six digits from the email.')
+    if (!email.trim() || token.length !== code.length) {
+      setError(`Enter the email address and all ${code.length} digits from the email.`)
       return
     }
     setSubmitting(true)
@@ -110,13 +112,13 @@ export default function VerifyEmail() {
         ) : (
           <>
             <h1 style={headingStyle}>Verify your email</h1>
-            <p style={mutedStyle}>Enter the six-digit code AbroBiz sent to your email. Codes expire shortly and can only be used once.</p>
+            <p style={mutedStyle}>Enter the verification code AbroBiz sent to your email. Codes expire shortly and can only be used once.</p>
             <form onSubmit={handleVerify} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <label style={labelStyle}>
                 <span>Email address</span>
                 <input required type="email" value={email} onChange={event => setEmail(event.target.value)} style={inputStyle} placeholder="you@example.com" autoComplete="email" />
               </label>
-              <div role="group" aria-label="Six-digit verification code" style={{ display: 'flex', justifyContent: 'space-between', gap: 7 }}>
+              <div role="group" aria-label={`${code.length}-digit verification code`} style={{ display: 'flex', justifyContent: 'space-between', gap: otpLength > 6 ? 4 : 7 }}>
                 {code.map((digit, index) => (
                   <input
                     key={index}
@@ -129,7 +131,7 @@ export default function VerifyEmail() {
                     autoComplete={index === 0 ? 'one-time-code' : 'off'}
                     maxLength={1}
                     aria-label={'Verification digit ' + (index + 1)}
-                    style={codeInputStyle}
+                    style={{ ...codeInputStyle, width: otpLength > 6 ? 32 : 44, fontSize: otpLength > 6 ? 18 : 22 }}
                   />
                 ))}
               </div>

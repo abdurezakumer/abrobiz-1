@@ -51,7 +51,7 @@ if (import.meta.main) {
         options: { redirectTo: `${(Deno.env.get('SITE_URL') ?? 'https://abrobiz.com').replace(/\/$/, '')}/setup` },
       })
       const code = data?.properties?.email_otp
-      if (error || !code || !/^\d{6}$/.test(code)) {
+      if (error || !code || !/^\d{6,10}$/.test(code)) {
         logFailure(req, { function_name: 'resend-signup-otp', operation: 'generate_otp', error_category: 'AUTHENTICATION_ERROR', error_code: error?.name ?? 'unknown', status: 200 })
         return json(GENERIC_RESPONSE, 200, req)
       }

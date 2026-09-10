@@ -46,49 +46,55 @@ if (import.meta.main) {
       if (turnstileFailure) return turnstileFailure
 
       const adminClient = createAdminClient()
-      // Create the Auth user explicitly, then generate a one-time email code
-      // for that user. Keeping these operations separate avoids relying on
-      // signup-link generation to both create the user and return OTP fields
-      // consistently across Auth configurations.
-      const { data: created, error } = await adminClient.auth.admin.createUser({
-        email,
-        password,
-        email_confirm: false,
-        user_metadata: { name, phone },
-      })
+      const redirectTo = `${(Deno.env.get('SITE_URL') ?? 'https://abrobiz.com').replace(/\/$/, '')}/setup`
 
-      if (error) {
-        // Keep duplicate-account and Auth-provider details out of the response.
-        logFailure(req, { function_name: 'signup', operation: 'auth_signup', error_category: 'AUTHENTICATION_ERROR', status: 200 })
-        return json(GENERIC_RESPONSE, 200, req)
+      // Call the Auth admin endpoint directly so the function reads the
+      // documented top-level `email_otp` response without depending on a
+      // client-library response transformer. The SDK fallback is retained for
+      // compatibility with projects whose Auth endpoint is proxied.
+      let code = ''
+      let user: { id: string; email?: string } | null = null
+      const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+      const supabaseUrl = Deno.env.get('SUPABASE_URL')
+      if (serviceRoleKey && supabaseUrl) {
+        const response = await fetch(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/admin/generate_link`, {
+          method: 'POST',
+          headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 'signup', email, password, data: { name, phone }, redirect_to: redirectTo }),
+        })
+        const payload = await response.json().catch(() => ({})) as Record<string, any>
+        code = typeof payload.email_otp === 'string' ? payload.email_otp : ''
+        user = payload.user && typeof payload.user.id === 'string' ? { id: payload.user.id, email: payload.user.email } : null
+        if (!response.ok && !code) {
+          logFailure(req, { function_name: 'signup', operation: 'generate_signup_otp', error_category: 'AUTHENTICATION_ERROR', error_code: `auth_${response.status}`, status: 200 })
+          return json(GENERIC_RESPONSE, 200, req)
+        }
+      } else {
+        const generated = await adminClient.auth.admin.generateLink({
+          type: 'signup',
+          email,
+          password,
+          options: { data: { name, phone }, redirectTo },
+        })
+        code = generated.data?.properties?.email_otp ?? ''
+        user = generated.data?.user?.id ? { id: generated.data.user.id, email: generated.data.user.email } : null
+        if (generated.error) {
+          logFailure(req, { function_name: 'signup', operation: 'generate_signup_otp', error_category: 'AUTHENTICATION_ERROR', error_code: generated.error.name ?? 'unknown', status: 200 })
+          return json(GENERIC_RESPONSE, 200, req)
+        }
       }
-
-      const user = created?.user
-      const generated = user ? await adminClient.auth.admin.generateLink({
-        type: 'magiclink',
-        email,
-        options: {
-          redirectTo: `${(Deno.env.get('SITE_URL') ?? 'https://abrobiz.com').replace(/\/$/, '')}/setup`,
-        },
-      }) : { data: null, error: new Error('user_creation_returned_no_user') }
-      const code = generated.data?.properties?.email_otp
-      if (generated.error) {
-        logFailure(req, { function_name: 'signup', operation: 'generate_signup_otp', error_category: 'AUTHENTICATION_ERROR', error_code: generated.error.name ?? 'unknown', status: 503 })
-      }
-      if (!code || !/^\d{6}$/.test(code)) {
-        if (user) await adminClient.auth.admin.deleteUser(user.id).catch(() => undefined)
+      if (!code || !/^\d{6,10}$/.test(code)) {
         logFailure(req, { function_name: 'signup', operation: 'generate_signup_otp', error_category: 'DEPENDENCY_ERROR', provider: 'supabase-auth', status: 503 })
         return json({ error: 'AbroBiz could not prepare your verification code. Please try again.' }, 503, req)
       }
 
       const emailResult = await sendAuthOtpEmail({ email, code, name, purpose: 'signup' })
       if (!emailResult.ok) {
-        if (user) await adminClient.auth.admin.deleteUser(user.id).catch(() => undefined)
         logFailure(req, { function_name: 'signup', operation: 'send_signup_otp', error_category: 'DEPENDENCY_ERROR', error_code: 'email_delivery_failed', provider: 'email', status: 503 })
         return json({ error: 'AbroBiz could not send your verification email. Please try again.' }, 503, req)
       }
 
-      return json({ ...GENERIC_RESPONSE, session: null, user: user ? { id: user.id, email: user.email } : null }, 200, req)
+      return json({ ...GENERIC_RESPONSE, otpLength: code.length, session: null, user }, 200, req)
     } catch (error) {
       logFailure(req, { function_name: 'signup', operation: 'auth_signup', error_category: 'INTERNAL_ERROR', error_code: error instanceof Error ? error.name : 'UnknownError', status: 503 })
       return json({ error: 'AbroBiz sign-up is temporarily unavailable. Please try again.' }, 503, req)

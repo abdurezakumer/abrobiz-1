@@ -39,11 +39,12 @@ export default function Register() {
     }
     setLoading(true)
     try {
-      await signUp(email, password, name, phone, termsAccepted, privacyAccepted, turnstileToken)
-      // Email/password registration always completes through the six-digit
-      // OTP screen, even if Supabase is configured to return a temporary
-      // session during sign-up.
-      navigate('/verify-email?email=' + encodeURIComponent(email.trim().toLowerCase()), { replace: true })
+      const result = await signUp(email, password, name, phone, termsAccepted, privacyAccepted, turnstileToken)
+      // Supabase projects can use six-to-ten digit email OTPs. Carry the
+      // active length to the verification screen so it matches the code sent
+      // by AbroBiz's SMTP sender.
+      const otpLength = result.otpLength && result.otpLength >= 6 && result.otpLength <= 10 ? result.otpLength : 8
+      navigate('/verify-email?email=' + encodeURIComponent(email.trim().toLowerCase()) + '&length=' + otpLength, { replace: true })
     } catch (err) {
       setError(friendlyAuthError(err))
       setTurnstileToken(null)

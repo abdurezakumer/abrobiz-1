@@ -19,7 +19,7 @@ if (import.meta.main) {
       const body = isRecord(parsedBody.data) ? parsedBody.data : {}
       const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : ''
       const token = typeof body.token === 'string' ? body.token.trim() : ''
-      if (!email || !/^\S+@\S+\.\S+$/.test(email) || !/^\d{6}$/.test(token)) return json({ error: 'Enter the six-digit code from your email.' }, 400, req)
+      if (!email || !/^\S+@\S+\.\S+$/.test(email) || !/^\d{6,10}$/.test(token)) return json({ error: 'Enter the verification code from your email.' }, 400, req)
 
       const limited = await enforceRateLimits(req, [
         { scope: 'verify-signup-otp-ip', limit: 20, windowSeconds: 900 },

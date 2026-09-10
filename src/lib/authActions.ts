@@ -21,7 +21,7 @@ export async function signUp(
     body: { email, password, name, phone, termsAccepted, privacyAccepted, ...(turnstileToken ? { turnstileToken } : {}) },
   })
   if (error) throw await edgeFunctionError(error)
-  return data as { session: import('@supabase/supabase-js').Session | null; user: { id: string; email?: string } | null; requiresVerification?: boolean }
+  return data as { session: import('@supabase/supabase-js').Session | null; user: { id: string; email?: string } | null; requiresVerification?: boolean; otpLength?: number }
 }
 
 export async function signIn(email: string, password: string, turnstileToken?: string | null) {
