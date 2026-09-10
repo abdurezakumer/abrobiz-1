@@ -65,6 +65,15 @@ Deno.test('createSmtpSenderFromEnv fails clearly when SMTP is missing', () => {
   assert.throws(() => createSmtpSenderFromEnv(env), /SMTP email is not configured/)
 })
 
+Deno.test('createSmtpSenderFromEnv uses the authenticated Gmail address when MAIL_FROM is not a verified Gmail address', () => {
+  const env = fakeEnv({
+    APP_NAME: 'AbroBiz', MAIL_SERVER: 'smtp.gmail.com', MAIL_PORT: '465', MAIL_USERNAME: 'oneabdre@gmail.com',
+    MAIL_PASSWORD: 'app-pw', MAIL_USE_TLS: 'true', MAIL_FROM: 'AbroBiz <noreply@abrobiz.com>',
+  })
+  const sender = createSmtpSenderFromEnv(env)
+  assert.equal(sender.from, '"AbroBiz" <oneabdre+noreply@gmail.com>')
+})
+
 Deno.test('createSenderFromEnv throws a clear error when nothing is configured, instead of failing mysteriously later', () => {
   const env = fakeEnv({})
   assert.throws(() => createSenderFromEnv(env), /No email provider configured/)

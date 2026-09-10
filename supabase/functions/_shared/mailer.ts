@@ -94,6 +94,20 @@ export function buildFromAddress(appName: string, opts: { override?: string; dom
   return `"${appName}" <noreply@example.com>`
 }
 
+function smtpFromAddress(appName: string, username: string, override: string | undefined, domain: string | undefined): string {
+  // Gmail SMTP may reject a From address that is not the authenticated Gmail
+  // account (unless it has been explicitly configured as a verified alias).
+  // Keep the AbroBiz display name, but use the authenticated address as the
+  // safe default for personal Gmail accounts.
+  if (/@gmail\.com$/i.test(username)) {
+    const configuredAddress = override?.match(/<\s*([^>\s]+)\s*>/)?.[1] ?? override?.trim()
+    if (!configuredAddress || configuredAddress.toLowerCase() !== username.toLowerCase()) {
+      return buildFromAddress(appName, { gmailUser: username })
+    }
+  }
+  return buildFromAddress(appName, { override, domain, gmailUser: username })
+}
+
 /** Builds the explicitly configured MAIL_* SMTP sender.
  *
  * This is intentionally separate from createSenderFromEnv so authentication
@@ -118,11 +132,12 @@ export function createSmtpSenderFromEnv(env: { get(key: string): string | undefi
       password: mailPassword,
       useTls: envBoolean(env.get('MAIL_USE_TLS'), true),
     }),
-    from: buildFromAddress(appName, {
-      override: env.get('MAIL_FROM') ?? env.get('EMAIL_FROM') ?? undefined,
-      domain: env.get('EMAIL_DOMAIN') ?? undefined,
-      gmailUser: mailUsername,
-    }),
+    from: smtpFromAddress(
+      appName,
+      mailUsername,
+      env.get('MAIL_FROM') ?? env.get('EMAIL_FROM') ?? undefined,
+      env.get('EMAIL_DOMAIN') ?? undefined,
+    ),
   }
 }
 
