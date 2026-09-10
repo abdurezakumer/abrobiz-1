@@ -162,6 +162,9 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             }}
           >
             <div style={{ fontSize: 11, color: 'rgba(240,237,231,0.4)', marginBottom: 4 }}>Subscription</div>
+            <div style={{ display: 'inline-flex', alignItems: 'center', borderRadius: 999, padding: '3px 8px', background: 'rgba(212,168,83,0.16)', border: '1px solid rgba(212,168,83,0.35)', color: '#D4A853', fontSize: 10, fontWeight: 700, letterSpacing: 0.3, textTransform: 'uppercase', marginBottom: 6 }}>
+              {subscription?.plan?.name ?? 'Free Trial'} plan
+            </div>
             <div style={{ fontSize: 13, fontWeight: 600, color: statusColor }}>{statusLabel}</div>
             {(subscription?.status === 'expired' || (days !== null && days !== undefined && days <= 3)) && (
               <Link

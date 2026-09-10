@@ -165,8 +165,13 @@ export default function Billing() {
       <div style={{ background: '#fff', borderRadius: 16, border: '1px solid rgba(10,12,16,0.06)', padding: '18px 22px', marginBottom: 22, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
         <div>
           <div style={{ fontSize: 12, color: 'rgba(10,12,16,0.45)' }}>Current plan</div>
-          <div style={{ fontSize: 18, fontWeight: 600, color: '#0A0C10', fontFamily: 'Outfit, sans-serif' }}>
-            {subscription?.plan?.name ?? 'Free Trial'}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap', marginTop: 3 }}>
+            <div style={{ fontSize: 18, fontWeight: 600, color: '#0A0C10', fontFamily: 'Outfit, sans-serif' }}>
+              {subscription?.plan?.name ?? 'Free Trial'}
+            </div>
+            <span style={planBadge} aria-label={`Plan type: ${subscription?.plan?.name ?? 'Free Trial'}`}>
+              {subscription?.plan?.name ?? 'Free Trial'}
+            </span>
           </div>
         </div>
         <div style={{ textAlign: 'right' }}>
@@ -332,3 +337,4 @@ const selectBtn: React.CSSProperties = { background: '#D4A853', color: '#0A0C10'
 const methodChip: React.CSSProperties = { border: 'none', borderRadius: 8, padding: '8px 14px', fontSize: 13, cursor: 'pointer', fontWeight: 500 }
 const uploadSurface: React.CSSProperties = { display: 'block', width: '100%', padding: 0, marginBottom: 14, background: 'transparent', cursor: 'pointer', textAlign: 'left' }
 const telegramPayBtn: React.CSSProperties = { display: 'block', width: '100%', textAlign: 'center', background: '#26A5E4', color: '#fff', borderRadius: 10, padding: '10px 18px', fontSize: 13.5, fontWeight: 600, textDecoration: 'none', marginTop: 10 }
+const planBadge: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', borderRadius: 999, padding: '4px 9px', background: 'rgba(212,168,83,0.16)', border: '1px solid rgba(212,168,83,0.35)', color: '#8A6417', fontSize: 11, fontWeight: 700, letterSpacing: 0.3, textTransform: 'uppercase' }
