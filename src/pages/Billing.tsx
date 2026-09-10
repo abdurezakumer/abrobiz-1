@@ -61,8 +61,8 @@ export default function Billing() {
     setSavingProof(true)
     try {
       const detectedType = detectedUploadType(file)
-      if (!detectedType || (!detectedType.startsWith('image/') && detectedType !== 'application/pdf')) {
-        throw new Error('Use a JPEG, PNG, WebP, or PDF file up to 10 MB.')
+      if (!detectedType || !detectedType.startsWith('image/')) {
+        throw new Error('Use a JPEG, PNG, WebP, or phone photo up to 10 MB.')
       }
       // Cache the original immediately. Compression and network upload happen
       // only after Submit, so a phone refresh cannot lose the photo.
@@ -219,7 +219,7 @@ export default function Billing() {
                     <Upload size={18} color="rgba(10,12,16,0.35)" />
                   </motion.div>
                   <div style={{ fontSize: 13, color: 'rgba(10,12,16,0.45)' }}>Click to browse your receipt photo</div>
-                  <div style={{ fontSize: 11.5, color: 'rgba(10,12,16,0.35)', marginTop: 5 }}>JPEG, PNG, WebP, or PDF up to 10 MB</div>
+                  <div style={{ fontSize: 11.5, color: 'rgba(10,12,16,0.35)', marginTop: 5 }}>Select a receipt photo up to 10 MB</div>
                 </>
               )}
             </div>

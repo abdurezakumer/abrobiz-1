@@ -1,5 +1,6 @@
 export const IMAGE_UPLOAD_ACCEPT = 'image/jpeg,image/png,image/webp,image/heic,image/heif'
-export const PAYMENT_UPLOAD_ACCEPT = `${IMAGE_UPLOAD_ACCEPT},application/pdf`
+// Payment receipts use the same photo picker behavior as logos and covers.
+export const PAYMENT_UPLOAD_ACCEPT = IMAGE_UPLOAD_ACCEPT
 
 const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'])
 
