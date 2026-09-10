@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { ArrowUp, Check, Upload, Clock, CheckCircle2, XCircle } from 'lucide-react'
 import DashboardLayout from '../components/DashboardLayout'
@@ -28,6 +28,8 @@ export default function Billing() {
   const [submitted, setSubmitted] = useState(false)
   const [error, setError] = useState('')
   const [telegramLink, setTelegramLink] = useState<TelegramLinkStatus | null>(null)
+  const paymentIdempotencyKey = useRef<string | null>(null)
+  const paymentProofPath = useRef<string | null>(null)
 
   useEffect(() => {
     listPlans().then(setPlans)
@@ -58,6 +60,8 @@ export default function Billing() {
     if (!file) return
     setError('')
     setProofFile(null)
+    paymentIdempotencyKey.current = null
+    paymentProofPath.current = null
     setSavingProof(true)
     try {
       const detectedType = detectedUploadType(file)
@@ -91,7 +95,10 @@ export default function Billing() {
     setSubmitting(true)
     setError('')
     try {
-      const proofPath = await uploadPaymentProof(business.id, proofFile)
+      paymentIdempotencyKey.current ??= crypto.randomUUID()
+      const idempotencyKey = paymentIdempotencyKey.current
+      const proofPath = paymentProofPath.current ?? await uploadPaymentProof(business.id, proofFile)
+      paymentProofPath.current = proofPath
       const payment = await submitPayment({
         businessId: business.id,
         planId: selectedPlan.id,
@@ -100,16 +107,20 @@ export default function Billing() {
         paymentMethodId: selectedMethod.id,
         proofPath,
         ownerNote: note,
+        idempotencyKey,
       })
       notifyAdminsOfPayment(payment.id)
+      paymentIdempotencyKey.current = null
+      paymentProofPath.current = null
       setSubmitted(true)
       setSelectedPlan(null)
       setProofFile(null)
       setNote('')
-      const updated = await listPaymentsForBusiness(business.id)
-      setHistory(updated)
       await clearCachedPaymentProof(business.id).catch(() => {})
-      await refreshBusiness()
+      // A successful payment must not be shown as failed just because a
+      // follow-up dashboard refresh is temporarily unavailable.
+      await listPaymentsForBusiness(business.id).then(setHistory).catch(() => {})
+      await refreshBusiness().catch(() => {})
     } catch (err) {
       setError(friendlyError(err))
     } finally {

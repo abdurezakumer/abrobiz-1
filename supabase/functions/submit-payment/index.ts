@@ -54,7 +54,10 @@ if (import.meta.main) {
       const proofName = proofMatch?.[2] ?? ''
       const { data: proofObjects, error: proofLookupError } = await db.storage
         .from('payment-proofs')
-        .list(businessId, { limit: 100, search: proofName })
+        // List the tenant folder and compare the exact object name locally.
+        // Storage search behaves differently across hosted Storage versions;
+        // relying on it can make a freshly uploaded proof appear missing.
+        .list(businessId, { limit: 1000 })
       const proofExists = !proofLookupError && proofObjects?.some(object => object.name === proofName)
       if (!proofExists) return json({ error: 'Payment proof was not found.' }, 400, req)
       const { data, error } = await db.rpc('submit_payment_idempotent', {
