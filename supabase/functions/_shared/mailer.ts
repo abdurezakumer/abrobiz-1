@@ -1,4 +1,6 @@
-import nodemailer from 'npm:nodemailer@6.9.16'
+// Supabase's current Edge SMTP example uses the Nodemailer 9.x line. Keep the
+// dependency pinned so the function does not change behavior between deploys.
+import nodemailer from 'npm:nodemailer@9.1.1'
 import { fetchWithTimeout, readJsonResponse } from './external.ts'
 
 export interface EmailContent {
