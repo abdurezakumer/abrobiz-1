@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
-import { ArrowUp, Check, Upload, Clock, CheckCircle2, XCircle, RefreshCw } from 'lucide-react'
+import { ArrowUp, Check, Upload, Clock, CheckCircle2, XCircle, RefreshCw, Copy, CheckCheck } from 'lucide-react'
 import DashboardLayout from '../components/DashboardLayout'
 import TelegramConnectCard from '../components/TelegramConnectCard'
 import { useAuth } from '../lib/authContext'
@@ -27,6 +27,7 @@ export default function Billing() {
   const [submitted, setSubmitted] = useState(false)
   const [submittedPaymentId, setSubmittedPaymentId] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
+  const [copiedAccountId, setCopiedAccountId] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [telegramLink, setTelegramLink] = useState<TelegramLinkStatus | null>(null)
   const paymentIdempotencyKey = useRef<string | null>(null)
@@ -94,6 +95,28 @@ export default function Billing() {
       setError(friendlyError(err))
     } finally {
       setRefreshing(false)
+    }
+  }
+
+  async function copyAccountNumber(method: PaymentMethod) {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(method.accountNumber)
+      } else {
+        const helper = document.createElement('textarea')
+        helper.value = method.accountNumber
+        helper.setAttribute('readonly', '')
+        helper.style.position = 'fixed'
+        helper.style.opacity = '0'
+        document.body.appendChild(helper)
+        helper.select()
+        if (!document.execCommand('copy')) throw new Error('Copy was not supported.')
+        helper.remove()
+      }
+      setCopiedAccountId(method.id)
+      window.setTimeout(() => setCopiedAccountId(current => current === method.id ? null : current), 1800)
+    } catch {
+      setError('Could not copy the account number. Please press and hold it to copy.')
     }
   }
 
@@ -259,9 +282,13 @@ export default function Billing() {
             <button onClick={() => setSelectedPlan(null)} style={{ background: 'none', border: 'none', fontSize: 13, color: 'rgba(10,12,16,0.5)', cursor: 'pointer' }}>Cancel</button>
           </div>
 
-          <div style={{ fontSize: 12.5, color: 'rgba(10,12,16,0.5)', marginBottom: 8 }}>1. Send payment to:</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+            <span style={stepNumber}>1</span>
+            <span style={{ fontSize: 13, fontWeight: 650, color: '#0A0C10' }}>Send payment to</span>
+            <span style={{ fontSize: 11.5, color: 'rgba(10,12,16,0.4)' }}>Choose a method below</span>
+          </div>
           {methods.length > 0 ? (
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
               {methods.map(m => (
                 <button type="button" key={m.id} onClick={() => { setSelectedMethod(m); setError('') }} style={{ ...methodChip, background: selectedMethod?.id === m.id ? '#0A0C10' : '#F6F3EE', color: selectedMethod?.id === m.id ? '#fff' : '#0A0C10' }}>
                   {m.name}
@@ -277,10 +304,21 @@ export default function Billing() {
             <div style={{ background: '#F6F3EE', borderRadius: 12, padding: '12px 16px', marginBottom: 20, fontSize: 13.5 }}>
               <div><strong>{selectedMethod.accountName}</strong> — {selectedMethod.accountNumber}</div>
               <div style={{ color: 'rgba(10,12,16,0.55)', marginTop: 4 }}>{selectedMethod.instructions}</div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', marginTop: 12 }}>
+                <span style={secureBadge}>Send the exact amount</span>
+                <button type="button" onClick={() => void copyAccountNumber(selectedMethod)} style={copyBtn} aria-label={`Copy ${selectedMethod.name} account number`}>
+                  {copiedAccountId === selectedMethod.id ? <CheckCheck size={14} /> : <Copy size={14} />}
+                  {copiedAccountId === selectedMethod.id ? 'Copied' : 'Copy account number'}
+                </button>
+              </div>
             </div>
           )}
 
-          <div style={{ fontSize: 12.5, color: 'rgba(10,12,16,0.5)', marginBottom: 8 }}>2. Browse your payment screenshot/receipt:</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '18px 0 10px' }}>
+            <span style={stepNumber}>2</span>
+            <span style={{ fontSize: 13, fontWeight: 650, color: '#0A0C10' }}>Upload your receipt</span>
+            <span style={{ fontSize: 11.5, color: 'rgba(10,12,16,0.4)' }}>Photo up to 5 MB</span>
+          </div>
           <label style={{ ...uploadSurface, opacity: savingProof || submitting ? 0.65 : 1, cursor: savingProof || submitting ? 'not-allowed' : 'pointer' }}>
             <div style={{ border: '1.5px dashed rgba(10,12,16,0.2)', borderRadius: 12, padding: '22px', textAlign: 'center', background: '#F6F3EE' }}>
               {savingProof ? (
@@ -302,7 +340,7 @@ export default function Billing() {
                     <Upload size={18} color="rgba(10,12,16,0.35)" />
                   </motion.div>
                   <div style={{ fontSize: 13, color: 'rgba(10,12,16,0.45)' }}>Click to browse your receipt photo</div>
-                  <div style={{ fontSize: 11.5, color: 'rgba(10,12,16,0.35)', marginTop: 5 }}>Select a receipt photo up to 10 MB</div>
+                  <div style={{ fontSize: 11.5, color: 'rgba(10,12,16,0.35)', marginTop: 5 }}>JPG, PNG, or WebP from your phone</div>
                 </>
               )}
             </div>
@@ -321,7 +359,10 @@ export default function Billing() {
 
           {error && <div style={{ color: '#F87171', fontSize: 13, marginBottom: 12 }}>{error}</div>}
 
-          <div style={{ fontSize: 12.5, color: 'rgba(10,12,16,0.5)', marginBottom: 8 }}>3. Submit your uploaded proof:</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '4px 0 10px' }}>
+            <span style={stepNumber}>3</span>
+            <span style={{ fontSize: 13, fontWeight: 650, color: '#0A0C10' }}>Submit for admin review</span>
+          </div>
           <button type="button" onClick={handleSubmit} disabled={!selectedMethod || !proofFile || savingProof || submitting} style={{ ...selectBtn, width: '100%', opacity: !selectedMethod || !proofFile || savingProof || submitting ? 0.5 : 1 }}>
             {submitting ? 'Submitting…' : 'Submit for approval'}
           </button>
@@ -373,3 +414,6 @@ const uploadSurface: React.CSSProperties = { display: 'block', width: '100%', pa
 const telegramPayBtn: React.CSSProperties = { display: 'block', width: '100%', textAlign: 'center', background: '#26A5E4', color: '#fff', borderRadius: 10, padding: '10px 18px', fontSize: 13.5, fontWeight: 600, textDecoration: 'none', marginTop: 10 }
 const planBadge: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', borderRadius: 999, padding: '4px 9px', background: 'rgba(212,168,83,0.16)', border: '1px solid rgba(212,168,83,0.35)', color: '#8A6417', fontSize: 11, fontWeight: 700, letterSpacing: 0.3, textTransform: 'uppercase' }
 const refreshBtn: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 7, border: '1px solid rgba(10,12,16,0.12)', borderRadius: 9, padding: '8px 12px', background: '#fff', color: '#0A0C10', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }
+const stepNumber: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 22, height: 22, borderRadius: '50%', background: '#0A0C10', color: '#D4A853', fontSize: 11, fontWeight: 700 }
+const secureBadge: React.CSSProperties = { borderRadius: 999, padding: '5px 9px', background: 'rgba(22,101,52,0.1)', color: '#166534', fontSize: 10.5, fontWeight: 700 }
+const copyBtn: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 5, border: '1px solid rgba(10,12,16,0.12)', borderRadius: 8, padding: '8px 10px', background: '#fff', color: '#0A0C10', fontSize: 12, fontWeight: 650, cursor: 'pointer' }
