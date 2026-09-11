@@ -22,6 +22,7 @@ export default function Billing() {
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod | null>(null)
   const [proofFile, setProofFile] = useState<File | null>(null)
   const [savingProof, setSavingProof] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null)
   const [note, setNote] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
@@ -124,6 +125,7 @@ export default function Billing() {
     if (!file) return
     setError('')
     setProofFile(null)
+    setUploadProgress(0)
     paymentIdempotencyKey.current = null
     paymentProofPath.current = null
     setSavingProof(true)
@@ -135,12 +137,16 @@ export default function Billing() {
       if (!business) throw new Error('Your business account is not ready yet.')
       // Upload directly after selection, just like the logo uploader. The
       // receipt is kept in secure storage; no device cache is used.
-      const proofPath = await uploadPaymentProof(business.id, file)
+      const proofPath = await uploadPaymentProof(business.id, file, progress => {
+        setUploadProgress(Math.min(99, 8 + Math.round(progress * 0.92)))
+      })
       paymentProofPath.current = proofPath
+      setUploadProgress(100)
       setProofFile(file)
     } catch (err) {
       paymentProofPath.current = null
       setProofFile(null)
+      setUploadProgress(null)
       setError(friendlyError(err))
     } finally {
       setSavingProof(false)
@@ -322,7 +328,13 @@ export default function Billing() {
           <label style={{ ...uploadSurface, opacity: savingProof || submitting ? 0.65 : 1, cursor: savingProof || submitting ? 'not-allowed' : 'pointer' }}>
             <div style={{ border: '1.5px dashed rgba(10,12,16,0.2)', borderRadius: 12, padding: '22px', textAlign: 'center', background: '#F6F3EE' }}>
               {savingProof ? (
-                <span style={{ fontSize: 13.5, color: 'rgba(10,12,16,0.55)' }}>Uploading photo…</span>
+                <div style={{ width: '100%' }}>
+                  <div style={{ fontSize: 13.5, color: 'rgba(10,12,16,0.65)', fontWeight: 600 }}>Uploading photo… {uploadProgress ?? 0}%</div>
+                  <div role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={uploadProgress ?? 0} style={{ height: 7, background: 'rgba(10,12,16,0.1)', borderRadius: 999, overflow: 'hidden', marginTop: 12 }}>
+                    <div style={{ width: `${uploadProgress ?? 0}%`, height: '100%', background: 'linear-gradient(90deg, #D4A853, #F0C978)', borderRadius: 999, transition: 'width 180ms ease' }} />
+                  </div>
+                  <div style={{ fontSize: 11.5, color: 'rgba(10,12,16,0.4)', marginTop: 7 }}>Keep this page open while your receipt is uploading.</div>
+                </div>
               ) : proofFile ? (
                 <>
                   <CheckCircle2 size={22} color="#166534" style={{ display: 'block', margin: '0 auto 6px' }} />

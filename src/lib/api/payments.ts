@@ -41,7 +41,68 @@ function mapPayment(row: any): Payment {
   }
 }
 
-export async function uploadPaymentProof(businessId: string, file: File): Promise<string> {
+async function uploadPaymentBytes(
+  businessId: string,
+  bytes: ArrayBuffer,
+  contentType: string,
+  onProgress?: (progress: number) => void,
+): Promise<string> {
+  const projectUrl = (import.meta.env.VITE_SUPABASE_URL ?? '').replace(/\/$/, '')
+  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY ?? ''
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
+  if (sessionError) throw sessionError
+  if (!sessionData.session) throw new Error('Not authenticated.')
+
+  // functions.invoke uses fetch, which cannot expose upload progress. XHR
+  // keeps the same authenticated Edge Function contract while reporting the
+  // real phone-to-storage transfer percentage.
+  if (typeof XMLHttpRequest === 'undefined' || !projectUrl || !anonKey) {
+    const { data, error } = await supabase.functions.invoke('storage-upload', {
+      body: bytes,
+      headers: { 'X-Upload-Bucket': 'payment-proofs', 'X-Business-Id': businessId, 'Content-Type': contentType },
+    })
+    if (error) throw await edgeFunctionError(error)
+    onProgress?.(100)
+    if (!data?.path) throw new Error('Upload did not return a file path.')
+    return data.path
+  }
+
+  return new Promise((resolve, reject) => {
+    const request = new XMLHttpRequest()
+    request.open('POST', `${projectUrl}/functions/v1/storage-upload`)
+    request.responseType = 'json'
+    request.timeout = 120000
+    request.setRequestHeader('Authorization', `Bearer ${sessionData.session.access_token}`)
+    request.setRequestHeader('apikey', anonKey)
+    request.setRequestHeader('X-Upload-Bucket', 'payment-proofs')
+    request.setRequestHeader('X-Business-Id', businessId)
+    request.setRequestHeader('Content-Type', contentType)
+    request.upload.onprogress = event => {
+      if (event.lengthComputable) onProgress?.(Math.round((event.loaded / event.total) * 100))
+    }
+    request.onload = () => {
+      const body = request.response ?? (() => {
+        try { return JSON.parse(request.responseText || '{}') } catch { return {} }
+      })()
+      if (request.status < 200 || request.status >= 300) {
+        reject(new Error(body?.error || 'Could not save the file.'))
+        return
+      }
+      if (!body?.path) {
+        reject(new Error('Upload did not return a file path.'))
+        return
+      }
+      onProgress?.(100)
+      resolve(body.path)
+    }
+    request.onerror = () => reject(new Error('Could not save the file.'))
+    request.ontimeout = () => reject(new Error('Could not save the file.'))
+    request.onabort = () => reject(new Error('Could not save the file.'))
+    request.send(bytes)
+  })
+}
+
+export async function uploadPaymentProof(businessId: string, file: File, onProgress?: (progress: number) => void): Promise<string> {
   const uploadFile = isPdfFile(file)
     ? (file.type === 'application/pdf' ? file : new File([file], file.name, { type: 'application/pdf' }))
     // Keep payment photos within the same mobile-friendly size used by the
@@ -51,13 +112,7 @@ export async function uploadPaymentProof(businessId: string, file: File): Promis
     throw new Error('Use a JPEG, PNG, WebP, or PDF file up to 10 MB.')
   }
   const uploadBytes = await uploadFile.arrayBuffer()
-  const { data, error } = await supabase.functions.invoke('storage-upload', {
-    body: uploadBytes,
-    headers: { 'X-Upload-Bucket': 'payment-proofs', 'X-Business-Id': businessId, 'Content-Type': uploadFile.type },
-  })
-  if (error) throw await edgeFunctionError(error)
-  if (!data?.path) throw new Error('Upload did not return a file path.')
-  return data.path // private bucket: resolve signed URLs on read
+  return uploadPaymentBytes(businessId, uploadBytes, uploadFile.type, onProgress) // private bucket: resolve signed URLs on read
 }
 
 export async function getPaymentProofUrl(path: string): Promise<string> {
