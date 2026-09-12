@@ -72,8 +72,8 @@ if (import.meta.main) {
       const { data: userData, error: userError } = await client.auth.getUser()
       if (userError || !userData?.user) return json({ error: 'Not authenticated' }, 401, req)
 
-      const { data: profile } = await client.from('profiles').select('role').eq('id', userData.user.id).single()
-      if (profile?.role !== 'admin') return json({ error: 'Admins only' }, 403, req)
+      const { data: permitted } = await client.rpc('has_admin_permission', { p_permission: 'templates.manage' })
+      if (!permitted) return json({ error: 'Template permission required' }, 403, req)
 
       const limited = await enforceRateLimits(req, [
         { scope: 'template-import-ip', limit: 30, windowSeconds: 3600 },

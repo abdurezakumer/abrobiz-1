@@ -1,6 +1,7 @@
 export type Language = 'en' | 'am' | 'or'
 export type TemplateSlug = string
-export type Role = 'admin' | 'owner'
+export type Role = 'admin' | 'super_admin' | 'owner'
+export type AdminRole = 'none' | 'super_admin' | 'operations' | 'support' | 'finance' | 'content'
 export type StorefrontVisualStyle = 'minimal' | 'grid' | 'warm' | 'aurora' | 'luxury' | 'heritage'
 
 export interface TemplateConfig {
@@ -43,6 +44,8 @@ export interface ItemTranslations {
 export interface Profile {
   id: string
   role: Role
+  platformId: string
+  adminRole: AdminRole
   name: string
   phone: string
   email?: string // populated client-side from auth session, not stored on profiles

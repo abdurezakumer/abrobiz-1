@@ -112,7 +112,7 @@ async function isLinkedAdmin(chatId: string, ctx: Ctx): Promise<boolean> {
     .from('profiles')
     .select('id')
     .eq('id', link.admin_id)
-    .eq('role', 'admin')
+    .in('role', ['admin', 'super_admin'])
     .maybeSingle()
   return !!profile
 }
@@ -230,7 +230,7 @@ async function handleStart(chatId: string, username: string | undefined, token: 
 
   const { data: adminLink } = await ctx.db.from('admin_telegram_links').select('id, admin_id').eq('link_token', token).maybeSingle()
   const { data: adminProfile } = adminLink?.admin_id
-    ? await ctx.db.from('profiles').select('id').eq('id', adminLink.admin_id).eq('role', 'admin').maybeSingle()
+    ? await ctx.db.from('profiles').select('id').eq('id', adminLink.admin_id).in('role', ['admin', 'super_admin']).maybeSingle()
     : { data: null }
   if (adminLink && adminProfile) {
     await ctx.db

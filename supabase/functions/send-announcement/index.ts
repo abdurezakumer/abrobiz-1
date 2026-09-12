@@ -31,8 +31,8 @@ if (import.meta.main) {
       const { data: userData, error: userError } = await client.auth.getUser()
       if (userError || !userData?.user) return json({ error: 'Not authenticated' }, 401, req)
 
-      const { data: callerProfile } = await client.from('profiles').select('role').eq('id', userData.user.id).single()
-      if (callerProfile?.role !== 'admin') return json({ error: 'Admins only' }, 403, req)
+      const { data: permitted } = await client.rpc('has_admin_permission', { p_permission: 'announcements.send' })
+      if (!permitted) return json({ error: 'Announcement permission required' }, 403, req)
 
       const limited = await enforceRateLimits(req, [
         { scope: 'announcement-ip', limit: 20, windowSeconds: 3600 },

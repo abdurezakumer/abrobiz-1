@@ -35,7 +35,7 @@ export async function notifyAdminsOfPayment(db: SupabaseClient, tg: TelegramClie
   if (payment.owner_note) lines.push(`Note: ${payment.owner_note}`)
   const caption = lines.join('\n')
 
-  const { data: adminProfiles } = await db.from('profiles').select('email').eq('role', 'admin').not('email', 'is', null)
+  const { data: adminProfiles } = await db.from('profiles').select('email').in('role', ['admin', 'super_admin']).not('email', 'is', null)
   if (adminProfiles && adminProfiles.length > 0) {
     try {
       const sender = createSenderFromEnv(Deno.env)

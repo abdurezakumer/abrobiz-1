@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  LayoutDashboard, Settings as SettingsIcon, QrCode, CreditCard, LogOut, Menu as MenuIcon, X, Bell, ExternalLink, Mail, CalendarCheck, Lock, ShoppingBag, Star, User,
+  LayoutDashboard, Settings as SettingsIcon, QrCode, CreditCard, LogOut, Menu as MenuIcon, X, Bell, ExternalLink, Mail, CalendarCheck, Lock, ShoppingBag, Star, User, Copy,
 } from 'lucide-react'
 import { useAuth } from '../lib/authContext'
 import { supabase } from '../lib/supabaseClient'
@@ -294,6 +294,11 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                   <div style={{ padding: '12px 16px', fontSize: 12.5, color: 'rgba(10,12,16,0.5)', borderBottom: '1px solid rgba(10,12,16,0.06)', wordBreak: 'break-all' }}>
                     {profile.email}
                   </div>
+                )}
+                {profile?.platformId && (
+                  <button type="button" onClick={() => void navigator.clipboard?.writeText(profile.platformId)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, width: '100%', padding: '10px 16px', border: 0, borderBottom: '1px solid rgba(10,12,16,0.06)', background: '#fff', color: '#72551D', cursor: 'pointer', textAlign: 'left', fontSize: 12 }}>
+                    <span><span style={{ display: 'block', color: 'rgba(10,12,16,0.4)', fontSize: 10, marginBottom: 2 }}>Platform ID</span>{profile.platformId}</span><Copy size={13} />
+                  </button>
                 )}
                 <button
                   onClick={async () => {

@@ -1,75 +1,48 @@
-import { useEffect, useState } from 'react'
-import { Building2, CreditCard, TrendingUp, Clock } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+import { Activity, Building2, CreditCard, Crown, DollarSign, RefreshCw, ShieldCheck, TrendingUp, UserRound, Users } from 'lucide-react'
 import AdminLayout from '../../components/AdminLayout'
-import { supabase } from '../../lib/supabaseClient'
-import { adminListBusinesses, type AdminBusinessRow } from '../../lib/api/businesses'
+import { useAuth } from '../../lib/authContext'
+import { getAdminDashboard, type AdminDashboardData } from '../../lib/api/adminControl'
+import { friendlyError } from '../../lib/errors'
+
+const cardStyle: React.CSSProperties = { background: '#fff', border: '1px solid rgba(10,12,16,0.07)', borderRadius: 18, padding: '18px 20px', boxShadow: '0 8px 30px rgba(10,12,16,0.035)' }
 
 export default function AdminOverview() {
-  const [totalBusinesses, setTotalBusinesses] = useState(0)
-  const [activeSubs, setActiveSubs] = useState(0)
-  const [pendingPayments, setPendingPayments] = useState(0)
-  const [mrr, setMrr] = useState(0)
-  const [recent, setRecent] = useState<AdminBusinessRow[]>([])
+  const { profile } = useAuth()
+  const [data, setData] = useState<AdminDashboardData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [error, setError] = useState('')
+  const isSuper = profile?.role === 'super_admin' || profile?.adminRole === 'super_admin'
+  const load = useCallback(async (manual = false) => {
+    if (manual) setRefreshing(true); setError('')
+    try { setData(await getAdminDashboard(profile)) } catch (err) { setError(friendlyError(err)) } finally { setLoading(false); setRefreshing(false) }
+  }, [profile])
+  useEffect(() => { void load() }, [load])
 
-  useEffect(() => {
-    supabase.from('businesses').select('id', { count: 'exact', head: true }).then(({ count }) => setTotalBusinesses(count ?? 0))
-    supabase.from('subscriptions').select('id', { count: 'exact', head: true }).eq('status', 'active').then(({ count }) => setActiveSubs(count ?? 0))
-    supabase.from('payments').select('id', { count: 'exact', head: true }).eq('status', 'pending').then(({ count }) => setPendingPayments(count ?? 0))
-    supabase
-      .from('subscriptions')
-      .select('plans(price_etb, billing_interval)')
-      .eq('status', 'active')
-      .then(({ data }) => {
-        const total = (data ?? []).reduce((sum: number, row: any) => {
-          const price = Number(row.plans?.price_etb ?? 0)
-          const monthly = row.plans?.billing_interval === 'year' ? price / 12 : price
-          return sum + monthly
-        }, 0)
-        setMrr(Math.round(total))
-      })
-    adminListBusinesses().then(rows => setRecent(rows.slice(0, 6)))
-  }, [])
-
-  const stats = [
-    { label: 'Businesses', value: totalBusinesses, icon: Building2 },
-    { label: 'Active subscriptions', value: activeSubs, icon: TrendingUp },
-    { label: 'Pending payments', value: pendingPayments, icon: Clock, highlight: pendingPayments > 0 },
-    { label: 'MRR (ETB)', value: mrr, icon: CreditCard },
-  ]
-
-  return (
-    <AdminLayout>
-      <h1 style={{ fontFamily: 'Outfit, sans-serif', fontSize: 24, fontWeight: 600, color: '#0A0C10', marginBottom: 4 }}>Overview</h1>
-      <p style={{ color: 'rgba(10,12,16,0.5)', fontSize: 14, marginBottom: 24 }}>Platform-wide snapshot.</p>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 14, marginBottom: 30 }}>
-        {stats.map(s => (
-          <div key={s.label} style={{ background: '#fff', borderRadius: 16, padding: '18px 20px', border: s.highlight ? '1.5px solid #D4A853' : '1px solid rgba(10,12,16,0.06)' }}>
-            <s.icon size={18} color="#D4A853" />
-            <div style={{ fontSize: 26, fontWeight: 700, color: '#0A0C10', marginTop: 10, fontFamily: 'Outfit, sans-serif' }}>{s.value}</div>
-            <div style={{ fontSize: 12.5, color: 'rgba(10,12,16,0.45)', marginTop: 2 }}>{s.label}</div>
-          </div>
-        ))}
-      </div>
-
-      <div style={{ fontSize: 15, fontWeight: 600, color: '#0A0C10', marginBottom: 12 }}>Recent signups</div>
-      <div style={{ background: '#fff', borderRadius: 16, border: '1px solid rgba(10,12,16,0.06)', overflow: 'hidden' }}>
-        {recent.length === 0 ? (
-          <div style={{ padding: 20, fontSize: 13.5, color: 'rgba(10,12,16,0.4)' }}>No businesses yet.</div>
-        ) : (
-          recent.map(b => (
-            <div key={b.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '13px 18px', borderBottom: '1px solid rgba(10,12,16,0.05)' }}>
-              <div>
-                <div style={{ fontSize: 13.5, fontWeight: 500 }}>{b.name}</div>
-                <div style={{ fontSize: 12, color: 'rgba(10,12,16,0.4)' }}>/{b.slug} · owner: {b.ownerName}</div>
-              </div>
-              <span style={{ fontSize: 12, fontWeight: 600, color: b.isPublished ? '#16A34A' : 'rgba(10,12,16,0.4)' }}>
-                {b.isPublished ? 'Live' : 'Draft'}
-              </span>
-            </div>
-          ))
-        )}
-      </div>
-    </AdminLayout>
-  )
+  return <AdminLayout>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, marginBottom: 26, flexWrap: 'wrap' }}>
+      <div><div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 5 }}>{isSuper ? <Crown size={20} color="#B98522" /> : <Activity size={20} color="#B98522" />}<h1 style={{ fontFamily: 'Outfit, sans-serif', fontSize: 27, fontWeight: 650, color: '#0A0C10', margin: 0 }}>{isSuper ? 'Command center' : 'Operations dashboard'}</h1></div><p style={{ color: 'rgba(10,12,16,0.52)', fontSize: 14, margin: 0 }}>{isSuper ? 'A complete live view of AbroBiz, its people, revenue, and administrator activity.' : 'The tools and signals needed to keep AbroBiz running smoothly.'}</p></div>
+      <button type="button" onClick={() => void load(true)} disabled={refreshing} style={refreshButton}><RefreshCw size={14} style={{ animation: refreshing ? 'abrobiz-spin 0.8s linear infinite' : 'none' }} /> {refreshing ? 'Refreshing…' : 'Refresh data'}</button>
+    </div>
+    {error && <div style={{ ...cardStyle, color: '#B42318', background: '#FFF5F3', marginBottom: 18, fontSize: 13 }}>{error}</div>}
+    {loading || !data ? <div style={{ ...cardStyle, color: 'rgba(10,12,16,0.45)', fontSize: 13 }}>Loading platform intelligence…</div> : <>
+      <div style={grid(4)}><Metric label={isSuper ? 'Registered users' : 'Businesses'} value={isSuper ? data.users : data.businesses} icon={isSuper ? Users : Building2} tone="#D4A853" /><Metric label={isSuper ? 'Administrators' : 'Active subscriptions'} value={isSuper ? data.admins : data.activeSubscriptions} icon={isSuper ? ShieldCheck : TrendingUp} tone="#5B72D6" /><Metric label={isSuper ? 'Businesses' : 'Pending payments'} value={isSuper ? data.businesses : data.pendingPayments} icon={isSuper ? Building2 : CreditCard} tone={data.pendingPayments > 0 ? '#D97706' : '#25A269'} /><Metric label={isSuper ? 'Approved revenue' : 'Trial accounts'} value={isSuper ? `${data.approvedRevenue.toLocaleString()} ETB` : data.trialSubscriptions} icon={isSuper ? DollarSign : UserRound} tone="#25A269" /></div>
+      <div style={{ ...grid(2), marginTop: 16 }}><ChartCard title="New users · last 14 days" subtitle="Daily account creation" data={data.signupsByDay} color="#5B72D6" format={value => String(value)} /><ChartCard title="Approved revenue · last 14 days" subtitle="Confirmed payments in ETB" data={data.revenueByDay} color="#B98522" format={value => `${Math.round(value).toLocaleString()}`} /></div>
+      <div style={{ ...grid(2), marginTop: 16 }}><section style={cardStyle}><SectionTitle icon={<UserRound size={16} />} title={isSuper ? 'Recent users' : 'Recent payment activity'} />{isSuper ? data.recentUsers.map(user => <UserRow key={user.id} user={user} />) : data.recentPayments.map(payment => <div key={payment.id} style={lineRow}><div><strong>{payment.businessName}</strong><small>{new Date(payment.createdAt).toLocaleString()}</small></div><Badge value={`${payment.amount.toLocaleString()} ETB · ${payment.status}`} /></div>)}{isSuper && data.recentUsers.length === 0 && <Empty />}</section><section style={cardStyle}><SectionTitle icon={<ShieldCheck size={16} />} title={isSuper ? 'Administrator roster' : 'Subscription health'} />{isSuper ? data.recentAdmins.map(user => <UserRow key={user.id} user={user} />) : <><HealthRow label="Active subscriptions" value={data.activeSubscriptions} total={data.businesses} color="#25A269" /><HealthRow label="Trial period" value={data.trialSubscriptions} total={data.businesses} color="#D97706" /><HealthRow label="Expired" value={data.expiredSubscriptions} total={data.businesses} color="#D14343" /><HealthRow label="Awaiting payment review" value={data.pendingPayments} total={Math.max(data.businesses, 1)} color="#5B72D6" /></>}{isSuper && data.recentAdmins.length === 0 && <Empty />}</section></div>
+      {isSuper && <section style={{ ...cardStyle, marginTop: 16 }}><SectionTitle icon={<ShieldCheck size={16} />} title="Latest administrator actions" />{data.recentAudit.length === 0 ? <Empty /> : data.recentAudit.map(log => <div key={log.id} style={lineRow}><div><strong>{log.action.replaceAll('_', ' ')}</strong><small>{log.adminPlatformId} · {log.adminName} · {new Date(log.createdAt).toLocaleString()}</small></div><span style={{ color: 'rgba(10,12,16,0.4)', fontSize: 11 }}>{log.targetTable ?? 'platform'}</span></div>)}</section>}
+    </>}
+    <style>{'@keyframes abrobiz-spin { to { transform: rotate(360deg); } }'}</style>
+  </AdminLayout>
 }
+
+function Metric({ label, value, icon: Icon, tone }: { label: string; value: string | number; icon: typeof Users; tone: string }) { return <div style={cardStyle}><div style={{ width: 34, height: 34, display: 'grid', placeItems: 'center', borderRadius: 10, background: `${tone}18`, color: tone }}><Icon size={17} /></div><div style={{ fontFamily: 'Outfit, sans-serif', fontWeight: 700, fontSize: 25, marginTop: 13, color: '#0A0C10' }}>{value}</div><div style={{ color: 'rgba(10,12,16,0.48)', fontSize: 12.5, marginTop: 3 }}>{label}</div></div> }
+function SectionTitle({ icon, title }: { icon: React.ReactNode; title: string }) { return <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 650, fontSize: 15, marginBottom: 11, color: '#0A0C10' }}>{icon}<span>{title}</span></div> }
+function Empty() { return <div style={{ padding: '18px 0 4px', color: 'rgba(10,12,16,0.4)', fontSize: 13 }}>No activity yet.</div> }
+function UserRow({ user }: { user: AdminDashboardData['recentUsers'][number] }) { return <div style={lineRow}><div><strong>{user.name}</strong><small>{user.platformId} · {user.email}</small></div><Badge value={user.adminRole === 'none' ? 'Owner' : user.adminRole.replace('_', ' ')} /></div> }
+function Badge({ value }: { value: string }) { return <span style={{ borderRadius: 999, padding: '5px 8px', background: '#F6F3EE', color: '#72551D', fontSize: 10.5, fontWeight: 700, textTransform: 'capitalize', whiteSpace: 'nowrap' }}>{value}</span> }
+function HealthRow({ label, value, total, color }: { label: string; value: number; total: number; color: string }) { const width = total ? Math.min(100, (value / total) * 100) : 0; return <div style={{ marginBottom: 14 }}><div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, marginBottom: 6 }}><span>{label}</span><strong>{value}</strong></div><div style={{ height: 7, borderRadius: 99, background: '#F1EEE8', overflow: 'hidden' }}><div style={{ width: `${width}%`, height: '100%', background: color, borderRadius: 99 }} /></div></div> }
+function ChartCard({ title, subtitle, data, color, format }: { title: string; subtitle: string; data: Array<{ date: string; value: number }>; color: string; format: (value: number) => string }) { const max = Math.max(...data.map(point => point.value), 1); const points = data.map((point, index) => `${(index / Math.max(data.length - 1, 1)) * 100},${100 - (point.value / max) * 82 - 8}`).join(' '); return <section style={cardStyle}><div style={{ fontWeight: 650, fontSize: 15 }}>{title}</div><div style={{ fontSize: 12, color: 'rgba(10,12,16,0.45)', marginTop: 3 }}>{subtitle}</div><div style={{ height: 138, marginTop: 14, position: 'relative' }}><svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ width: '100%', height: '100%', overflow: 'visible' }}><polyline points={points} fill="none" stroke={color} strokeWidth="2.4" vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round" /></svg></div><div style={{ display: 'flex', justifyContent: 'space-between', color: 'rgba(10,12,16,0.38)', fontSize: 10.5 }}><span>{data[0]?.date.slice(5)}</span><strong style={{ color }}>{format(data.reduce((sum, point) => sum + point.value, 0))}</strong><span>{data[data.length - 1]?.date.slice(5)}</span></div></section> }
+function grid(columns: number): React.CSSProperties { return { display: 'grid', gridTemplateColumns: `repeat(auto-fit, minmax(${columns === 4 ? 180 : 280}px, 1fr))`, gap: 14 } }
+const lineRow: React.CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '11px 0', borderTop: '1px solid rgba(10,12,16,0.06)', fontSize: 12.5 }
+const refreshButton: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 7, border: '1px solid rgba(10,12,16,0.12)', borderRadius: 10, padding: '9px 13px', background: '#fff', color: '#0A0C10', fontSize: 12.5, fontWeight: 650, cursor: 'pointer' }

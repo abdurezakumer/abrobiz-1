@@ -1,19 +1,22 @@
 import { useState, type ReactNode } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { LayoutDashboard, Building2, CreditCard, SlidersHorizontal, LogOut, Menu as MenuIcon, X, ShieldCheck, Megaphone } from 'lucide-react'
+import { LayoutDashboard, Building2, CreditCard, SlidersHorizontal, LogOut, Menu as MenuIcon, ShieldCheck, Megaphone, Users, ClipboardList, Copy } from 'lucide-react'
 import { useAuth } from '../lib/authContext'
+import { hasAdminPermission } from '../lib/api/adminControl'
 
 const navItems = [
-  { to: '/admin', label: 'Overview', icon: LayoutDashboard },
-  { to: '/admin/businesses', label: 'Businesses', icon: Building2 },
-  { to: '/admin/payments', label: 'Payments', icon: CreditCard },
-  { to: '/admin/announcements', label: 'Announcements', icon: Megaphone },
-  { to: '/admin/settings', label: 'Settings', icon: SlidersHorizontal },
+  { to: '/admin', label: 'Overview', icon: LayoutDashboard, permission: 'dashboard.read' as const },
+  { to: '/admin/businesses', label: 'Businesses', icon: Building2, permission: 'businesses.read' as const },
+  { to: '/admin/payments', label: 'Payments', icon: CreditCard, permission: 'payments.read' as const },
+  { to: '/admin/announcements', label: 'Announcements', icon: Megaphone, permission: 'announcements.send' as const },
+  { to: '/admin/settings', label: 'Settings', icon: SlidersHorizontal, permission: 'templates.manage' as const },
+  { to: '/admin/management', label: 'Admin management', icon: Users, superOnly: true },
+  { to: '/admin/audit', label: 'Audit trail', icon: ClipboardList, superOnly: true },
 ]
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
-  const { signOut } = useAuth()
+  const { signOut, profile } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -30,13 +33,17 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           <ShieldCheck size={17} color="#D4A853" />
         </div>
         <span style={{ fontFamily: 'Outfit, sans-serif', fontWeight: 600, color: '#F0EDE7', fontSize: 17 }}>
-          Admin
+          {profile?.role === 'super_admin' ? 'Super Admin' : 'Admin'}
         </span>
       </div>
-      <div style={{ fontSize: 11, color: 'rgba(240,237,231,0.35)', padding: '0 8px 24px' }}>Platform control</div>
+      <div style={{ fontSize: 11, color: 'rgba(240,237,231,0.35)', padding: '0 8px 16px' }}>Platform control · {profile?.adminRole ?? 'administrator'}</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'rgba(240,237,231,0.5)', fontSize: 10.5, padding: '0 8px 18px' }}>
+        <span style={{ color: '#D4A853', fontWeight: 700 }}>{profile?.platformId ?? 'ABZ—'}</span>
+        <button type="button" aria-label="Copy platform ID" onClick={() => profile?.platformId && void navigator.clipboard?.writeText(profile.platformId)} style={{ border: 0, background: 'transparent', color: 'inherit', padding: 0, cursor: 'pointer' }}><Copy size={11} /></button>
+      </div>
 
       <nav style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, minHeight: 0, overflowY: 'auto' }}>
-        {navItems.map(item => {
+        {navItems.filter(item => item.superOnly ? profile?.role === 'super_admin' || profile?.adminRole === 'super_admin' : !!item.permission && hasAdminPermission(profile, item.permission)).map(item => {
           const active = location.pathname === item.to
           const Icon = item.icon
           return (
@@ -90,7 +97,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         <button onClick={() => setMobileOpen(true)} style={{ background: 'none', border: 'none', color: '#F0EDE7' }}>
           <MenuIcon size={22} />
         </button>
-        <span style={{ color: '#F0EDE7', fontFamily: 'Outfit, sans-serif', fontWeight: 600 }}>Admin</span>
+        <span style={{ color: '#F0EDE7', fontFamily: 'Outfit, sans-serif', fontWeight: 600 }}>{profile?.role === 'super_admin' ? 'Super Admin' : 'Admin'}</span>
         <div style={{ width: 22 }} />
       </div>
 

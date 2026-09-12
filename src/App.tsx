@@ -2,7 +2,7 @@ import { lazy, Suspense, type ReactNode } from 'react'
 import { Routes, Route } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import { AuthProvider } from './lib/authContext'
-import { RequireAuth, RequireSetup, RequireGuest, RequireOwner, RequireAdmin } from './components/Guards'
+import { RequireAuth, RequireSetup, RequireGuest, RequireOwner, RequireAdmin, RequireAdminPermission, RequireSuperAdmin } from './components/Guards'
 
 import Landing from './pages/Landing'
 import Terms from './pages/Terms'
@@ -30,6 +30,8 @@ const AdminBusinesses = lazy(() => import('./pages/admin/AdminBusinesses'))
 const AdminPayments = lazy(() => import('./pages/admin/AdminPayments'))
 const AdminSettings = lazy(() => import('./pages/admin/AdminSettings'))
 const AdminAnnouncements = lazy(() => import('./pages/admin/AdminAnnouncements'))
+const AdminManagement = lazy(() => import('./pages/admin/AdminManagement'))
+const AdminAudit = lazy(() => import('./pages/admin/AdminAudit'))
 const TemplateDemo = lazy(() => import('./pages/TemplateDemo'))
 
 function HostStorefront({ page }: { page: ReactNode }) {
@@ -82,10 +84,12 @@ export default function App() {
         <Route path="/dashboard/reviews" element={<RequireOwner><Reviews /></RequireOwner>} />
 
         <Route path="/admin" element={<RequireAdmin><AdminOverview /></RequireAdmin>} />
-        <Route path="/admin/businesses" element={<RequireAdmin><AdminBusinesses /></RequireAdmin>} />
-        <Route path="/admin/payments" element={<RequireAdmin><AdminPayments /></RequireAdmin>} />
-        <Route path="/admin/settings" element={<RequireAdmin><AdminSettings /></RequireAdmin>} />
-        <Route path="/admin/announcements" element={<RequireAdmin><AdminAnnouncements /></RequireAdmin>} />
+        <Route path="/admin/businesses" element={<RequireAdminPermission permission="businesses.read"><AdminBusinesses /></RequireAdminPermission>} />
+        <Route path="/admin/payments" element={<RequireAdminPermission permission="payments.read"><AdminPayments /></RequireAdminPermission>} />
+        <Route path="/admin/settings" element={<RequireAdminPermission permission="templates.manage"><AdminSettings /></RequireAdminPermission>} />
+        <Route path="/admin/announcements" element={<RequireAdminPermission permission="announcements.send"><AdminAnnouncements /></RequireAdminPermission>} />
+        <Route path="/admin/management" element={<RequireSuperAdmin><AdminManagement /></RequireSuperAdmin>} />
+        <Route path="/admin/audit" element={<RequireSuperAdmin><AdminAudit /></RequireSuperAdmin>} />
 
         <Route path="*" element={<Landing />} />
       </Routes>

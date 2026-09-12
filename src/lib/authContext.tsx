@@ -37,7 +37,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSubscription(null)
     const { data: profileRow, error: profileError } = await supabase
       .from('profiles')
-      .select('id, role, name, phone, email_verified_at, terms_accepted_at, privacy_accepted_at, legal_version')
+      .select('id, role, platform_id, admin_role, name, phone, email_verified_at, terms_accepted_at, privacy_accepted_at, legal_version')
       .eq('id', s.user.id)
       .single()
 
@@ -45,6 +45,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setProfile({
         id: profileRow.id,
         role: profileRow.role,
+        platformId: profileRow.platform_id ?? `ABZ-${String(profileRow.id).replaceAll('-', '').slice(0, 12).toUpperCase()}`,
+        adminRole: profileRow.admin_role ?? (profileRow.role === 'admin' || profileRow.role === 'super_admin' ? 'super_admin' : 'none'),
         name: profileRow.name,
         phone: profileRow.phone,
         email: s.user.email ?? undefined,
@@ -58,13 +60,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // production migration adds the full selection above.
       const { data: legacyProfile } = await supabase
         .from('profiles')
-        .select('id, role, name, phone, email_verified_at')
+        .select('id, role, platform_id, admin_role, name, phone, email_verified_at')
         .eq('id', s.user.id)
         .single()
       if (legacyProfile) {
         setProfile({
           id: legacyProfile.id,
           role: legacyProfile.role,
+          platformId: legacyProfile.platform_id ?? `ABZ-${String(legacyProfile.id).replaceAll('-', '').slice(0, 12).toUpperCase()}`,
+          adminRole: legacyProfile.admin_role ?? (legacyProfile.role === 'admin' || legacyProfile.role === 'super_admin' ? 'super_admin' : 'none'),
           name: legacyProfile.name,
           phone: legacyProfile.phone,
           email: s.user.email ?? undefined,
@@ -118,7 +122,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, role, name, phone, email_verified_at, terms_accepted_at, privacy_accepted_at, legal_version')
+      .select('id, role, platform_id, admin_role, name, phone, email_verified_at, terms_accepted_at, privacy_accepted_at, legal_version')
       .eq('id', currentSession.user.id)
       .single()
 
@@ -126,6 +130,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile(data ? {
       id: data.id,
       role: data.role,
+      platformId: data.platform_id ?? `ABZ-${String(data.id).replaceAll('-', '').slice(0, 12).toUpperCase()}`,
+      adminRole: data.admin_role ?? (data.role === 'admin' || data.role === 'super_admin' ? 'super_admin' : 'none'),
       name: data.name,
       phone: data.phone,
       email: currentSession.user.email ?? undefined,

@@ -22,8 +22,8 @@ if (import.meta.main) {
       const sessionClient = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, { global: { headers: { Authorization: authorization } } })
       const { data: userData, error: userError } = await sessionClient.auth.getUser()
       if (userError || !userData.user) return json({ error: 'Not authenticated.' }, 401, req)
-      const { data: profile } = await sessionClient.from('profiles').select('role').eq('id', userData.user.id).maybeSingle()
-      if (profile?.role !== 'admin') return json({ error: 'Admins only.' }, 403, req)
+      const { data: permitted } = await sessionClient.rpc('has_admin_permission', { p_permission: 'payments.review' })
+      if (!permitted) return json({ error: 'Payment reviewers only.' }, 403, req)
       const limited = await enforceRateLimits(req, [
         { scope: 'payment-reviewed-ip', limit: 60, windowSeconds: 3600 },
         { scope: 'payment-reviewed-admin', limit: 30, windowSeconds: 3600, identity: userData.user.id },

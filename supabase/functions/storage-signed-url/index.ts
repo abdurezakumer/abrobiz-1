@@ -37,7 +37,7 @@ if (import.meta.main) {
 
       const db = createAdminClient()
       const { data: profile } = await db.from('profiles').select('role').eq('id', userData.user.id).maybeSingle()
-      const isAdmin = profile?.role === 'admin'
+      const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin'
       const businessQuery = db.from('businesses').select('id').eq('id', match[1])
       const { data: business } = isAdmin
         ? await businessQuery.maybeSingle()
