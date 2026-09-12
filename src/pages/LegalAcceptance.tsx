@@ -24,10 +24,17 @@ export default function LegalAcceptance() {
     setLoading(true)
     try {
       await recordLegalAcceptance()
-      // Guards read consent from AuthProvider. Refresh only the profile before
-      // navigating so unrelated business requests cannot mask a saved consent.
-      await refreshProfile()
       const from = safeInternalPath((location.state as { from?: { pathname?: string } } | null)?.from?.pathname, '/setup')
+      // Guards read consent from AuthProvider. Refresh only the profile before
+      // navigating. If that follow-up read is temporarily unavailable, a
+      // reload still starts with the committed database value and avoids
+      // telling the user that a successful save failed.
+      try {
+        await refreshProfile()
+      } catch {
+        window.location.assign(from)
+        return
+      }
       navigate(from, { replace: true })
     } catch {
       setError('We could not save your legal acceptance. Please check your connection and try again.')
