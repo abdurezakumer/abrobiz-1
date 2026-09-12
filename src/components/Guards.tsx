@@ -2,6 +2,8 @@ import type { ReactNode } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../lib/authContext'
 import { safeInternalPath } from '../lib/safeUrl'
+import { daysRemaining } from '../lib/api/subscriptions'
+import SubscriptionExpiredGate from './SubscriptionExpiredGate'
 
 function FullScreenSpinner() {
   return (
@@ -59,7 +61,7 @@ export function RequireGuest({ children }: { children: ReactNode }) {
 }
 
 export function RequireOwner({ children }: { children: ReactNode }) {
-  const { session, profile, business, loading } = useAuth()
+  const { session, profile, business, subscription, loading } = useAuth()
   const location = useLocation()
   if (loading) return <FullScreenSpinner />
   if (!session) return <Navigate to="/login" state={{ from: location }} replace />
@@ -68,6 +70,9 @@ export function RequireOwner({ children }: { children: ReactNode }) {
   if (profile?.role === 'admin') return <Navigate to="/admin" replace />
   if (profile?.role !== 'owner') return <Navigate to="/login" replace />
   if (!business) return <Navigate to="/setup" replace />
+  const days = daysRemaining(subscription?.endDate ?? null)
+  const expired = subscription?.status === 'expired' || (days !== null && days < 0)
+  if (expired && location.pathname !== '/dashboard/billing') return <SubscriptionExpiredGate business={business} subscription={subscription} />
   return <>{children}</>
 }
 

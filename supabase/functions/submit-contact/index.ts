@@ -4,6 +4,8 @@ import { enforceRateLimits } from '../_shared/rateLimit.ts'
 import { isRecord, readJsonBody, validEmail, validUuid } from '../_shared/requestSecurity.ts'
 import { logFailure } from '../_shared/observability.ts'
 import { requireTurnstile } from '../_shared/turnstile.ts'
+import { TelegramClient } from '../_shared/telegram.ts'
+import { notifyBusinessOwner } from '../_shared/ownerNotifications.ts'
 
 function json(body: unknown, status = 200, req?: Request): Response {
   return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders(req), 'Content-Type': 'application/json' } })
@@ -37,11 +39,20 @@ if (import.meta.main) {
       const db = createAdminClient()
       const { data: business } = await db.from('businesses').select('id').eq('id', businessId).eq('is_published', true).eq('is_blocked', false).maybeSingle()
       if (!business) return json({ error: 'Business is not available.' }, 404, req)
+      const { data: entitlement } = await db.rpc('get_business_entitlements', { p_business_id: businessId })
+      if (!entitlement?.siteActive) return json({ error: 'This website is temporarily unavailable.' }, 403, req)
       const { error } = await db.from('contact_messages').insert({ business_id: businessId, name, email, phone, message })
       if (error) {
         logFailure(req, { function_name: 'submit-contact', operation: 'create_contact_message', error_category: 'DATABASE_ERROR', error_code: error.code ?? 'unknown', status: 400 })
         return json({ error: 'Could not send your message.' }, 500, req)
       }
+      const tg = Deno.env.get('TELEGRAM_BOT_TOKEN') ? new TelegramClient(Deno.env.get('TELEGRAM_BOT_TOKEN')!) : null
+      await notifyBusinessOwner(db, tg, businessId, {
+        title: `New message from ${name}`,
+        body: message.slice(0, 140),
+        link: '/dashboard/messages',
+        telegramText: `New message from ${name}${email ? ` (${email})` : ''}\n\n${message.slice(0, 700)}`,
+      }).catch(() => {})
       return json({ ok: true }, 200, req)
     } catch (error) {
       logFailure(req, { function_name: 'submit-contact', operation: 'create_contact_message', error_category: 'INTERNAL_ERROR', error_code: error instanceof Error ? error.name : 'UnknownError', status: 500 })

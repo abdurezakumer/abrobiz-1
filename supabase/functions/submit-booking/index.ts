@@ -4,6 +4,8 @@ import { enforceRateLimits } from '../_shared/rateLimit.ts'
 import { isRecord, readJsonBody, validUuid } from '../_shared/requestSecurity.ts'
 import { logFailure } from '../_shared/observability.ts'
 import { requireTurnstile } from '../_shared/turnstile.ts'
+import { TelegramClient } from '../_shared/telegram.ts'
+import { notifyBusinessOwner } from '../_shared/ownerNotifications.ts'
 
 function json(body: unknown, status = 200, req?: Request): Response {
   return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders(req), 'Content-Type': 'application/json' } })
@@ -48,6 +50,13 @@ if (import.meta.main) {
         logFailure(req, { function_name: 'submit-booking', operation: 'create_booking', error_category: error.code === '23505' ? 'CONFLICT' : 'DATABASE_ERROR', error_code: error.code ?? 'unknown', status: error.code === '23505' ? 409 : 400 })
         return json({ error: 'Could not submit your booking.' }, 500, req)
       }
+      const tg = Deno.env.get('TELEGRAM_BOT_TOKEN') ? new TelegramClient(Deno.env.get('TELEGRAM_BOT_TOKEN')!) : null
+      await notifyBusinessOwner(db, tg, businessId, {
+        title: `New booking request from ${name}`,
+        body: `${date} ${time}`,
+        link: '/dashboard/bookings',
+        telegramText: `New booking request from ${name}\n\n${date} ${time}${partySize ? `\nParty size: ${partySize}` : ''}`,
+      }).catch(() => {})
       return json({ ok: true }, 200, req)
     } catch (error) {
       logFailure(req, { function_name: 'submit-booking', operation: 'create_booking', error_category: 'INTERNAL_ERROR', error_code: error instanceof Error ? error.name : 'UnknownError', status: 500 })

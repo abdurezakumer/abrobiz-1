@@ -4,6 +4,8 @@ import { enforceRateLimits } from '../_shared/rateLimit.ts'
 import { isRecord, readJsonBody, validUuid } from '../_shared/requestSecurity.ts'
 import { logFailure } from '../_shared/observability.ts'
 import { requireTurnstile } from '../_shared/turnstile.ts'
+import { TelegramClient } from '../_shared/telegram.ts'
+import { notifyBusinessOwner } from '../_shared/ownerNotifications.ts'
 
 function json(body: unknown, status = 200, req?: Request): Response {
   return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders(req), 'Content-Type': 'application/json' } })
@@ -61,6 +63,13 @@ if (import.meta.main) {
         logFailure(req, { function_name: 'submit-order', operation: 'create_order', error_category: error?.code === '23505' ? 'CONFLICT' : 'DATABASE_ERROR', error_code: error?.code ?? 'unknown', status: error?.code === '23505' ? 409 : 400 })
         return json({ error: 'Could not submit your order.' }, error?.code === '23505' ? 409 : 400, req)
       }
+      const tg = Deno.env.get('TELEGRAM_BOT_TOKEN') ? new TelegramClient(Deno.env.get('TELEGRAM_BOT_TOKEN')!) : null
+      await notifyBusinessOwner(db, tg, businessId, {
+        title: `New order from ${customerName}`,
+        body: `${data.total_etb} ETB - ${items.length} item(s)`,
+        link: '/dashboard/orders',
+        telegramText: `New order from ${customerName}\n\n${data.total_etb} ETB - ${items.length} item(s)`,
+      }).catch(() => {})
       return json({ id: data.id, total_etb: data.total_etb }, 200, req)
     } catch (error) {
       logFailure(req, { function_name: 'submit-order', operation: 'create_order', error_category: 'INTERNAL_ERROR', error_code: error instanceof Error ? error.name : 'UnknownError', status: 500 })

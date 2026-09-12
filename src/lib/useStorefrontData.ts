@@ -17,6 +17,7 @@ export interface StorefrontEntitlements {
   bookings: boolean
   ordering: boolean
   reviews: boolean
+  siteActive: boolean
 }
 
 export interface StorefrontData {
@@ -31,7 +32,7 @@ export interface StorefrontData {
 }
 
 const DEFAULT_LABELS: StorefrontLabels = { label: 'Business', itemLabel: 'Item', categoryLabel: 'Category', icon: 'Store' }
-const DEFAULT_ENTITLEMENTS: StorefrontEntitlements = { bookings: false, ordering: false, reviews: false }
+const DEFAULT_ENTITLEMENTS: StorefrontEntitlements = { bookings: false, ordering: false, reviews: false, siteActive: false }
 const PUBLIC_CONFIG_TTL = 5 * 60 * 1000
 const templateCache = new Map<string, { config: unknown; expiresAt: number }>()
 const categoryCache = new Map<string, { labels: StorefrontLabels; expiresAt: number }>()
@@ -83,20 +84,34 @@ export function useStorefrontData(slug: string | undefined, pagePath: string): S
       try {
         const biz = await retryRead(() => getBusinessBySlug(businessSlug))
         if (cancelled) return
+        if (!biz) {
+          setBusiness(null)
+          return
+        }
+
+        // Resolve subscription access before loading any catalog data. This
+        // keeps an expired storefront from rendering stale menu/order data and
+        // gives the owner a clear renewal message instead of a blank page.
+        const ent = await retryRead(() => getBusinessEntitlements(biz.id))
+        if (cancelled) return
         setBusiness(biz)
-        if (!biz) return
+        setEntitlements(ent)
         setLang(previous => biz.languages.includes(previous) ? previous : (biz.languages[0] ?? 'en'))
 
-        const [cats, its, ent, template] = await retryRead(() => Promise.all([
+        if (!ent.siteActive) {
+          setCategories([])
+          setItems([])
+          return
+        }
+
+        const [cats, its, template] = await retryRead(() => Promise.all([
           listCategories(biz.id),
           listItems(biz.id),
-          getBusinessEntitlements(biz.id),
           loadTemplateConfig(biz.templateSlug),
         ]))
         if (cancelled) return
         setCategories(cats.filter(c => !c.isHidden))
         setItems(its)
-        setEntitlements(ent)
         setTemplateConfig((template.data?.config ?? {}) as TemplateConfig)
         setLabels(DEFAULT_LABELS)
         if (trackView) void trackPageView(biz.id, pagePath).catch(() => {})

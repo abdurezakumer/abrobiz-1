@@ -2,6 +2,7 @@ import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.45.4'
 import { createAdminClient } from '../_shared/db.ts'
 import { TelegramClient, buildInlineKeyboard } from '../_shared/telegram.ts'
 import { notifyAdminsOfPayment } from '../_shared/notify.ts'
+import { notifyBusinessOwner } from '../_shared/ownerNotifications.ts'
 import type { TelegramUpdate, TelegramMessage, TelegramCallbackQuery, TelegramPhotoSize } from '../_shared/types.ts'
 import { checkSecret } from '../_shared/endpointSecurity.ts'
 import { detectAllowedFile, safeStoragePath } from '../_shared/fileSecurity.ts'
@@ -420,16 +421,20 @@ async function handleApproval(
   const resultText = action === 'approve' ? `\u2705 Approved by ${by}` : `\u274C Rejected by ${by}`
   if (messageId) await ctx.tg.editMessageText(adminChatId, messageId, resultText).catch(() => {})
 
-  // Best-effort notify the owner directly in Telegram too (in-app notification already happened inside the RPC)
+  // Best-effort owner delivery. The same helper sends both email and linked
+  // Telegram updates, while the RPC remains the source of truth.
   const { data: payment } = await ctx.db.from('payments').select('business_id').eq('id', paymentId).maybeSingle()
   if (payment?.business_id) {
-    const { data: ownerLink } = await ctx.db.from('business_telegram_links').select('telegram_chat_id').eq('business_id', payment.business_id).not('telegram_chat_id', 'is', null).maybeSingle()
-    if (ownerLink?.telegram_chat_id) {
-      const ownerText = action === 'approve'
-        ? '\uD83C\uDF89 Your payment was approved! Your subscription is now active.'
-        : 'Your payment was rejected. Check your dashboard\u2019s Billing page for details, or resubmit.'
-      await ctx.tg.sendMessage(ownerLink.telegram_chat_id, ownerText).catch(() => {})
-    }
+    await notifyBusinessOwner(ctx.db, ctx.tg, payment.business_id, {
+      title: action === 'approve' ? 'Payment approved' : 'Payment rejected',
+      body: action === 'approve'
+        ? 'Your payment has been approved and your AbroBiz subscription is now active.'
+        : 'Your payment proof was rejected. Open Billing to review the reason and submit a new proof if needed.',
+      link: '/dashboard/billing',
+      telegramText: action === 'approve'
+        ? '\uD83C\uDF89 Your AbroBiz payment was approved. Your subscription is now active.'
+        : 'Your AbroBiz payment was rejected. Check Billing for details and resubmit if needed.',
+    }).catch(() => {})
   }
 }
 

@@ -23,6 +23,7 @@ const authenticatedFunctions = [
   '../send-announcement/index.ts',
   '../send-verification-email/index.ts',
   '../notify-payment-submitted/index.ts',
+  '../notify-payment-reviewed/index.ts',
   '../storage-upload/index.ts',
   '../storage-signed-url/index.ts',
   '../submit-payment/index.ts',

@@ -47,7 +47,7 @@ if (import.meta.main) {
       }
 
       const db = createAdminClient()
-      const tg = new TelegramClient(Deno.env.get('TELEGRAM_BOT_TOKEN') ?? '')
+      const tg = Deno.env.get('TELEGRAM_BOT_TOKEN') ? new TelegramClient(Deno.env.get('TELEGRAM_BOT_TOKEN')!) : null
       await notifyAdminsOfPayment(db, tg, paymentId)
 
       return json({ ok: true }, 200, req)

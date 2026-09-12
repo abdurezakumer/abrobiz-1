@@ -1,6 +1,7 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.45.4'
 import { createAdminClient } from '../_shared/db.ts'
 import { TelegramClient } from '../_shared/telegram.ts'
+import { notifyBusinessOwner } from '../_shared/ownerNotifications.ts'
 import { checkBearerSecret } from '../_shared/endpointSecurity.ts'
 import { readBoundedBody } from '../_shared/requestSecurity.ts'
 import { logFailure } from '../_shared/observability.ts'
@@ -13,6 +14,8 @@ export interface CronResult {
 /**
  * Two jobs in one pass, run daily:
  *  1. Flip trial/active subscriptions whose end_date has passed to 'expired'
+ *     and notify the owner. Public access is denied by the subscription-aware
+ *     entitlement function until payment is approved.
  *     and notify the owner. The storefront itself is NOT auto-unpublished —
  *     that's a deliberate choice (see SETUP.md); an admin can block a
  *     business manually if they want harder enforcement.
@@ -51,15 +54,22 @@ async function expireOverdueSubscriptions(db: SupabaseClient, tg: TelegramClient
     const ownerId = (sub as any).businesses?.owner_id
     const businessName = (sub as any).businesses?.name ?? 'Your business'
     if (ownerId) {
+      const title = 'Subscription expired'
+      const body = `${businessName}'s subscription has expired. Renew from Billing to bring your AbroBiz website back online.`
       await db.from('notifications').insert({
         user_id: ownerId,
         type: 'subscription_expired',
-        title: 'Subscription expired',
-        body: `${businessName}'s subscription has expired. Renew from Billing to keep your site current.`,
+        title,
+        body,
         link: '/dashboard/billing',
       })
+      await notifyBusinessOwner(db, tg, sub.business_id, {
+        title,
+        body,
+        link: '/dashboard/billing',
+        telegramText: `\u23F0 ${businessName}'s AbroBiz subscription has expired. Renew from Billing to bring your website back online, or send /pay here.`,
+      }, { ownerId, businessName }).catch(() => {})
     }
-    await notifyOwnerTelegram(db, tg, sub.business_id, `\u23F0 ${businessName}'s subscription just expired. Renew anytime from your dashboard\u2019s Billing page, or send /pay here.`)
   }
 
   return overdue.length
@@ -91,31 +101,25 @@ async function sendUpcomingExpiryReminders(db: SupabaseClient, tg: TelegramClien
     const ownerId = (sub as any).businesses?.owner_id
     const businessName = (sub as any).businesses?.name ?? 'Your business'
     if (ownerId) {
+      const title = 'Subscription ending soon'
+      const body = `${businessName}'s subscription ends in 3 days. Renew now to avoid interrupting your AbroBiz website.`
       await db.from('notifications').insert({
         user_id: ownerId,
         type: 'subscription_reminder',
-        title: 'Subscription ending soon',
-        body: `${businessName}'s subscription ends in 3 days. Renew from Billing to avoid interruption.`,
+        title,
+        body,
         link: '/dashboard/billing',
       })
+      await notifyBusinessOwner(db, tg, sub.business_id, {
+        title,
+        body,
+        link: '/dashboard/billing',
+        telegramText: `\u23F3 Heads up - ${businessName}'s AbroBiz subscription ends in 3 days. Renew from your dashboard, or send /pay here anytime.`,
+      }, { ownerId, businessName }).catch(() => {})
     }
-    await notifyOwnerTelegram(db, tg, sub.business_id, `\u23F3 Heads up \u2014 ${businessName}'s subscription ends in 3 days. Renew from your dashboard, or send /pay here anytime.`)
   }
 
   return soonToExpire.length
-}
-
-async function notifyOwnerTelegram(db: SupabaseClient, tg: TelegramClient | null, businessId: string, text: string): Promise<void> {
-  if (!tg) return
-  const { data: link } = await db
-    .from('business_telegram_links')
-    .select('telegram_chat_id')
-    .eq('business_id', businessId)
-    .not('telegram_chat_id', 'is', null)
-    .maybeSingle()
-  if (link?.telegram_chat_id) {
-    await tg.sendMessage(link.telegram_chat_id, text).catch(() => {})
-  }
 }
 
 function addDays(isoDate: string, days: number): string {

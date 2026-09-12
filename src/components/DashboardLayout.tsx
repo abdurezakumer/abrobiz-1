@@ -416,6 +416,15 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
               </div>
             </div>
           )}
+          {subscription && subscription.status !== 'expired' && days !== null && days >= 0 && days <= 3 && location.pathname !== '/dashboard/billing' && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', background: 'linear-gradient(100deg, rgba(212,168,83,0.16), rgba(255,255,255,0.92))', border: '1px solid rgba(212,168,83,0.34)', borderRadius: 14, padding: '12px 16px', marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#6B4F12', fontSize: 13.5 }}>
+                <Bell size={16} color="#B17E13" />
+                Your {subscription.status === 'trial' ? 'free trial' : 'subscription'} ends in {days} day{days === 1 ? '' : 's'}. Keep your website live by renewing today.
+              </div>
+              <Link to="/dashboard/billing" style={{ color: '#0A0C10', background: '#D4A853', padding: '8px 13px', borderRadius: 9, fontSize: 12.5, fontWeight: 700, textDecoration: 'none', whiteSpace: 'nowrap' }}>View plans</Link>
+            </div>
+          )}
           {children}
         </motion.main>
       </div>

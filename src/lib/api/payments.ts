@@ -178,9 +178,11 @@ export async function adminListAllPayments(): Promise<Payment[]> {
 export async function adminApprovePayment(paymentId: string): Promise<void> {
   const { error } = await supabase.rpc('admin_approve_payment', { p_payment_id: paymentId })
   if (error) throw error
+  await supabase.functions.invoke('notify-payment-reviewed', { body: { paymentId, action: 'approved' } }).catch(() => {})
 }
 
 export async function adminRejectPayment(paymentId: string, reason: string): Promise<void> {
   const { error } = await supabase.rpc('admin_reject_payment', { p_payment_id: paymentId, p_reason: reason })
   if (error) throw error
+  await supabase.functions.invoke('notify-payment-reviewed', { body: { paymentId, action: 'rejected' } }).catch(() => {})
 }

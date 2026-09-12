@@ -261,7 +261,7 @@ Apply the plan-price migration before testing the new prices:
 supabase db push
 ```
 
-It keeps the free trial unchanged and sets Basic to 1000 ETB/month, Business
+It keeps the seven-day free trial and sets Basic to 1000 ETB/month, Business
 to 1500 ETB/month, and Premium to 2000 ETB/month. The Admin → Settings → Plans
 screen remains the source of truth for later plan changes.
 
@@ -356,13 +356,11 @@ select cron.schedule(
 ```
 
 What it does daily: flips any trial/active subscription past its `end_date`
-to `expired` (in-app + Telegram notification to the owner), and sends a
-one-time reminder to anyone expiring in exactly 3 days. **It does not
-unpublish the storefront on expiry** — that's a deliberate choice, since
-enforcement should probably be a human decision given payments are reviewed
-manually, not an automatic one. If you'd rather it auto-unpublish, that's a
-small change to `supabase/functions/subscription-cron/index.ts` — say the
-word and I'll add it.
+to `expired`, blocks the public website through the subscription-aware access
+check, and sends the owner an in-app, AbroBiz email, and linked Telegram
+notification. It also sends a one-time reminder to anyone expiring in exactly
+3 days. After an admin approves payment, the subscription becomes active and
+the website becomes available again automatically.
 
 Tests: `cd app/supabase/functions && deno test --node-modules-dir=none _shared/cron_test.ts`
 

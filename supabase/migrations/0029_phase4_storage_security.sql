@@ -23,13 +23,13 @@ create policy "payment_proofs_owner_or_admin_read" on storage.objects
   for select using (
     bucket_id = 'payment-proofs'
     and array_length(storage.foldername(storage.objects.name), 1) = 1
-    and storage.foldername(storage.objects.name)[1] ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+    and (storage.foldername(storage.objects.name))[1] ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
     and storage.filename(storage.objects.name) ~ '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'
     and (
       public.is_admin()
       or exists (
         select 1 from public.businesses b
-        where b.id::text = storage.foldername(storage.objects.name)[1]
+        where b.id::text = (storage.foldername(storage.objects.name))[1]
           and b.owner_id = auth.uid()
       )
     )
@@ -45,7 +45,7 @@ create policy "logos_public_read" on storage.objects
   for select using (
     bucket_id = 'logos'
     and array_length(storage.foldername(storage.objects.name), 1) = 1
-    and storage.foldername(storage.objects.name)[1] ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+    and (storage.foldername(storage.objects.name))[1] ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
     and storage.filename(storage.objects.name) ~ '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'
   );
 
@@ -53,7 +53,7 @@ create policy "covers_public_read" on storage.objects
   for select using (
     bucket_id = 'covers'
     and array_length(storage.foldername(storage.objects.name), 1) = 1
-    and storage.foldername(storage.objects.name)[1] ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+    and (storage.foldername(storage.objects.name))[1] ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
     and storage.filename(storage.objects.name) ~ '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'
   );
 
@@ -61,7 +61,7 @@ create policy "item_images_public_read" on storage.objects
   for select using (
     bucket_id = 'item-images'
     and array_length(storage.foldername(storage.objects.name), 1) = 1
-    and storage.foldername(storage.objects.name)[1] ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+    and (storage.foldername(storage.objects.name))[1] ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
     and storage.filename(storage.objects.name) ~ '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'
   );
 

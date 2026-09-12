@@ -74,7 +74,7 @@ export async function isSlugAvailable(slug: string): Promise<boolean> {
   return !data
 }
 
-/** Creates the business row + its 14-day trial subscription atomically via RPC. */
+/** Creates the business row + its seven-day trial subscription atomically via RPC. */
 export async function createBusinessWithTrial(input: { name: string; slug: string; categoryId: string }): Promise<Business> {
   const { data, error } = await supabase.rpc('create_business_with_trial', {
     p_name: input.name,
@@ -155,10 +155,10 @@ export async function trackPageView(businessId: string, path: string): Promise<v
   })
 }
 
-export async function getBusinessEntitlements(businessId: string): Promise<{ bookings: boolean; ordering: boolean; reviews: boolean }> {
+export async function getBusinessEntitlements(businessId: string): Promise<{ bookings: boolean; ordering: boolean; reviews: boolean; siteActive: boolean }> {
   const { data, error } = await supabase.rpc('get_business_entitlements', { p_business_id: businessId })
   if (error) throw error
-  return { bookings: !!data?.bookings, ordering: !!data?.ordering, reviews: !!data?.reviews }
+  return { bookings: !!data?.bookings, ordering: !!data?.ordering, reviews: !!data?.reviews, siteActive: data?.siteActive !== false }
 }
 
 // ── Admin ────────────────────────────────────────────────────────────────
