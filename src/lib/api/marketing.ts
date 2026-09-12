@@ -1,6 +1,8 @@
 import { supabase } from '../supabaseClient'
 import type { AdminRole, Profile } from '../../types'
 
+const formatMoney = (value: number) => `${Math.round(value).toLocaleString()} ETB`
+
 export interface MarketingCustomer {
   attributionId: string
   ownerId: string
@@ -18,6 +20,13 @@ export interface MarketingCustomer {
   planName: string
   amountRequired: number
   paidAmount: number
+  paymentId: string | null
+  paymentCreatedAt: string | null
+  paymentUpdatedAt: string | null
+  daysPending: number
+  lastReminderAt: string | null
+  salesPersonName: string | null
+  marketingAdminName: string | null
 }
 
 export interface MarketingLedgerEntry {
@@ -33,6 +42,15 @@ export interface MarketingLedgerEntry {
   createdAt: string
 }
 
+export interface MarketingActivity {
+  id: string
+  kind: 'attribution' | 'commission'
+  title: string
+  description: string
+  ownerId: string | null
+  createdAt: string
+}
+
 export interface MarketingSummary {
   customers: number
   paidCustomers: number
@@ -41,11 +59,18 @@ export interface MarketingSummary {
   commissionTotal: number
   commissionPending: number
   commissionPaid: number
+  activeCustomers: number
+  conversionRate: number
+  myCommission: number
+  teamCommission: number
+  pendingCommission: number
+  paidCommission: number
 }
 
 export interface MarketingWorkspace {
   customers: MarketingCustomer[]
   ledger: MarketingLedgerEntry[]
+  activity: MarketingActivity[]
   summary: MarketingSummary
   team: Array<{ id: string; name: string; email: string; platformId: string; role: AdminRole }>
   managedSalesIds: string[]
@@ -88,7 +113,7 @@ export async function getMarketingWorkspace(profile: Profile): Promise<Marketing
 
   const businessIds = (businessRows ?? []).map((row: any) => row.id)
   const { data: paymentRows, error: paymentError } = businessIds.length
-    ? await supabase.from('payments').select('id, business_id, plan_id, amount_etb, status, plans(name, price_etb)').in('business_id', businessIds).order('created_at', { ascending: false }).limit(2000)
+    ? await supabase.from('payments').select('id, business_id, plan_id, amount_etb, status, created_at, updated_at, plans(name, price_etb)').in('business_id', businessIds).order('created_at', { ascending: false }).limit(2000)
     : { data: [], error: null }
   if (paymentError) throw paymentError
 
@@ -97,8 +122,15 @@ export async function getMarketingWorkspace(profile: Profile): Promise<Marketing
     : { data: [], error: null }
   if (ledgerError) throw ledgerError
 
+  const attributionIds = attributions.map((row: any) => row.id)
+  const { data: eventRows, error: eventError } = attributionIds.length
+    ? await supabase.from('marketing_attribution_events').select('id, owner_id, reason, created_at, new_sales_person_id, new_marketing_admin_id').in('attribution_id', attributionIds).order('created_at', { ascending: false }).limit(500)
+    : { data: [], error: null }
+  if (eventError) throw eventError
+
   const ownerById = new Map((ownerRows ?? []).map((row: any) => [row.id, row]))
   const businessByOwner = new Map((businessRows ?? []).map((row: any) => [row.owner_id, row]))
+  const teamById = new Map((teamRows ?? []).map((row: any) => [row.id, row]))
   const paymentsByBusiness = new Map<string, any[]>()
   for (const payment of paymentRows ?? []) paymentsByBusiness.set(payment.business_id, [...(paymentsByBusiness.get(payment.business_id) ?? []), payment])
 
@@ -109,6 +141,9 @@ export async function getMarketingWorkspace(profile: Profile): Promise<Marketing
     const approved = payments.find(payment => payment.status === 'approved')
     const pending = payments.find(payment => payment.status === 'pending')
     const latest = approved ?? pending ?? payments[0]
+    const submittedAmount = Number(latest?.amount_etb ?? 0)
+    const pendingSince = latest?.created_at ?? row.attributed_at
+    const daysPending = Math.max(0, Math.floor((Date.now() - new Date(pendingSince).getTime()) / 86400000))
     return {
       attributionId: row.id,
       ownerId: row.owner_id,
@@ -125,7 +160,14 @@ export async function getMarketingWorkspace(profile: Profile): Promise<Marketing
       paymentStatus: approved ? 'approved' : pending ? 'pending' : latest?.status ?? 'unpaid',
       planName: latest?.plans?.name ?? 'No plan selected',
       amountRequired: Number(latest?.plans?.price_etb ?? 0),
-      paidAmount: approved ? Number(approved.amount_etb ?? 0) : 0,
+      paidAmount: submittedAmount,
+      paymentId: latest?.id ?? null,
+      paymentCreatedAt: latest?.created_at ?? null,
+      paymentUpdatedAt: latest?.updated_at ?? null,
+      daysPending,
+      lastReminderAt: null,
+      salesPersonName: row.sales_person_id ? teamById.get(row.sales_person_id)?.name ?? null : null,
+      marketingAdminName: row.marketing_admin_id ? teamById.get(row.marketing_admin_id)?.name ?? null : null,
     }
   })
 
@@ -142,6 +184,30 @@ export async function getMarketingWorkspace(profile: Profile): Promise<Marketing
     createdAt: row.created_at,
   }))
   const partnerLedger = ledger.filter(entry => entry.recipientType !== 'abrobiz' && entry.entryType === 'original')
+  const myLedger = profile.adminRole === 'sales_person'
+    ? partnerLedger.filter(entry => entry.recipientType === 'sales_person')
+    : profile.adminRole === 'marketing_admin'
+      ? partnerLedger.filter(entry => entry.recipientType === 'marketing_admin')
+      : partnerLedger
+  const teamLedger = profile.adminRole === 'marketing_admin' ? partnerLedger.filter(entry => entry.recipientType === 'sales_person') : []
+  const activity: MarketingActivity[] = [
+    ...(eventRows ?? []).map((row: any) => ({
+      id: `attribution-${row.id}`,
+      kind: 'attribution' as const,
+      title: row.new_sales_person_id ? 'Referral attribution recorded' : 'Direct registration recorded',
+      description: row.reason || 'An owner attribution was recorded.',
+      ownerId: row.owner_id ?? null,
+      createdAt: row.created_at,
+    })),
+    ...ledger.map(entry => ({
+      id: `commission-${entry.id}`,
+      kind: 'commission' as const,
+      title: entry.entryType === 'reversal' ? 'Commission reversed' : 'Commission generated',
+      description: `${entry.recipientType.replace('_', ' ')} · ${formatMoney(entry.amountEtb)} · ${entry.status}`,
+      ownerId: entry.ownerId,
+      createdAt: entry.createdAt,
+    })),
+  ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
   const activeMemberships = membershipRows ?? []
   const managedSalesIds = profile.adminRole === 'marketing_admin'
     ? activeMemberships.filter((row: any) => row.marketing_admin_id === profile.id).map((row: any) => row.sales_person_id)
@@ -153,6 +219,7 @@ export async function getMarketingWorkspace(profile: Profile): Promise<Marketing
   return {
     customers,
     ledger,
+    activity,
     summary: {
       customers: customers.length,
       paidCustomers: customers.filter(customer => customer.paymentStatus === 'approved').length,
@@ -161,6 +228,12 @@ export async function getMarketingWorkspace(profile: Profile): Promise<Marketing
       commissionTotal: partnerLedger.reduce((sum, entry) => sum + entry.amountEtb, 0),
       commissionPending: partnerLedger.filter(entry => ['pending', 'calculated', 'eligible'].includes(entry.status)).reduce((sum, entry) => sum + entry.amountEtb, 0),
       commissionPaid: partnerLedger.filter(entry => entry.status === 'paid').reduce((sum, entry) => sum + entry.amountEtb, 0),
+      activeCustomers: customers.filter(customer => customer.paymentStatus === 'approved').length,
+      conversionRate: customers.length ? Math.round((customers.filter(customer => customer.paymentStatus === 'approved').length / customers.length) * 100) : 0,
+      myCommission: myLedger.reduce((sum, entry) => sum + entry.amountEtb, 0),
+      teamCommission: teamLedger.reduce((sum, entry) => sum + entry.amountEtb, 0),
+      pendingCommission: myLedger.filter(entry => ['pending', 'calculated', 'eligible'].includes(entry.status)).reduce((sum, entry) => sum + entry.amountEtb, 0),
+      paidCommission: myLedger.filter(entry => entry.status === 'paid').reduce((sum, entry) => sum + entry.amountEtb, 0),
     },
     team: (teamRows ?? []).map((row: any) => ({ id: row.id, name: row.name || 'Unnamed', email: row.email || '—', platformId: row.platform_id || '—', role: row.admin_role })),
     managedSalesIds,
