@@ -71,6 +71,18 @@ if (import.meta.main) {
       const db = createAdminClient()
       const { data: business } = await db.from('businesses').select('id').eq('id', businessId).eq('owner_id', userData.user.id).maybeSingle()
       if (!business) return json({ error: 'Not found or not authorized.' }, 403, req)
+      // The selected plan is the financial source of truth. Never trust a
+      // client-supplied deposit or partial amount; every submission must
+      // cover the complete active plan price for the selected interval.
+      const { data: selectedPlan } = await db
+        .from('plans')
+        .select('id, price_etb, billing_interval, is_active, is_trial')
+        .eq('id', planId)
+        .maybeSingle()
+      const fullPlanAmount = Number(selectedPlan?.price_etb)
+      if (!selectedPlan?.is_active || selectedPlan.is_trial || selectedPlan.billing_interval !== billingCycle || !Number.isFinite(fullPlanAmount)) {
+        return json({ error: 'The selected payment plan is no longer available at that price. Please choose the plan again.' }, 400, req)
+      }
       const proofName = proofMatch?.[2] ?? ''
       const { data: proofObjects, error: proofLookupError } = await db.storage
         .from('payment-proofs')
@@ -84,8 +96,8 @@ if (import.meta.main) {
         p_idempotency_key: idempotencyKey,
         p_business_id: businessId,
         p_plan_id: planId,
-        p_billing_cycle: billingCycle,
-        p_amount_etb: amountEtb,
+        p_billing_cycle: selectedPlan.billing_interval,
+        p_amount_etb: fullPlanAmount,
         p_payment_method_id: paymentMethodId,
         p_proof_url: proofPath,
         p_owner_note: ownerNote,

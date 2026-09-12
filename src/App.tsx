@@ -14,6 +14,7 @@ const Login = lazy(() => import('./pages/Login'))
 const VerifyEmail = lazy(() => import('./pages/VerifyEmail'))
 const ResetPassword = lazy(() => import('./pages/ResetPassword'))
 const LegalAcceptance = lazy(() => import('./pages/LegalAcceptance'))
+const MarketingPolicy = lazy(() => import('./pages/MarketingPolicy'))
 const SetupWizard = lazy(() => import('./pages/SetupWizard'))
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const CatalogEditor = lazy(() => import('./pages/CatalogEditor'))
@@ -32,6 +33,7 @@ const AdminSettings = lazy(() => import('./pages/admin/AdminSettings'))
 const AdminAnnouncements = lazy(() => import('./pages/admin/AdminAnnouncements'))
 const AdminUsers = lazy(() => import('./pages/admin/AdminUsers'))
 const AdminTelegram = lazy(() => import('./pages/admin/AdminTelegram'))
+const AdminMarketing = lazy(() => import('./pages/admin/AdminMarketing'))
 const AdminManagement = lazy(() => import('./pages/admin/AdminManagement'))
 const AdminAudit = lazy(() => import('./pages/admin/AdminAudit'))
 const TemplateDemo = lazy(() => import('./pages/TemplateDemo'))
@@ -57,6 +59,7 @@ export default function App() {
         <Route path="/book" element={<HostStorefront page={<StorefrontHome />} />} />
         <Route path="/verify-email" element={<VerifyEmail />} />
         <Route path="/legal-acceptance" element={<RequireAuth><LegalAcceptance /></RequireAuth>} />
+        <Route path="/marketing-policy" element={<RequireAuth><MarketingPolicy /></RequireAuth>} />
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/terms" element={<Terms />} />
         <Route path="/privacy" element={<Privacy />} />
@@ -88,6 +91,7 @@ export default function App() {
         <Route path="/admin" element={<RequireAdmin><AdminOverview /></RequireAdmin>} />
         <Route path="/admin/users" element={<RequireAdminPermission permission="users.read"><AdminUsers /></RequireAdminPermission>} />
         <Route path="/admin/telegram" element={<RequireAdminPermission permission="dashboard.read"><AdminTelegram /></RequireAdminPermission>} />
+        <Route path="/admin/marketing" element={<RequireAdminPermission permission="marketing.read"><AdminMarketing /></RequireAdminPermission>} />
         <Route path="/admin/businesses" element={<RequireAdminPermission permission="businesses.read"><AdminBusinesses /></RequireAdminPermission>} />
         <Route path="/admin/payments" element={<RequireAdminPermission permission="payments.read"><AdminPayments /></RequireAdminPermission>} />
         <Route path="/admin/settings" element={<RequireAdminPermission permission="templates.manage"><AdminSettings /></RequireAdminPermission>} />

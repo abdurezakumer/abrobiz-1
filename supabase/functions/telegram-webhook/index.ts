@@ -388,10 +388,12 @@ async function handleMethodSelected(chatId: string, methodId: string, ctx: Ctx):
 
   const { data: method } = await ctx.db.from('payment_methods').select('name, account_name, account_number, instructions').eq('id', methodId).single()
   if (!method) return
+  const { data: plan } = await ctx.db.from('plans').select('name, price_etb, billing_interval').eq('id', pending.plan_id).eq('is_active', true).eq('is_trial', false).single()
 
   const text = [
     `Send payment via ${method.name}:`,
     `${method.account_name} \u2014 ${method.account_number}`,
+    plan ? `Full payment required: ${plan.price_etb} ETB/${plan.billing_interval}` : 'Send the complete amount shown in your Billing page.',
     method.instructions,
     '',
     'Then send a photo of your receipt/screenshot right here.',

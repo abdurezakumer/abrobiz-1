@@ -284,7 +284,7 @@ export default function Billing() {
       ) : (
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} style={{ background: '#fff', borderRadius: 16, border: '1.5px solid #D4A853', padding: 22, marginBottom: 30 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <div style={{ fontSize: 15, fontWeight: 600 }}>Pay for {selectedPlan.name} — {selectedPlan.priceEtb} ETB</div>
+            <div style={{ fontSize: 15, fontWeight: 600 }}>Full payment for {selectedPlan.name} — {selectedPlan.priceEtb} ETB</div>
             <button onClick={() => setSelectedPlan(null)} style={{ background: 'none', border: 'none', fontSize: 13, color: 'rgba(10,12,16,0.5)', cursor: 'pointer' }}>Cancel</button>
           </div>
 
@@ -311,7 +311,7 @@ export default function Billing() {
               <div><strong>{selectedMethod.accountName}</strong> — {selectedMethod.accountNumber}</div>
               <div style={{ color: 'rgba(10,12,16,0.55)', marginTop: 4 }}>{selectedMethod.instructions}</div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', marginTop: 12 }}>
-                <span style={secureBadge}>Send the exact amount</span>
+                <span style={secureBadge}>Full plan payment required</span>
                 <button type="button" onClick={() => void copyAccountNumber(selectedMethod)} style={copyBtn} aria-label={`Copy ${selectedMethod.name} account number`}>
                   {copiedAccountId === selectedMethod.id ? <CheckCheck size={14} /> : <Copy size={14} />}
                   {copiedAccountId === selectedMethod.id ? 'Copied' : 'Copy account number'}

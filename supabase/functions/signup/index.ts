@@ -30,12 +30,14 @@ if (import.meta.main) {
       const password = body.password
       const name = typeof body.name === 'string' ? body.name.trim() : ''
       const phone = typeof body.phone === 'string' ? body.phone.trim() : ''
+      const referralCode = typeof body.referralCode === 'string' ? body.referralCode.trim().toUpperCase() : ''
 
       if (!email || email.length > 254 || !/^\S+@\S+\.\S+$/.test(email)) return json({ error: 'Enter a valid email address.' }, 400, req)
       if (!body?.termsAccepted || !body?.privacyAccepted) return json({ error: 'Accept the Terms of Service and Privacy Policy to continue.' }, 400, req)
       const passwordCheck = validatePassword(password)
       if (!passwordCheck.valid) return json({ error: passwordCheck.error }, 400, req)
       if (!name || name.length > 120 || !phone || phone.length > 40) return json({ error: 'Enter your name and phone number.' }, 400, req)
+      if (referralCode && !/^[A-Z0-9][A-Z0-9_-]{2,31}$/.test(referralCode)) return json({ error: 'Enter a valid referral code or leave it blank.' }, 400, req)
 
       const limited = await enforceRateLimits(req, [
         { scope: 'signup-ip', limit: 10, windowSeconds: 900 },
@@ -60,7 +62,7 @@ if (import.meta.main) {
         const response = await fetch(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/admin/generate_link`, {
           method: 'POST',
           headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ type: 'signup', email, password, data: { name, phone }, redirect_to: redirectTo }),
+          body: JSON.stringify({ type: 'signup', email, password, data: { name, phone, ...(referralCode ? { referral_code: referralCode } : {}) }, redirect_to: redirectTo }),
         })
         const payload = await response.json().catch(() => ({})) as Record<string, any>
         code = typeof payload.email_otp === 'string' ? payload.email_otp : ''
@@ -74,7 +76,7 @@ if (import.meta.main) {
           type: 'signup',
           email,
           password,
-          options: { data: { name, phone }, redirectTo },
+          options: { data: { name, phone, ...(referralCode ? { referral_code: referralCode } : {}) }, redirectTo },
         })
         code = generated.data?.properties?.email_otp ?? ''
         user = generated.data?.user?.id ? { id: generated.data.user.id, email: generated.data.user.email } : null

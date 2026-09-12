@@ -1,7 +1,7 @@
 export type Language = 'en' | 'am' | 'or'
 export type TemplateSlug = string
 export type Role = 'admin' | 'super_admin' | 'owner'
-export type AdminRole = 'none' | 'super_admin' | 'operations' | 'support' | 'finance' | 'content'
+export type AdminRole = 'none' | 'super_admin' | 'operations' | 'support' | 'finance' | 'content' | 'marketing_admin' | 'sales_person'
 export type StorefrontVisualStyle = 'minimal' | 'grid' | 'warm' | 'aurora' | 'luxury' | 'heritage'
 
 export interface TemplateConfig {
@@ -53,6 +53,8 @@ export interface Profile {
   termsAcceptedAt?: string | null
   privacyAcceptedAt?: string | null
   legalVersion?: string | null
+  marketingPolicyAcceptedAt?: string | null
+  marketingPolicyVersion?: string | null
 }
 
 export interface BusinessCategory {

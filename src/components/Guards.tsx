@@ -6,6 +6,12 @@ import { daysRemaining } from '../lib/api/subscriptions'
 import SubscriptionExpiredGate from './SubscriptionExpiredGate'
 import { hasAdminPermission, type AdminPermission } from '../lib/api/adminControl'
 
+const MARKETING_POLICY_VERSION = '2026-09'
+
+function needsMarketingPolicy(profile: ReturnType<typeof useAuth>['profile']) {
+  return Boolean(profile && ['marketing_admin', 'sales_person'].includes(profile.adminRole) && profile.marketingPolicyVersion !== MARKETING_POLICY_VERSION)
+}
+
 function FullScreenSpinner() {
   return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0A0C10' }}>
@@ -85,6 +91,7 @@ export function RequireAdmin({ children }: { children: ReactNode }) {
   if (profile && !profile.emailVerifiedAt) return <Navigate to={'/verify-email?email=' + encodeURIComponent(session.user.email ?? '')} state={{ from: { pathname: safeInternalPath(location.pathname) } }} replace />
   if (profile && (!profile.termsAcceptedAt || !profile.privacyAcceptedAt || profile.legalVersion !== '2026-01')) return <Navigate to="/legal-acceptance" state={{ from: location }} replace />
   if (profile?.role !== 'admin' && profile?.role !== 'super_admin') return <Navigate to="/dashboard" replace />
+  if (needsMarketingPolicy(profile) && location.pathname !== '/marketing-policy') return <Navigate to="/marketing-policy" state={{ from: location }} replace />
   return <>{children}</>
 }
 
@@ -95,6 +102,7 @@ export function RequireAdminPermission({ permission, children }: { permission: A
   if (!session) return <Navigate to="/login" state={{ from: location }} replace />
   if (profile && !profile.emailVerifiedAt) return <Navigate to={'/verify-email?email=' + encodeURIComponent(session.user.email ?? '')} replace />
   if (profile && (!profile.termsAcceptedAt || !profile.privacyAcceptedAt || profile.legalVersion !== '2026-01')) return <Navigate to="/legal-acceptance" replace />
+  if (needsMarketingPolicy(profile) && location.pathname !== '/marketing-policy') return <Navigate to="/marketing-policy" state={{ from: location }} replace />
   if (!hasAdminPermission(profile, permission)) return <Navigate to="/admin" replace />
   return <>{children}</>
 }

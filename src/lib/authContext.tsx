@@ -37,7 +37,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSubscription(null)
     const { data: profileRow, error: profileError } = await supabase
       .from('profiles')
-      .select('id, role, platform_id, admin_role, name, phone, email_verified_at, terms_accepted_at, privacy_accepted_at, legal_version')
+      .select('id, role, platform_id, admin_role, name, phone, email_verified_at, terms_accepted_at, privacy_accepted_at, legal_version, marketing_policy_accepted_at, marketing_policy_version')
       .eq('id', s.user.id)
       .single()
 
@@ -54,6 +54,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         termsAcceptedAt: profileRow.terms_accepted_at ?? null,
         privacyAcceptedAt: profileRow.privacy_accepted_at ?? null,
         legalVersion: profileRow.legal_version ?? null,
+        marketingPolicyAcceptedAt: profileRow.marketing_policy_accepted_at ?? null,
+        marketingPolicyVersion: profileRow.marketing_policy_version ?? null,
       })
     } else if (profileError) {
       // Keep existing sessions readable during the migration rollout. The
@@ -73,6 +75,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           phone: legacyProfile.phone,
           email: s.user.email ?? undefined,
           emailVerifiedAt: legacyProfile.email_verified_at ?? null,
+          marketingPolicyAcceptedAt: null,
+          marketingPolicyVersion: null,
         })
       } else {
         setProfile(null)
@@ -122,7 +126,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, role, platform_id, admin_role, name, phone, email_verified_at, terms_accepted_at, privacy_accepted_at, legal_version')
+      .select('id, role, platform_id, admin_role, name, phone, email_verified_at, terms_accepted_at, privacy_accepted_at, legal_version, marketing_policy_accepted_at, marketing_policy_version')
       .eq('id', currentSession.user.id)
       .single()
 
@@ -139,6 +143,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       termsAcceptedAt: data.terms_accepted_at ?? null,
       privacyAcceptedAt: data.privacy_accepted_at ?? null,
       legalVersion: data.legal_version ?? null,
+      marketingPolicyAcceptedAt: data.marketing_policy_accepted_at ?? null,
+      marketingPolicyVersion: data.marketing_policy_version ?? null,
     } : null)
   }, [])
 

@@ -16,9 +16,10 @@ export async function signUp(
   termsAccepted: boolean,
   privacyAccepted: boolean,
   turnstileToken?: string | null,
+  referralCode?: string | null,
 ) {
   const { data, error } = await supabase.functions.invoke('signup', {
-    body: { email, password, name, phone, termsAccepted, privacyAccepted, ...(turnstileToken ? { turnstileToken } : {}) },
+    body: { email, password, name, phone, termsAccepted, privacyAccepted, ...(turnstileToken ? { turnstileToken } : {}), ...(referralCode?.trim() ? { referralCode: referralCode.trim() } : {}) },
   })
   if (error) throw await edgeFunctionError(error)
   return data as { session: import('@supabase/supabase-js').Session | null; user: { id: string; email?: string } | null; requiresVerification?: boolean; otpLength?: number }

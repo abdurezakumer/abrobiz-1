@@ -9,6 +9,7 @@ import { logFailure } from '../_shared/observability.ts'
 export interface CronResult {
   expiredCount: number
   reminderCount: number
+  marketingReminderCount: number
 }
 
 /**
@@ -27,8 +28,9 @@ export async function runSubscriptionCron(db: SupabaseClient, tg: TelegramClient
 
   const expiredCount = await expireOverdueSubscriptions(db, tg, today)
   const reminderCount = await sendUpcomingExpiryReminders(db, tg, today)
+  const marketingReminderCount = await sendMarketingPaymentReminders(db, tg, today)
 
-  return { expiredCount, reminderCount }
+  return { expiredCount, reminderCount, marketingReminderCount }
 }
 
 async function expireOverdueSubscriptions(db: SupabaseClient, tg: TelegramClient | null, today: string): Promise<number> {
@@ -120,6 +122,54 @@ async function sendUpcomingExpiryReminders(db: SupabaseClient, tg: TelegramClien
   }
 
   return soonToExpire.length
+}
+
+/** Sends configurable follow-up messages to the attributed partner team when
+ * an owner has not yet made a full plan payment. The event insert is the
+ * idempotency guard, so a repeated cron invocation cannot spam recipients. */
+async function sendMarketingPaymentReminders(db: SupabaseClient, tg: TelegramClient | null, today: string): Promise<number> {
+  const { data: rules } = await db
+    .from('marketing_reminder_rules')
+    .select('id, days_after_registration, message')
+    .eq('is_active', true)
+    .limit(100)
+  const { data: attributions } = await db
+    .from('marketing_attributions')
+    .select('id, owner_id, sales_person_id, marketing_admin_id, attributed_at')
+    .limit(1000)
+  if (!rules || !attributions || attributions.length === 0) return 0
+
+  let sent = 0
+  for (const rule of rules) {
+    const targetDate = addDays(today, -Number(rule.days_after_registration ?? 0))
+    for (const attribution of attributions) {
+      if (String(attribution.attributed_at ?? '').slice(0, 10) !== targetDate) continue
+      const { data: business } = await db.from('businesses').select('id, name').eq('owner_id', attribution.owner_id).maybeSingle()
+      if (!business?.id) continue
+      const { data: approvedPayment } = await db.from('payments').select('id').eq('business_id', business.id).eq('status', 'approved').limit(1)
+      if (approvedPayment && approvedPayment.length > 0) continue
+
+      const { data: claimed, error: claimError } = await db
+        .from('marketing_reminder_events')
+        .insert({ attribution_id: attribution.id, reminder_rule_id: rule.id })
+        .select('id')
+        .maybeSingle()
+      if (claimError || !claimed) continue
+
+      const recipients = [...new Set([attribution.sales_person_id, attribution.marketing_admin_id].filter(Boolean))] as string[]
+      for (const recipientId of recipients) {
+        const title = 'Marketing payment follow-up'
+        const body = `${business.name ?? 'A business'} has not completed the full plan payment. ${rule.message ?? 'Please follow up with the owner.'}`
+        await db.from('notifications').insert({ user_id: recipientId, type: 'marketing_payment_reminder', title, body, link: '/admin/marketing' })
+        if (tg) {
+          const { data: link } = await db.from('admin_telegram_links').select('telegram_chat_id').eq('admin_id', recipientId).not('telegram_chat_id', 'is', null).maybeSingle()
+          if (link?.telegram_chat_id) await tg.sendMessage(link.telegram_chat_id, `🔔 ${title}\n\n${body}`).catch(() => {})
+        }
+      }
+      sent += 1
+    }
+  }
+  return sent
 }
 
 function addDays(isoDate: string, days: number): string {

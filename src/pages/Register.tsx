@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { ArrowLeft, Mail } from 'lucide-react'
 import { signUp, friendlyAuthError } from '../lib/authActions'
@@ -10,8 +10,10 @@ import { turnstileEnabled } from '../lib/turnstile'
 
 export default function Register() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
+  const [referralCode, setReferralCode] = useState(() => searchParams.get('ref')?.trim().toUpperCase() ?? '')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -38,7 +40,7 @@ export default function Register() {
     }
     setLoading(true)
     try {
-      const result = await signUp(email, password, name, phone, true, true, turnstileToken)
+      const result = await signUp(email, password, name, phone, true, true, turnstileToken, referralCode)
       // Supabase projects can use six-to-ten digit email OTPs. Carry the
       // active length to the verification screen so it matches the code sent
       // by AbroBiz's SMTP sender.
@@ -68,6 +70,7 @@ export default function Register() {
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <Field label="Full name"><input required value={name} onChange={e => setName(e.target.value)} style={inputStyle} placeholder="Abebe Kebede" /></Field>
             <Field label="Phone number"><input required value={phone} onChange={e => setPhone(e.target.value)} style={inputStyle} placeholder="09XXXXXXXX" /></Field>
+            <Field label="Referral code (optional)"><input value={referralCode} onChange={e => setReferralCode(e.target.value.toUpperCase())} style={inputStyle} placeholder="Enter a partner code if you were referred" maxLength={32} autoCapitalize="characters" /></Field>
             <Field label="Email"><input required type="email" value={email} onChange={e => setEmail(e.target.value)} style={inputStyle} placeholder="you@example.com" /></Field>
             <Field label="Password"><input required minLength={12} maxLength={128} type="password" value={password} onChange={e => setPassword(e.target.value)} style={inputStyle} placeholder="12+ characters with upper, lower, number and symbol" /></Field>
             {password && <div style={{ marginTop: -7, fontSize: 12, color: passwordCheckColor(passwordStrength(password)) }}>Password strength: {passwordStrength(password)}</div>}
