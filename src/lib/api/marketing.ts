@@ -123,10 +123,12 @@ export async function getMarketingWorkspace(profile: Profile): Promise<Marketing
   if (ledgerError) throw ledgerError
 
   const attributionIds = attributions.map((row: any) => row.id)
-  const { data: eventRows, error: eventError } = attributionIds.length
+  // Activity is supplementary to the workspace. Keep the customer, payment,
+  // and commission data available if an older deployment has not yet applied
+  // the activity read policy (or if that optional read is temporarily denied).
+  const { data: eventRows } = attributionIds.length
     ? await supabase.from('marketing_attribution_events').select('id, owner_id, reason, created_at, new_sales_person_id, new_marketing_admin_id').in('attribution_id', attributionIds).order('created_at', { ascending: false }).limit(500)
-    : { data: [], error: null }
-  if (eventError) throw eventError
+    : { data: [] }
 
   const ownerById = new Map((ownerRows ?? []).map((row: any) => [row.id, row]))
   const businessByOwner = new Map((businessRows ?? []).map((row: any) => [row.owner_id, row]))
