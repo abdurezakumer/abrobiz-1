@@ -161,6 +161,43 @@ export async function getBusinessEntitlements(businessId: string): Promise<{ boo
   return { bookings: !!data?.bookings, ordering: !!data?.ordering, reviews: !!data?.reviews, siteActive: data?.siteActive !== false }
 }
 
+export interface PublicShowcaseBusiness {
+  id: string
+  name: string
+  slug: string
+  description: string
+  logoUrl?: string
+  coverUrl?: string
+  templateSlug: string
+  accentColor: string
+  category: string
+  createdAt: string
+}
+
+/** Public, non-sensitive directory of live storefronts for the marketing site. */
+export async function listPublishedShowcaseBusinesses(limit = 60): Promise<PublicShowcaseBusiness[]> {
+  const { data, error } = await supabase
+    .from('businesses')
+    .select('id, name, slug, description, logo_url, cover_url, template_slug, accent_color, created_at, business_categories(label)')
+    .eq('is_published', true)
+    .eq('is_blocked', false)
+    .order('created_at', { ascending: false })
+    .limit(Math.min(Math.max(limit, 1), 100))
+  if (error) throw error
+  return (data ?? []).map((row: any) => ({
+    id: row.id,
+    name: row.name,
+    slug: row.slug,
+    description: row.description ?? '',
+    logoUrl: row.logo_url ?? undefined,
+    coverUrl: row.cover_url ?? undefined,
+    templateSlug: row.template_slug ?? 'clean-minimal',
+    accentColor: row.accent_color ?? '#D4A853',
+    category: row.business_categories?.label ?? 'Business',
+    createdAt: row.created_at,
+  }))
+}
+
 // ── Admin ────────────────────────────────────────────────────────────────
 
 export interface AdminBusinessRow extends Business {

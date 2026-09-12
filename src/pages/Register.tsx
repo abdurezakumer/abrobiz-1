@@ -16,8 +16,7 @@ export default function Register() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [termsAccepted, setTermsAccepted] = useState(false)
-  const [privacyAccepted, setPrivacyAccepted] = useState(false)
+  const [legalAccepted, setLegalAccepted] = useState(false)
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
   const [turnstileResetKey, setTurnstileResetKey] = useState(0)
 
@@ -29,7 +28,7 @@ export default function Register() {
       setError(passwordCheck.message ?? 'Choose a stronger password.')
       return
     }
-    if (!termsAccepted || !privacyAccepted) {
+    if (!legalAccepted) {
       setError('Please accept both the AbroBiz Terms of Service and Privacy Policy to continue.')
       return
     }
@@ -39,7 +38,7 @@ export default function Register() {
     }
     setLoading(true)
     try {
-      const result = await signUp(email, password, name, phone, termsAccepted, privacyAccepted, turnstileToken)
+      const result = await signUp(email, password, name, phone, true, true, turnstileToken)
       // Supabase projects can use six-to-ten digit email OTPs. Carry the
       // active length to the verification screen so it matches the code sent
       // by AbroBiz's SMTP sender.
@@ -74,12 +73,8 @@ export default function Register() {
             {password && <div style={{ marginTop: -7, fontSize: 12, color: passwordCheckColor(passwordStrength(password)) }}>Password strength: {passwordStrength(password)}</div>}
 
             <label style={checkLabelStyle}>
-              <input type="checkbox" checked={termsAccepted} onChange={e => setTermsAccepted(e.target.checked)} style={checkStyle} />
-              <span>I agree to the AbroBiz <Link to="/terms" target="_blank" style={linkStyle}>Terms of Service</Link>.</span>
-            </label>
-            <label style={checkLabelStyle}>
-              <input type="checkbox" checked={privacyAccepted} onChange={e => setPrivacyAccepted(e.target.checked)} style={checkStyle} />
-              <span>I agree to the AbroBiz <Link to="/privacy" target="_blank" style={linkStyle}>Privacy Policy</Link>.</span>
+              <input type="checkbox" checked={legalAccepted} onChange={e => setLegalAccepted(e.target.checked)} style={checkStyle} />
+              <span>I agree to the AbroBiz <Link to="/terms" target="_blank" style={linkStyle}>Terms of Service</Link> and <Link to="/privacy" target="_blank" style={linkStyle}>Privacy Policy</Link>.</span>
             </label>
 
             <TurnstileWidget action="signup" onToken={setTurnstileToken} resetKey={turnstileResetKey} />

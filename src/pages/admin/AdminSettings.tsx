@@ -1,9 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Plus, Check, X, Github, ExternalLink } from 'lucide-react'
 import AdminLayout from '../../components/AdminLayout'
-import TelegramConnectCard from '../../components/TelegramConnectCard'
-import { useAuth } from '../../lib/authContext'
-import { getOrCreateAdminTelegramLink, type TelegramLinkStatus } from '../../lib/api/telegram'
 import { adminListAllPlans, createPlan, updatePlan } from '../../lib/api/plans'
 import { listPaymentMethods, createPaymentMethod, updatePaymentMethod } from '../../lib/api/paymentMethods'
 import { listBusinessCategories, createBusinessCategory, updateBusinessCategory } from '../../lib/api/businessCategories'
@@ -16,20 +13,12 @@ import { friendlyError } from '../../lib/errors'
 type Tab = 'plans' | 'methods' | 'categories' | 'templates'
 
 export default function AdminSettings() {
-  const { profile } = useAuth()
   const [tab, setTab] = useState<Tab>('plans')
-  const [telegramLink, setTelegramLink] = useState<TelegramLinkStatus | null>(null)
-
-  useEffect(() => {
-    if (profile) getOrCreateAdminTelegramLink(profile.id).then(setTelegramLink).catch(() => {})
-  }, [profile])
 
   return (
     <AdminLayout>
       <h1 style={{ fontFamily: 'Outfit, sans-serif', fontSize: 24, fontWeight: 600, color: '#0A0C10', marginBottom: 4 }}>Settings</h1>
       <p style={{ color: 'rgba(10,12,16,0.5)', fontSize: 14, marginBottom: 20 }}>Configure pricing, payment methods, business verticals, and storefront templates.</p>
-
-      <TelegramConnectCard status={telegramLink} kind="admin" />
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
         {(['plans', 'methods', 'categories', 'templates'] as Tab[]).map(t => (

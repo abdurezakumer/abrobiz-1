@@ -10,15 +10,14 @@ export default function LegalAcceptance() {
   const navigate = useNavigate()
   const location = useLocation()
   const { refreshProfile } = useAuth()
-  const [terms, setTerms] = useState(false)
-  const [privacy, setPrivacy] = useState(false)
+  const [accepted, setAccepted] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
-    if (!terms || !privacy) {
-      setError('Please accept both documents to continue.')
+    if (!accepted) {
+      setError('Please accept the Terms of Service and Privacy Policy to continue.')
       return
     }
     setError('')
@@ -44,12 +43,8 @@ export default function LegalAcceptance() {
         <p style={mutedStyle}>Please review and accept the AbroBiz legal documents before creating or managing a business website.</p>
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 15 }}>
           <label style={{ ...checkLabelStyle, opacity: loading ? 0.65 : 1 }}>
-            <input type="checkbox" checked={terms} onChange={e => setTerms(e.target.checked)} disabled={loading} style={checkStyle} />
-            <span>I agree to the <a href="/terms" target="_blank" rel="noreferrer" style={linkStyle}>Terms of Service</a>.</span>
-          </label>
-          <label style={{ ...checkLabelStyle, opacity: loading ? 0.65 : 1 }}>
-            <input type="checkbox" checked={privacy} onChange={e => setPrivacy(e.target.checked)} disabled={loading} style={checkStyle} />
-            <span>I agree to the <a href="/privacy" target="_blank" rel="noreferrer" style={linkStyle}>Privacy Policy</a>.</span>
+            <input type="checkbox" checked={accepted} onChange={e => setAccepted(e.target.checked)} disabled={loading} style={checkStyle} />
+            <span>I have read and agree to the <a href="/terms" target="_blank" rel="noreferrer" style={linkStyle}>Terms of Service</a> and <a href="/privacy" target="_blank" rel="noreferrer" style={linkStyle}>Privacy Policy</a>.</span>
           </label>
           {error && <div role="alert" style={errorStyle}>{error}</div>}
           {loading && (

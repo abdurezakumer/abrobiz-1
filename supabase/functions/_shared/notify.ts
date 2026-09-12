@@ -12,10 +12,26 @@ export async function notifyAdminsOfPayment(db: SupabaseClient, tg: TelegramClie
 
   if (!payment) return
 
-  const { data: admins } = await db
+  const { data: linkedAdmins } = await db
     .from('admin_telegram_links')
-    .select('telegram_chat_id')
+    .select('telegram_chat_id, admin_id')
     .not('telegram_chat_id', 'is', null)
+
+  const { data: adminProfiles } = await db
+    .from('profiles')
+    .select('id, email, role, admin_role')
+    .in('role', ['admin', 'super_admin'])
+    .not('email', 'is', null)
+
+  // Payment alerts are operationally sensitive. Support/content admins can
+  // use their role-specific Telegram workspace, but should not receive or
+  // act on payment-review messages.
+  const paymentReviewerIds = new Set(
+    (adminProfiles ?? [])
+      .filter((profile: any) => profile.role === 'super_admin' || profile.admin_role === 'super_admin' || profile.admin_role === 'operations' || profile.admin_role === 'finance')
+      .map((profile: any) => profile.id),
+  )
+  const admins = (linkedAdmins ?? []).filter((admin: any) => paymentReviewerIds.has(admin.admin_id))
 
   let photoUrl: string | undefined
   if (payment.proof_url) {
@@ -35,12 +51,11 @@ export async function notifyAdminsOfPayment(db: SupabaseClient, tg: TelegramClie
   if (payment.owner_note) lines.push(`Note: ${payment.owner_note}`)
   const caption = lines.join('\n')
 
-  const { data: adminProfiles } = await db.from('profiles').select('email').in('role', ['admin', 'super_admin']).not('email', 'is', null)
   if (adminProfiles && adminProfiles.length > 0) {
     try {
       const sender = createSenderFromEnv(Deno.env)
       const html = `<h2>New payment awaiting review</h2><p><strong>${escapeHtml(businessName)}</strong></p><p>Plan: ${escapeHtml(planName)}<br>Amount: ${escapeHtml(String(payment.amount_etb))} ETB</p><p>Open AbroBiz Admin &rarr; Payments to review the proof.</p>`
-      for (const admin of adminProfiles) {
+      for (const admin of adminProfiles.filter((profile: any) => paymentReviewerIds.has(profile.id))) {
         if (!admin.email) continue
         await sendEmail(sender.sendMail, {
           from: sender.from,

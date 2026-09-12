@@ -217,6 +217,12 @@ async function handleStart(chatId: string, username: string | undefined, token: 
   const connectionToken = startsPayment ? token.slice(4) : token
   const { data: businessLink } = await ctx.db.from('business_telegram_links').select('id, business_id').eq('link_token', connectionToken).maybeSingle()
   if (businessLink) {
+    const { data: linkedBusiness } = await ctx.db.from('business_telegram_links').select('id').eq('telegram_chat_id', chatId).not('linked_at', 'is', null).neq('id', businessLink.id).maybeSingle()
+    const { data: linkedAdmin } = await ctx.db.from('admin_telegram_links').select('id').eq('telegram_chat_id', chatId).not('linked_at', 'is', null).maybeSingle()
+    if (linkedBusiness || linkedAdmin) {
+      await ctx.tg.sendMessage(chatId, 'This Telegram account is already connected to another AbroBiz account. Disconnect it there first, then try again.')
+      return
+    }
     await ctx.db
       .from('business_telegram_links')
       .update({ telegram_chat_id: chatId, telegram_username: username ?? null, linked_at: new Date().toISOString() })
@@ -233,6 +239,12 @@ async function handleStart(chatId: string, username: string | undefined, token: 
     ? await ctx.db.from('profiles').select('id').eq('id', adminLink.admin_id).in('role', ['admin', 'super_admin']).maybeSingle()
     : { data: null }
   if (adminLink && adminProfile) {
+    const { data: linkedBusiness } = await ctx.db.from('business_telegram_links').select('id').eq('telegram_chat_id', chatId).not('linked_at', 'is', null).maybeSingle()
+    const { data: linkedAdmin } = await ctx.db.from('admin_telegram_links').select('id').eq('telegram_chat_id', chatId).not('linked_at', 'is', null).neq('id', adminLink.id).maybeSingle()
+    if (linkedBusiness || linkedAdmin) {
+      await ctx.tg.sendMessage(chatId, 'This Telegram account is already connected to another AbroBiz account. Disconnect it there first, then try again.')
+      return
+    }
     await ctx.db
       .from('admin_telegram_links')
       .update({ telegram_chat_id: chatId, telegram_username: username ?? null, linked_at: new Date().toISOString() })

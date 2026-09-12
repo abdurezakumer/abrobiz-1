@@ -54,6 +54,14 @@ export async function getOrCreateAdminTelegramLink(adminId: string): Promise<Tel
   return { linkToken: created.link_token, telegramUsername: created.telegram_username, linkedAt: created.linked_at }
 }
 
+/** Disconnects the current account's Telegram chat and rotates its token so an
+ * old deep link cannot reconnect the account accidentally. The database RPC
+ * enforces that the caller owns the connection or is an administrator. */
+export async function disconnectTelegram(kind: 'business' | 'admin'): Promise<void> {
+  const { error } = await supabase.rpc('disconnect_telegram_connection', { p_kind: kind })
+  if (error) throw error
+}
+
 /** Fire-and-forget: pings linked admins on Telegram. The payment already exists either way. */
 export async function notifyAdminsOfPayment(paymentId: string): Promise<void> {
   try {

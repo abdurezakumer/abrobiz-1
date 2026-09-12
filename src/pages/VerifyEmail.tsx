@@ -106,7 +106,8 @@ export default function VerifyEmail() {
           <div style={{ textAlign: 'center', paddingTop: 25 }}>
             <CheckCircle2 size={38} color="#4ADE80" style={{ margin: '0 auto 16px' }} />
             <h1 style={headingStyle}>Email verified</h1>
-            <p style={mutedStyle}>Your AbroBiz account is ready.</p>
+            <p style={mutedStyle}>Your AbroBiz account is ready. After verification, connect one Telegram account from Billing (business owners) or the Admin Telegram workspace to receive secure updates and support messages.</p>
+            <div style={telegramPrompt}>Telegram is optional, protected by a one-account connection limit, and can be disconnected anytime.</div>
             <button onClick={() => navigate('/setup', { replace: true })} style={submitStyle}>Continue to setup</button>
           </div>
         ) : (
@@ -164,4 +165,5 @@ const inputStyle: React.CSSProperties = { background: 'rgba(255,255,255,0.04)', 
 const codeInputStyle: React.CSSProperties = { ...inputStyle, width: 44, height: 50, padding: 0, textAlign: 'center', fontSize: 22, fontWeight: 600 }
 const errorStyle: React.CSSProperties = { color: '#F87171', fontSize: 13, background: 'rgba(248,113,113,0.08)', padding: '10px 12px', borderRadius: 10 }
 const submitStyle: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', background: '#D4A853', color: '#0A0C10', border: 'none', borderRadius: 10, padding: '13px', fontSize: 15, fontWeight: 600, cursor: 'pointer' }
+const telegramPrompt: React.CSSProperties = { color: 'rgba(240,237,231,0.65)', background: 'rgba(38,165,228,0.09)', border: '1px solid rgba(38,165,228,0.2)', borderRadius: 10, padding: '10px 12px', fontSize: 12.5, lineHeight: 1.55, textAlign: 'left', marginBottom: 16 }
 const resendStyle: React.CSSProperties = { background: 'none', border: 'none', color: '#D4A853', fontSize: 13, fontWeight: 600, cursor: 'pointer', padding: 0 }

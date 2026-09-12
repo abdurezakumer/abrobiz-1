@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { QrCode, Palette, Globe2, Check, ArrowRight, UserPlus, LayoutTemplate, Rocket, TrendingUp } from 'lucide-react'
+import { QrCode, Palette, Globe2, Check, ArrowRight, UserPlus, LayoutTemplate, Rocket, TrendingUp, Search, ArrowUpRight, Store, Sparkles } from 'lucide-react'
 import { listPlans } from '../lib/api/plans'
+import { listPublishedShowcaseBusinesses, type PublicShowcaseBusiness } from '../lib/api/businesses'
+import { publicStorefrontUrl } from '../lib/storefrontUrl'
+import { safeImageUrl } from '../lib/safeUrl'
 import PhoneMockup from '../components/PhoneMockup'
 import CategoryMarquee from '../components/CategoryMarquee'
 import MagneticButton from '../components/MagneticButton'
@@ -19,7 +22,7 @@ const FEATURES = [
 ]
 
 const STEPS = [
-  { icon: UserPlus, title: 'Create your account', desc: 'Sign up and start a 14-day free trial — no card required.' },
+  { icon: UserPlus, title: 'Create your account', desc: 'Sign up and start a 7-day free trial — no card required.' },
   { icon: LayoutTemplate, title: 'Set up your site', desc: 'Pick your business type and a template, then add your menu, services, or products.' },
   { icon: Rocket, title: 'Go live', desc: 'Get your QR code and shareable link instantly — customers can find you right away.' },
   { icon: TrendingUp, title: 'Grow', desc: 'Upgrade to Premium anytime for bookings, online ordering, and customer reviews.' },
@@ -27,7 +30,7 @@ const STEPS = [
 
 const FAQS = [
   { question: 'What kinds of businesses can use this?', answer: 'Restaurants, cafés, salons, retail shops, hotels, and more — the platform admin can add new business types anytime, so it keeps expanding.' },
-  { question: 'Is there a free trial?', answer: 'Yes — 14 days, full access, no card required to start.' },
+  { question: 'Is there a free trial?', answer: 'Yes — 7 days, full access, no card required to start.' },
   { question: 'How does billing work?', answer: 'Payment is manual: you send payment via the methods shown at checkout (like Telebirr or bank transfer), upload your proof, and the platform admin reviews and approves it.' },
   { question: "Can I change my site's look later?", answer: 'Yes, anytime from your dashboard — template, colors, branding, and content are all editable whenever you like.' },
   { question: 'What languages are supported?', answer: 'English, Amharic, and Afaan Oromo out of the box, per business.' },
@@ -36,11 +39,24 @@ const FAQS = [
 
 export default function Landing() {
   const [plans, setPlans] = useState<Plan[]>([])
+  const [showcase, setShowcase] = useState<PublicShowcaseBusiness[]>([])
+  const [showcaseQuery, setShowcaseQuery] = useState('')
+  const [showcaseCategory, setShowcaseCategory] = useState('All')
+  const [showcaseLoading, setShowcaseLoading] = useState(true)
+  const [showcaseError, setShowcaseError] = useState('')
   const [wordIndex, setWordIndex] = useState(0)
 
   useEffect(() => {
-    listPlans().then(setPlans)
+    listPlans().then(setPlans).catch(() => {})
+    listPublishedShowcaseBusinesses().then(setShowcase).catch(() => setShowcaseError('Live storefronts are temporarily unavailable.')).finally(() => setShowcaseLoading(false))
   }, [])
+
+  const showcaseCategories = ['All', ...Array.from(new Set(showcase.map(item => item.category))).sort()]
+  const visibleShowcase = showcase.filter(item => {
+    const matchesCategory = showcaseCategory === 'All' || item.category === showcaseCategory
+    const term = showcaseQuery.trim().toLowerCase()
+    return matchesCategory && (!term || `${item.name} ${item.category} ${item.description}`.toLowerCase().includes(term))
+  })
 
   useEffect(() => {
     const id = setInterval(() => setWordIndex(i => (i + 1) % ROTATING_WORDS.length), 2800)
@@ -56,6 +72,7 @@ export default function Landing() {
         </div>
         <nav style={{ display: 'flex', gap: 22, alignItems: 'center' }} className="landing-nav-links">
           <a href="#how-it-works" style={navLinkStyle}>How it works</a>
+          <a href="#showcase" style={navLinkStyle}>Live businesses</a>
           <a href="#pricing" style={navLinkStyle}>Pricing</a>
           <a href="#faq" style={navLinkStyle}>FAQ</a>
         </nav>
@@ -106,7 +123,7 @@ export default function Landing() {
                 Start your free trial <ArrowRight size={16} />
               </Link>
             </MagneticButton>
-            <span style={{ fontSize: 12.5, color: 'rgba(240,237,231,0.4)' }}>14 days free, no card required</span>
+            <span style={{ fontSize: 12.5, color: 'rgba(240,237,231,0.4)' }}>7 days free, no card required</span>
           </motion.div>
         </div>
 
@@ -127,6 +144,26 @@ export default function Landing() {
       <div style={{ marginTop: 48 }}>
         <CategoryMarquee />
       </div>
+
+      <section id="showcase" style={{ maxWidth: 1080, margin: '0 auto', padding: '72px 20px 26px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 20, flexWrap: 'wrap', marginBottom: 24 }}>
+          <div>
+            <div style={showcaseEyebrow}><Sparkles size={13} /> LIVE ON ABROBIZ</div>
+            <h2 style={{ fontFamily: 'Outfit, sans-serif', fontSize: 30, fontWeight: 650, margin: '10px 0 7px' }}>Explore businesses already live</h2>
+            <p style={{ color: 'rgba(240,237,231,0.52)', fontSize: 14, lineHeight: 1.6, margin: 0, maxWidth: 560 }}>Discover real AbroBiz storefronts and see how owners turn their menus, services, and products into polished digital experiences.</p>
+          </div>
+          <span style={showcaseCount}>{showcaseLoading ? 'Loading live storefronts…' : `${showcase.length} live storefront${showcase.length === 1 ? '' : 's'}`}</span>
+        </div>
+        {showcase.length > 0 && <>
+          <div style={showcaseToolbar}>
+            <div style={{ position: 'relative', flex: '1 1 240px' }}><Search size={15} color="rgba(240,237,231,0.4)" style={{ position: 'absolute', left: 13, top: 12 }} /><input value={showcaseQuery} onChange={event => setShowcaseQuery(event.target.value)} placeholder="Search live businesses" style={showcaseInput} /></div>
+            <select value={showcaseCategory} onChange={event => setShowcaseCategory(event.target.value)} style={showcaseSelect}>{showcaseCategories.map(category => <option key={category} value={category}>{category}</option>)}</select>
+          </div>
+          <div className="showcase-grid">{visibleShowcase.map((business, index) => <ShowcaseCard key={business.id} business={business} index={index} />)}</div>
+          {visibleShowcase.length === 0 && <div style={showcaseEmpty}>No live storefronts match that search.</div>}
+        </>}
+        {!showcaseLoading && showcase.length === 0 && <div style={showcaseEmpty}>{showcaseError || 'Published storefronts will appear here as AbroBiz businesses go live.'}</div>}
+      </section>
 
       {/* Features */}
       <div id="features" style={{ maxWidth: 1000, margin: '0 auto', padding: '64px 20px 20px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 20 }}>
@@ -240,7 +277,8 @@ export default function Landing() {
             <a href="#features" style={footerLink}>Features</a>
             <a href="#how-it-works" style={footerLink}>How it works</a>
             <a href="#pricing" style={footerLink}>Pricing</a>
-            <a href="#faq" style={footerLink}>FAQ</a>
+          <a href="#faq" style={footerLink}>FAQ</a>
+            <a href="#showcase" style={footerLink}>Live businesses</a>
           </div>
           <div>
             <div style={footerHeading}>Legal</div>
@@ -260,6 +298,7 @@ export default function Landing() {
           .landing-nav-links { display: none !important; }
           .footer-grid { grid-template-columns: 1fr !important; text-align: center; }
           .preview-badge { display: none !important; }
+          .showcase-grid { grid-template-columns: 1fr !important; }
         }
       `}</style>
     </div>
@@ -269,3 +308,18 @@ export default function Landing() {
 const navLinkStyle: React.CSSProperties = { color: 'rgba(240,237,231,0.55)', textDecoration: 'none', fontSize: 13.5, fontWeight: 500 }
 const footerHeading: React.CSSProperties = { fontSize: 12.5, fontWeight: 700, color: 'rgba(240,237,231,0.4)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 12 }
 const footerLink: React.CSSProperties = { display: 'block', fontSize: 13, color: 'rgba(240,237,231,0.55)', textDecoration: 'none', marginBottom: 9 }
+const showcaseEyebrow: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 6, color: '#D4A853', fontSize: 10.5, letterSpacing: 1.5, fontWeight: 700 }
+const showcaseCount: React.CSSProperties = { color: 'rgba(240,237,231,0.5)', fontSize: 12, border: '1px solid rgba(255,255,255,0.11)', borderRadius: 999, padding: '7px 11px' }
+const showcaseToolbar: React.CSSProperties = { display: 'flex', gap: 9, padding: 10, background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.09)', borderRadius: 14, marginBottom: 16, flexWrap: 'wrap' }
+const showcaseInput: React.CSSProperties = { width: '100%', boxSizing: 'border-box', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#F0EDE7', borderRadius: 10, padding: '10px 12px 10px 36px', outline: 'none', fontSize: 13, fontFamily: 'inherit' }
+const showcaseSelect: React.CSSProperties = { background: '#171A20', border: '1px solid rgba(255,255,255,0.1)', color: '#F0EDE7', borderRadius: 10, padding: '10px 12px', outline: 'none', fontSize: 13, fontFamily: 'inherit' }
+const showcaseEmpty: React.CSSProperties = { border: '1px dashed rgba(255,255,255,0.15)', borderRadius: 16, padding: 28, color: 'rgba(240,237,231,0.45)', textAlign: 'center', fontSize: 13 }
+
+function ShowcaseCard({ business, index }: { business: PublicShowcaseBusiness; index: number }) {
+  const cover = safeImageUrl(business.coverUrl)
+  const logo = safeImageUrl(business.logoUrl)
+  return <motion.a href={publicStorefrontUrl(business.slug)} target="_blank" rel="noopener noreferrer" initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: .35, delay: Math.min(index * .04, .25) }} whileHover={{ y: -5 }} style={{ display: 'block', color: '#F0EDE7', textDecoration: 'none', background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.09)', borderRadius: 18, overflow: 'hidden' }}>
+    <div style={{ height: 142, background: cover ? `linear-gradient(180deg, transparent, rgba(0,0,0,.58)), url("${cover}") center/cover` : `linear-gradient(135deg, ${business.accentColor}55, #171A20)` }}><div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: 12 }}><span style={{ background: 'rgba(10,12,16,.68)', backdropFilter: 'blur(8px)', borderRadius: 999, padding: '5px 8px', fontSize: 10, color: '#F0EDE7' }}>{business.category}</span><span style={{ width: 27, height: 27, borderRadius: 9, display: 'grid', placeItems: 'center', background: 'rgba(10,12,16,.62)', color: '#D4A853' }}><ArrowUpRight size={14} /></span></div></div>
+    <div style={{ padding: '14px 15px 16px', position: 'relative' }}>{logo ? <img src={logo} alt="" loading="lazy" style={{ position: 'absolute', width: 42, height: 42, objectFit: 'cover', borderRadius: 12, border: '3px solid #171A20', top: -24, right: 15, background: '#171A20' }} /> : <span style={{ position: 'absolute', width: 42, height: 42, display: 'grid', placeItems: 'center', borderRadius: 12, border: '3px solid #171A20', top: -24, right: 15, background: business.accentColor, color: '#0A0C10' }}><Store size={17} /></span>}<h3 style={{ fontFamily: 'Outfit, sans-serif', fontSize: 16, margin: '0 48px 5px 0', fontWeight: 650 }}>{business.name}</h3><p style={{ color: 'rgba(240,237,231,0.5)', fontSize: 12.5, lineHeight: 1.55, margin: 0, minHeight: 38 }}>{business.description || `Visit ${business.name} on AbroBiz.`}</p><div style={{ color: business.accentColor, fontSize: 11.5, fontWeight: 650, marginTop: 11 }}>Visit storefront ↗</div></div>
+  </motion.a>
+}

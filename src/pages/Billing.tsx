@@ -8,7 +8,7 @@ import { listPlans } from '../lib/api/plans'
 import { listPaymentMethods } from '../lib/api/paymentMethods'
 import { uploadPaymentProof, submitPayment, listPaymentsForBusiness } from '../lib/api/payments'
 import { daysRemaining } from '../lib/api/subscriptions'
-import { getOrCreateBusinessTelegramLink, telegramPaymentDeepLink, notifyAdminsOfPayment, type TelegramLinkStatus } from '../lib/api/telegram'
+import { getOrCreateBusinessTelegramLink, disconnectTelegram, telegramPaymentDeepLink, notifyAdminsOfPayment, type TelegramLinkStatus } from '../lib/api/telegram'
 import { friendlyError } from '../lib/errors'
 import type { Plan, PaymentMethod, Payment } from '../types'
 import { PAYMENT_UPLOAD_ACCEPT, detectedUploadType, takeSelectedFile } from '../lib/fileUpload'
@@ -257,7 +257,7 @@ export default function Billing() {
         </div>
       )}
 
-      <TelegramConnectCard status={telegramLink} kind="business" />
+      <TelegramConnectCard status={telegramLink} kind="business" onDisconnect={async () => { await disconnectTelegram('business'); if (business) setTelegramLink(await getOrCreateBusinessTelegramLink(business.id)) }} />
 
       {!selectedPlan ? (
         <>
