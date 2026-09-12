@@ -68,7 +68,16 @@ export default function VerifyEmail() {
     setSubmitting(true)
     try {
       await verifySignupOtp(email, token)
-      await recordLegalAcceptance()
+      try {
+        await recordLegalAcceptance()
+      } catch {
+        // OTP verification has already succeeded. Leave the authenticated
+        // session in place and let the legal page retry the acceptance RPC
+        // instead of making the user enter a now-consumed OTP again.
+        await refreshProfile().catch(() => undefined)
+        navigate('/legal-acceptance', { replace: true })
+        return
+      }
       await refreshProfile()
       setVerified(true)
     } catch (err) {

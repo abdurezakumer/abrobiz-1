@@ -66,9 +66,21 @@ export async function initializeGoogleSignInButton(container: HTMLElement, onCre
   return () => { container.replaceChildren() }
 }
 
-export async function signInWithGoogleCredential(credential: string): Promise<void> {
-  const { error } = await supabase.auth.signInWithIdToken({ provider: 'google', token: credential })
+export async function signInWithGoogleCredential(credential: string, referralCode?: string | null): Promise<void> {
+  const { data, error } = await supabase.auth.signInWithIdToken({ provider: 'google', token: credential })
   if (error) throw error
+
+  // The Google ID-token flow cannot send custom user metadata during the
+  // provider exchange. Complete attribution after authentication through the
+  // existing server-side RPC. An empty code intentionally means direct signup.
+  const code = referralCode?.trim().toUpperCase()
+  if (code && data.user) {
+    const { error: attributionError } = await supabase.rpc('create_marketing_attribution', {
+      p_owner_id: data.user.id,
+      p_referral_code: code,
+    })
+    if (attributionError) throw attributionError
+  }
 }
 
 let googleIdentityPromise: Promise<void> | null = null

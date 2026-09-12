@@ -87,7 +87,7 @@ export default function Register() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '22px 0 18px' }}>
             <div style={ruleStyle} /><span style={{ fontSize: 12, color: 'rgba(240,237,231,0.35)' }}>or</span><div style={ruleStyle} />
           </div>
-          <GoogleSignInButton onError={setError} />
+          <GoogleSignInButton onError={setError} referralCode={referralCode} />
 
           <p style={{ textAlign: 'center', color: 'rgba(240,237,231,0.45)', fontSize: 13.5, marginTop: 22 }}>
             Already have an account? <Link to="/login" style={linkStyle}>Log in</Link>

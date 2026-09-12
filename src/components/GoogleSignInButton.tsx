@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { friendlyAuthError, initializeGoogleSignInButton, signInWithGoogleCredential } from '../lib/authActions'
 
-export default function GoogleSignInButton({ onError, disabled = false }: { onError: (msg: string) => void; disabled?: boolean }) {
+export default function GoogleSignInButton({ onError, disabled = false, referralCode }: { onError: (msg: string) => void; disabled?: boolean; referralCode?: string | null }) {
   const [loading, setLoading] = useState(false)
   const buttonRef = useRef<HTMLDivElement>(null)
   const onErrorRef = useRef(onError)
+  const referralCodeRef = useRef(referralCode)
   onErrorRef.current = onError
+  referralCodeRef.current = referralCode
 
   useEffect(() => {
     if (disabled || !buttonRef.current) return
@@ -17,7 +19,7 @@ export default function GoogleSignInButton({ onError, disabled = false }: { onEr
       if (disposed) return
       setLoading(true)
       try {
-        await signInWithGoogleCredential(credential)
+        await signInWithGoogleCredential(credential, referralCodeRef.current)
       } catch (err) {
         onErrorRef.current(friendlyAuthError(err))
       } finally {

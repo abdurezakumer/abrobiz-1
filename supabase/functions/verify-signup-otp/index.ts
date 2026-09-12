@@ -31,7 +31,19 @@ if (import.meta.main) {
       const anonKey = Deno.env.get('SUPABASE_ANON_KEY')
       if (!url || !anonKey) return json({ error: 'Email verification is temporarily unavailable.' }, 503, req)
       const client = createClient(url, anonKey, { auth: { persistSession: false } })
-      const { data, error } = await client.auth.verifyOtp({ email, token, type: 'email' })
+      // Supabase currently documents `email` for email OTPs, but older Auth
+      // deployments issue signup and magic-link OTPs with their legacy type.
+      // Try the current type first, then the two legacy types so codes created
+      // by either signup or resend are accepted without weakening validation.
+      const verificationTypes = ['email', 'signup', 'magiclink'] as const
+      let data: Awaited<ReturnType<typeof client.auth.verifyOtp>>['data'] = { session: null, user: null }
+      let error: Awaited<ReturnType<typeof client.auth.verifyOtp>>['error'] = null
+      for (const type of verificationTypes) {
+        const result = await client.auth.verifyOtp({ email, token, type })
+        data = result.data
+        error = result.error
+        if (!error && data.session) break
+      }
       if (error || !data.session) return json({ error: 'That verification code is invalid or expired.' }, 400, req)
 
       return json({
