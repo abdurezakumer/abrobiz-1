@@ -166,6 +166,7 @@ export async function getBusinessEntitlements(businessId: string): Promise<{ boo
 export interface AdminBusinessRow extends Business {
   ownerName: string
   ownerEmail: string
+  ownerPlatformId: string
   subscriptionStatus: string | null
   subscriptionEndDate: string | null
 }
@@ -173,14 +174,15 @@ export interface AdminBusinessRow extends Business {
 export async function adminListBusinesses(): Promise<AdminBusinessRow[]> {
   const { data, error } = await supabase
     .from('businesses')
-    .select('*, profiles!businesses_owner_id_fkey(name), subscriptions(status, end_date)')
+    .select('*, profiles!businesses_owner_id_fkey(name, email, platform_id), subscriptions(status, end_date)')
     .order('created_at', { ascending: false })
     .limit(1000)
   if (error) throw error
   return (data ?? []).map((row: any) => ({
     ...mapBusiness(row),
     ownerName: row.profiles?.name ?? '—',
-    ownerEmail: '',
+    ownerEmail: row.profiles?.email ?? '',
+    ownerPlatformId: row.profiles?.platform_id ?? '—',
     subscriptionStatus: row.subscriptions?.[0]?.status ?? null,
     subscriptionEndDate: row.subscriptions?.[0]?.end_date ?? null,
   }))

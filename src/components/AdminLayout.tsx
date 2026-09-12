@@ -7,6 +7,7 @@ import { hasAdminPermission } from '../lib/api/adminControl'
 
 const navItems = [
   { to: '/admin', label: 'Overview', icon: LayoutDashboard, permission: 'dashboard.read' as const },
+  { to: '/admin/users', label: 'User directory', icon: Users, permission: 'users.read' as const },
   { to: '/admin/businesses', label: 'Businesses', icon: Building2, permission: 'businesses.read' as const },
   { to: '/admin/payments', label: 'Payments', icon: CreditCard, permission: 'payments.read' as const },
   { to: '/admin/announcements', label: 'Announcements', icon: Megaphone, permission: 'announcements.send' as const },

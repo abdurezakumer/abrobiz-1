@@ -107,6 +107,7 @@ function makeSeries(rows: any[], value: (row: any) => number): Array<{ date: str
 
 export async function getAdminDashboard(profile?: Profile | null): Promise<AdminDashboardData> {
   const isSuper = profile?.role === 'super_admin' || profile?.adminRole === 'super_admin'
+  const canSeeUsers = isSuper || profile?.adminRole === 'support'
   const since = new Date()
   since.setDate(since.getDate() - 13)
   const sinceIso = since.toISOString()
@@ -121,7 +122,7 @@ export async function getAdminDashboard(profile?: Profile | null): Promise<Admin
     supabase.from('payments').select('amount_etb').eq('status', 'approved').limit(10000),
     supabase.from('profiles').select('created_at').gte('created_at', sinceIso).order('created_at', { ascending: true }).limit(10000),
     supabase.from('payments').select('amount_etb, status, created_at').gte('created_at', sinceIso).eq('status', 'approved').order('created_at', { ascending: true }).limit(10000),
-    isSuper ? supabase.from('profiles').select('id, platform_id, name, email, phone, role, admin_role, created_at, businesses(name)').order('created_at', { ascending: false }).limit(8) : supabase.from('profiles').select('id, platform_id, name, email, phone, role, admin_role, created_at').eq('id', '00000000-0000-0000-0000-000000000000'),
+    canSeeUsers ? supabase.from('profiles').select('id, platform_id, name, email, phone, role, admin_role, created_at, businesses(name)').order('created_at', { ascending: false }).limit(8) : supabase.from('profiles').select('id, platform_id, name, email, phone, role, admin_role, created_at').eq('id', '00000000-0000-0000-0000-000000000000'),
     isSuper ? supabase.from('profiles').select('id, platform_id, name, email, phone, role, admin_role, created_at').in('role', ['admin', 'super_admin']).order('created_at', { ascending: false }).limit(8) : supabase.from('profiles').select('id').eq('id', '00000000-0000-0000-0000-000000000000'),
     supabase.from('payments').select('id, amount_etb, status, created_at, businesses(name)').order('created_at', { ascending: false }).limit(8),
     isSuper ? supabase.from('admin_logs').select('id, admin_id, action, target_table, target_id, meta, created_at, profiles!admin_logs_admin_id_fkey(platform_id, name)').order('created_at', { ascending: false }).limit(8) : supabase.from('admin_logs').select('id').eq('id', '00000000-0000-0000-0000-000000000000'),
@@ -129,7 +130,7 @@ export async function getAdminDashboard(profile?: Profile | null): Promise<Admin
   const firstError = [usersCount, adminsCount, businessesCount, activeCount, trialCount, expiredCount, pendingCount, approvedRows, signupRows, revenueRows, recentUsersRows, recentAdminsRows, recentPaymentsRows, auditRows].find(result => result.error)?.error
   if (firstError) throw firstError
   return {
-    users: isSuper ? usersCount.count ?? 0 : 0,
+    users: canSeeUsers ? usersCount.count ?? 0 : 0,
     admins: isSuper ? adminsCount.count ?? 0 : 0,
     businesses: businessesCount.count ?? 0,
     activeSubscriptions: activeCount.count ?? 0,
