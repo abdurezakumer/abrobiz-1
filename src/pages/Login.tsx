@@ -19,6 +19,7 @@ export default function Login() {
   const [loading, setLoading] = useState(false)
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
   const [resetToken, setResetToken] = useState<string | null>(null)
+  const [resetMode, setResetMode] = useState(false)
   const [turnstileResetKey, setTurnstileResetKey] = useState(0)
   const [resetWidgetKey, setResetWidgetKey] = useState(0)
 
@@ -53,6 +54,7 @@ export default function Login() {
       return
     }
     if (turnstileEnabled && !resetToken) {
+      setResetMode(true)
       setError('Complete the password-reset security check to continue.')
       return
     }
@@ -61,6 +63,7 @@ export default function Login() {
       await requestPasswordReset(email, resetToken)
       setResetToken(null)
       setResetWidgetKey(value => value + 1)
+      setResetMode(false)
       setInfo('If that email has an account, a reset link is on its way — check your inbox.')
     } catch (err) {
       setError(friendlyAuthError(err))
@@ -106,8 +109,16 @@ export default function Login() {
               Forgot password?
             </button>
 
-            <TurnstileWidget action="login" onToken={setTurnstileToken} resetKey={turnstileResetKey} />
-            <TurnstileWidget action="password-reset" onToken={setResetToken} resetKey={resetWidgetKey} />
+            <TurnstileWidget
+              action={resetMode ? 'password-reset' : 'login'}
+              onToken={resetMode ? setResetToken : setTurnstileToken}
+              resetKey={resetMode ? resetWidgetKey : turnstileResetKey}
+            />
+            {resetMode && turnstileEnabled && (
+              <div style={{ color: 'rgba(240,237,231,0.5)', fontSize: 12, lineHeight: 1.45 }}>
+                Complete this security check, then click “Forgot password?” above.
+              </div>
+            )}
 
             {error && (
               <div style={{ color: '#F87171', fontSize: 13, background: 'rgba(248,113,113,0.08)', padding: '10px 12px', borderRadius: 10 }}>
