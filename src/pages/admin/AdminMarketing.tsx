@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { BadgeDollarSign, Copy, Link2, RefreshCw, ShieldCheck, Users, TrendingUp } from 'lucide-react'
+import { BadgeDollarSign, Link2, RefreshCw, ShieldCheck, Users, TrendingUp } from 'lucide-react'
 import AdminLayout from '../../components/AdminLayout'
 import { useAuth } from '../../lib/authContext'
-import { assignMarketingTeam, createReferralCode, getMarketingWorkspace, reassignMarketingAttribution, setCommissionRule, updateCommissionStatus, type MarketingWorkspace } from '../../lib/api/marketing'
+import { assignMarketingTeam, getMarketingWorkspace, rotateReferralCode, setCommissionRule, updateCommissionStatus, type MarketingWorkspace } from '../../lib/api/marketing'
 import { friendlyError } from '../../lib/errors'
 
 const money = (value: number) => `${Math.round(value).toLocaleString()} ETB`
@@ -68,7 +68,7 @@ function TeamPanel({ workspace, isSuper, onChanged }: { workspace: MarketingWork
   const marketingAdmins = workspace.team.filter(member => member.role === 'marketing_admin' || member.role === 'super_admin')
   const [selectedSales, setSelectedSales] = useState('')
   const [selectedAdmin, setSelectedAdmin] = useState('')
-  const [code, setCode] = useState('')
+  const [selectedCodeSales, setSelectedCodeSales] = useState('')
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
   const activeCodeBySales = new Map(workspace.referralCodes.filter(item => item.isActive).map(item => [item.salesPersonId, item.code]))
@@ -80,7 +80,7 @@ function TeamPanel({ workspace, isSuper, onChanged }: { workspace: MarketingWork
 
   return <section style={{ ...panel, marginTop: 16 }}><div style={panelHeader}><div><h2 style={panelTitle}>{isSuper ? 'Marketing administration' : 'Marketing team'}</h2><p style={panelHint}>{isSuper ? 'Assign partner roles, lock referral ownership, and manage the active commission rule.' : 'Your attributed customer and commission activity appears above.'}</p></div><span style={pill}>{workspace.commissionRule ? `${workspace.commissionRule.salesPersonRate}% sales · ${workspace.commissionRule.marketingAdminRate}% admin · ${workspace.commissionRule.abrobizRate}% AbroBiz` : 'No rule'}</span></div>{isSuper && <div style={managementGrid}>
     <div style={managementCard}><strong>Assign Sales Person team</strong><select value={selectedSales} onChange={event => setSelectedSales(event.target.value)} style={formInput}><option value="">Select Sales Person</option>{salesPeople.map(member => <option key={member.id} value={member.id}>{member.name} · {member.platformId}</option>)}</select><select value={selectedAdmin} onChange={event => setSelectedAdmin(event.target.value)} style={formInput}><option value="">Select Marketing Admin</option>{marketingAdmins.map(member => <option key={member.id} value={member.id}>{member.name} · {member.platformId}</option>)}</select><button type="button" disabled={busy || !selectedSales || !selectedAdmin} onClick={() => void run(() => assignMarketingTeam(selectedSales, selectedAdmin), 'Team assignment saved.')} style={primaryButton}>Save assignment</button></div>
-    <div style={managementCard}><strong>Create / rotate referral code</strong><select value={selectedSales} onChange={event => setSelectedSales(event.target.value)} style={formInput}><option value="">Select Sales Person</option>{salesPeople.map(member => <option key={member.id} value={member.id}>{member.name}</option>)}</select><input value={code} onChange={event => setCode(event.target.value.toUpperCase())} placeholder="e.g. ABDU-2026" maxLength={32} style={formInput} /><button type="button" disabled={busy || !selectedSales || code.length < 3} onClick={() => void run(() => createReferralCode(selectedSales, code), 'Referral code saved.')} style={primaryButton}>Save referral code</button><div style={muted}>Current codes: {salesPeople.map(member => `${member.name}: ${activeCodeBySales.get(member.id) ?? 'unassigned'}`).join(' · ') || 'none'}</div></div>
+    <div style={managementCard}><strong>System referral code</strong><select value={selectedCodeSales} onChange={event => setSelectedCodeSales(event.target.value)} style={formInput}><option value="">Select Sales Person</option>{salesPeople.map(member => <option key={member.id} value={member.id}>{member.name}</option>)}</select><button type="button" disabled={busy || !selectedCodeSales} onClick={() => void run(() => rotateReferralCode(selectedCodeSales), 'A new unique referral code was generated.')} style={primaryButton}>Generate new unique code</button><div style={muted}>Codes are created automatically when a Sales Person is assigned. Current codes: {salesPeople.map(member => `${member.name}: ${activeCodeBySales.get(member.id) ?? 'generating'}`).join(' · ') || 'none'}</div></div>
     <CommissionRuleCard workspace={workspace} busy={busy} onSaved={message => { setMessage(message); onChanged() }} />
   </div>}{message && <div style={{ ...messageBox, color: message.includes('saved') ? '#166534' : '#991B1B' }}>{message}</div>}</section>
 }

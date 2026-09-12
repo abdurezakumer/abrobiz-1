@@ -68,10 +68,16 @@ if (import.meta.main) {
         code = typeof payload.email_otp === 'string' ? payload.email_otp : ''
         user = payload.user && typeof payload.user.id === 'string' ? { id: payload.user.id, email: payload.user.email } : null
         if (!response.ok && !code) {
-          logFailure(req, { function_name: 'signup', operation: 'generate_signup_otp', error_category: 'AUTHENTICATION_ERROR', error_code: `auth_${response.status}`, status: 200 })
-          return json(GENERIC_RESPONSE, 200, req)
+          // Some Supabase Auth deployments do not expose the admin endpoint
+          // response shape consistently. Fall through to the SDK path before
+          // reporting a generic signup failure.
+          logFailure(req, { function_name: 'signup', operation: 'generate_signup_otp_http_fallback', error_category: 'AUTHENTICATION_ERROR', error_code: `auth_${response.status}`, status: 200 })
         }
-      } else {
+      }
+
+      // The SDK fallback also handles Auth versions that return a successful
+      // response without the documented top-level email_otp field.
+      if (!code) {
         const generated = await adminClient.auth.admin.generateLink({
           type: 'signup',
           email,

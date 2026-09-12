@@ -156,8 +156,8 @@ export async function getMarketingWorkspace(profile: Profile): Promise<Marketing
   }
 }
 
-export async function createReferralCode(salesPersonId: string, code: string, label = ''): Promise<void> {
-  const { error } = await supabase.rpc('super_admin_create_referral_code', { p_sales_person_id: salesPersonId, p_code: code, p_label: label })
+export async function rotateReferralCode(salesPersonId: string): Promise<void> {
+  const { error } = await supabase.rpc('super_admin_rotate_marketing_referral_code', { p_sales_person_id: salesPersonId })
   if (error) throw error
 }
 
