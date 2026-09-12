@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { BadgeDollarSign, Link2, RefreshCw, ShieldCheck, Users, TrendingUp } from 'lucide-react'
 import AdminLayout from '../../components/AdminLayout'
 import { useAuth } from '../../lib/authContext'
-import { assignMarketingTeam, getMarketingWorkspace, rotateReferralCode, setCommissionRule, updateCommissionStatus, type MarketingWorkspace } from '../../lib/api/marketing'
+import { assignMarketingTeam, getMarketingWorkspace, manageSalesTeam, rotateReferralCode, setCommissionRule, updateCommissionStatus, type MarketingWorkspace } from '../../lib/api/marketing'
 import { friendlyError } from '../../lib/errors'
 
 const money = (value: number) => `${Math.round(value).toLocaleString()} ETB`
@@ -31,7 +32,7 @@ export default function AdminMarketing() {
     {loading ? <div style={panel}>Loading marketing workspace…</div> : workspace ? <>
       <SummaryCards workspace={workspace} />
       <div className="marketing-layout-grid" style={layoutGrid}><CustomersPanel workspace={workspace} /><LedgerPanel workspace={workspace} isSuper={isSuper} onChanged={() => void load(true)} /></div>
-      {canManage && <TeamPanel workspace={workspace} isSuper={isSuper} onChanged={() => void load(true)} />}
+      {canManage && <TeamPanel workspace={workspace} isSuper={isSuper} isMarketingAdmin={profile?.adminRole === 'marketing_admin'} onChanged={() => void load(true)} />}
     </> : null}
     <style>{'@keyframes marketing-spin { to { transform: rotate(360deg); } } @media (max-width: 900px) { .marketing-layout-grid { grid-template-columns: 1fr !important; } }'}</style>
   </AdminLayout>
@@ -63,9 +64,10 @@ function LedgerPanel({ workspace, isSuper, onChanged }: { workspace: MarketingWo
   return <section style={panel}><div style={panelHeader}><div><h2 style={panelTitle}>Commission ledger</h2><p style={panelHint}>Generated only after an approved payment and calculated on the full plan payment.</p></div><span style={pill}>{workspace.summary.commissionPending ? `${money(workspace.summary.commissionPending)} pending` : 'No pending commission'}</span></div><div style={tableWrap}><table style={table}><thead><tr><th style={th}>Recipient</th><th style={th}>Rate</th><th style={th}>Amount</th><th style={th}>Status</th>{isSuper && <th style={th}>Action</th>}</tr></thead><tbody>{partnerEntries.slice(0, 100).map(entry => <tr key={entry.id}><td style={td}>{entry.recipientType === 'sales_person' ? 'Sales Person' : 'Marketing Admin'}<div style={muted}>{entry.entryType}</div></td><td style={td}>{entry.rate}%</td><td style={td}>{money(entry.amountEtb)}</td><td style={td}><span style={{ ...statusPill, ...statusColor(entry.status) }}>{entry.status}</span></td>{isSuper && <td style={td}><select value={entry.status} onChange={event => void updateCommissionStatus(entry.id, event.target.value).then(onChanged).catch(() => {})} style={smallSelect}><option value="pending">Pending</option><option value="eligible">Eligible</option><option value="approved">Approved</option><option value="payable">Payable</option><option value="paid">Paid</option><option value="disputed">Disputed</option><option value="cancelled">Cancelled</option></select></td>}</tr>)}</tbody></table>{partnerEntries.length === 0 && <div style={empty}>No commission entries yet. They appear after a full payment is approved.</div>}</div></section>
 }
 
-function TeamPanel({ workspace, isSuper, onChanged }: { workspace: MarketingWorkspace; isSuper: boolean; onChanged: () => void }) {
+function TeamPanel({ workspace, isSuper, isMarketingAdmin, onChanged }: { workspace: MarketingWorkspace; isSuper: boolean; isMarketingAdmin: boolean; onChanged: () => void }) {
   const salesPeople = workspace.team.filter(member => member.role === 'sales_person')
   const marketingAdmins = workspace.team.filter(member => member.role === 'marketing_admin' || member.role === 'super_admin')
+  const managedSales = workspace.team.filter(member => member.role === 'sales_person' && workspace.managedSalesIds.includes(member.id))
   const [selectedSales, setSelectedSales] = useState('')
   const [selectedAdmin, setSelectedAdmin] = useState('')
   const [selectedCodeSales, setSelectedCodeSales] = useState('')
@@ -78,11 +80,26 @@ function TeamPanel({ workspace, isSuper, onChanged }: { workspace: MarketingWork
     try { await action(); setMessage(success); onChanged() } catch (err) { setMessage(friendlyError(err)) } finally { setBusy(false) }
   }
 
-  return <section style={{ ...panel, marginTop: 16 }}><div style={panelHeader}><div><h2 style={panelTitle}>{isSuper ? 'Marketing administration' : 'Marketing team'}</h2><p style={panelHint}>{isSuper ? 'Assign partner roles, lock referral ownership, and manage the active commission rule.' : 'Your attributed customer and commission activity appears above.'}</p></div><span style={pill}>{workspace.commissionRule ? `${workspace.commissionRule.salesPersonRate}% sales · ${workspace.commissionRule.marketingAdminRate}% admin · ${workspace.commissionRule.abrobizRate}% AbroBiz` : 'No rule'}</span></div>{isSuper && <div style={managementGrid}>
+  return <section style={{ ...panel, marginTop: 16 }}><div style={panelHeader}><div><h2 style={panelTitle}>{isSuper ? 'Marketing administration' : 'My Sales team'}</h2><p style={panelHint}>{isSuper ? 'Manage Marketing Admins, Sales Persons, referral ownership, and the active commission rule.' : 'Manage only Sales Persons assigned to your Marketing Admin team.'}</p></div><span style={pill}>{workspace.commissionRule ? `${workspace.commissionRule.salesPersonRate}% sales · ${workspace.commissionRule.marketingAdminRate}% admin · ${workspace.commissionRule.abrobizRate}% AbroBiz` : 'No rule'}</span></div>{isMarketingAdmin && <MarketingAdminTeam managedSales={managedSales} workspace={workspace} busy={busy} run={run} />}{isSuper && <div style={managementGrid}>
+    <div style={managementCard}><strong>Marketing Admins</strong><div style={adminList}>{marketingAdmins.map(member => <div key={member.id} style={adminListRow}><span><strong>{member.name}</strong><small>{member.platformId} · {member.role === 'super_admin' ? 'Super Admin' : 'Marketing Admin'}</small></span><Link to="/admin/management" style={miniButton}>Manage roles</Link></div>)}</div><Link to="/admin/management" style={primaryLink}>Open full admin management</Link></div>
     <div style={managementCard}><strong>Assign Sales Person team</strong><select value={selectedSales} onChange={event => setSelectedSales(event.target.value)} style={formInput}><option value="">Select Sales Person</option>{salesPeople.map(member => <option key={member.id} value={member.id}>{member.name} · {member.platformId}</option>)}</select><select value={selectedAdmin} onChange={event => setSelectedAdmin(event.target.value)} style={formInput}><option value="">Select Marketing Admin</option>{marketingAdmins.map(member => <option key={member.id} value={member.id}>{member.name} · {member.platformId}</option>)}</select><button type="button" disabled={busy || !selectedSales || !selectedAdmin} onClick={() => void run(() => assignMarketingTeam(selectedSales, selectedAdmin), 'Team assignment saved.')} style={primaryButton}>Save assignment</button></div>
     <div style={managementCard}><strong>System referral code</strong><select value={selectedCodeSales} onChange={event => setSelectedCodeSales(event.target.value)} style={formInput}><option value="">Select Sales Person</option>{salesPeople.map(member => <option key={member.id} value={member.id}>{member.name}</option>)}</select><button type="button" disabled={busy || !selectedCodeSales} onClick={() => void run(() => rotateReferralCode(selectedCodeSales), 'A new unique referral code was generated.')} style={primaryButton}>Generate new unique code</button><div style={muted}>Codes are created automatically when a Sales Person is assigned. Current codes: {salesPeople.map(member => `${member.name}: ${activeCodeBySales.get(member.id) ?? 'generating'}`).join(' · ') || 'none'}</div></div>
     <CommissionRuleCard workspace={workspace} busy={busy} onSaved={message => { setMessage(message); onChanged() }} />
   </div>}{message && <div style={{ ...messageBox, color: message.includes('saved') ? '#166534' : '#991B1B' }}>{message}</div>}</section>
+}
+
+function MarketingAdminTeam({ managedSales, workspace, busy, run }: { managedSales: MarketingWorkspace['team']; workspace: MarketingWorkspace; busy: boolean; run: (action: () => Promise<void>, success: string) => Promise<void> }) {
+  const activeCodeBySales = new Map(workspace.referralCodes.filter(item => item.isActive).map(item => [item.salesPersonId, item.code]))
+  const [selectedSalesId, setSelectedSalesId] = useState('')
+  const availableSales = workspace.salesPool.filter(member => !member.isAssignedToMe && !member.isAssignedElsewhere)
+  return <>
+    <div style={teamToolbar}><div><strong>Team controls</strong><div style={muted}>Add an unassigned Sales Person or manage an existing team member.</div></div><div style={teamAdd}><select value={selectedSalesId} onChange={event => setSelectedSalesId(event.target.value)} style={formInput}><option value="">Add unassigned Sales Person</option>{availableSales.map(member => <option key={member.id} value={member.id}>{member.name} · {member.platformId}</option>)}</select><button type="button" disabled={busy || !selectedSalesId} onClick={() => void run(() => manageSalesTeam(selectedSalesId, 'add').then(() => setSelectedSalesId('')), 'Sales Person added to your team.')} style={primaryButton}>Add to team</button></div></div>
+    <div style={teamCards}>{managedSales.length === 0 ? <div style={emptyTeam}>No Sales Persons are assigned to your team yet. Add an unassigned Sales Person above or ask a Super Admin for an assignment.</div> : managedSales.map(member => {
+    const code = activeCodeBySales.get(member.id)
+    const referralLink = code ? `${window.location.origin}/register?ref=${encodeURIComponent(code)}` : ''
+    return <div key={member.id} style={teamCard}><div style={teamCardTop}><div><strong>{member.name}</strong><div style={muted}>{member.platformId} · {member.email}</div></div><span style={pill}>Sales Person</span></div><div style={codeBox}><span>{code ?? 'Code generating'}</span>{code && <button type="button" onClick={() => void navigator.clipboard?.writeText(referralLink)} style={copyButton}>Copy referral link</button>}</div><button type="button" disabled={busy} onClick={() => void run(() => manageSalesTeam(member.id, 'remove'), 'Sales Person removed from your team.')} style={dangerButton}>Remove from my team</button></div>
+  })}</div>
+  </>
 }
 
 function CommissionRuleCard({ workspace, busy, onSaved }: { workspace: MarketingWorkspace; busy: boolean; onSaved: (message: string) => void }) {
@@ -126,4 +143,17 @@ const rateGrid: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'r
 const primaryButton: React.CSSProperties = { border: 0, borderRadius: 8, padding: '9px 11px', background: '#0A0C10', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 650 }
 const smallSelect: React.CSSProperties = { border: '1px solid rgba(10,12,16,.12)', borderRadius: 7, padding: '5px 6px', fontSize: 11.5, background: '#fff' }
 const messageBox: React.CSSProperties = { marginTop: 12, padding: '9px 11px', borderRadius: 9, background: 'rgba(22,101,52,.08)', fontSize: 12.5 }
+const teamCards: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 10, marginBottom: 14 }
+const teamCard: React.CSSProperties = { background: '#F6F3EE', borderRadius: 12, padding: 13, display: 'flex', flexDirection: 'column', gap: 9 }
+const teamCardTop: React.CSSProperties = { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, fontSize: 13 }
+const codeBox: React.CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, background: '#fff', border: '1px dashed rgba(10,12,16,.16)', borderRadius: 8, padding: '8px 9px', color: '#72551D', fontFamily: 'monospace', fontSize: 11.5 }
+const copyButton: React.CSSProperties = { border: 0, borderRadius: 6, background: '#FFF4D8', color: '#72551D', padding: '5px 7px', cursor: 'pointer', fontSize: 10.5, fontWeight: 700 }
+const dangerButton: React.CSSProperties = { border: '1px solid rgba(153,27,27,.18)', borderRadius: 7, background: 'transparent', color: '#991B1B', padding: '7px 9px', cursor: 'pointer', fontSize: 11.5, fontWeight: 650 }
+const emptyTeam: React.CSSProperties = { gridColumn: '1 / -1', padding: 14, color: 'rgba(10,12,16,.5)', background: '#F6F3EE', borderRadius: 10, fontSize: 12.5 }
+const teamToolbar: React.CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', background: '#F6F3EE', borderRadius: 12, padding: 12, marginBottom: 12, fontSize: 12.5 }
+const teamAdd: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 7, minWidth: 300 }
+const adminList: React.CSSProperties = { display: 'flex', flexDirection: 'column', gap: 7 }
+const adminListRow: React.CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '8px 9px', background: '#fff', borderRadius: 8, fontSize: 12 }
+const miniButton: React.CSSProperties = { borderRadius: 6, background: '#FFF4D8', color: '#72551D', padding: '5px 7px', textDecoration: 'none', fontSize: 10.5, fontWeight: 700, whiteSpace: 'nowrap' }
+const primaryLink: React.CSSProperties = { color: '#72551D', fontSize: 11.5, fontWeight: 700, textDecoration: 'none', marginTop: 2 }
 const errorBox: React.CSSProperties = { marginBottom: 16, padding: '10px 12px', color: '#991B1B', background: 'rgba(220,38,38,.08)', borderRadius: 10, fontSize: 13 }

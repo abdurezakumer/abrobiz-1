@@ -48,6 +48,8 @@ export interface MarketingWorkspace {
   ledger: MarketingLedgerEntry[]
   summary: MarketingSummary
   team: Array<{ id: string; name: string; email: string; platformId: string; role: AdminRole }>
+  managedSalesIds: string[]
+  salesPool: Array<{ id: string; platformId: string; name: string; isAssignedToMe: boolean; isAssignedElsewhere: boolean }>
   referralCodes: Array<{ id: string; salesPersonId: string; code: string; label: string; isActive: boolean }>
   commissionRule: { id: string; name: string; salesPersonRate: number; marketingAdminRate: number; abrobizRate: number } | null
 }
@@ -60,16 +62,18 @@ function scopedAttributions(profile: Profile) {
 }
 
 export async function getMarketingWorkspace(profile: Profile): Promise<MarketingWorkspace> {
-  const [{ data: attributionRows, error: attributionError }, { data: teamRows, error: teamError }, { data: codeRows, error: codeError }, { data: ruleRows, error: ruleError }] = await Promise.all([
+  const [{ data: attributionRows, error: attributionError }, { data: teamRows, error: teamError }, { data: codeRows, error: codeError }, { data: ruleRows, error: ruleError }, { data: membershipRows, error: membershipError }] = await Promise.all([
     scopedAttributions(profile),
     supabase.from('profiles').select('id, name, email, platform_id, admin_role').in('admin_role', ['marketing_admin', 'sales_person']).order('name').limit(500),
     supabase.from('marketing_referral_codes').select('id, sales_person_id, code, label, is_active').order('created_at', { ascending: false }).limit(500),
     supabase.from('marketing_commission_rules').select('id, name, sales_person_rate, marketing_admin_rate, abrobiz_rate').eq('is_active', true).limit(1),
+    supabase.from('marketing_team_memberships').select('sales_person_id, marketing_admin_id').is('ended_at', null).limit(1000),
   ])
   if (attributionError) throw attributionError
   if (teamError) throw teamError
   if (codeError) throw codeError
   if (ruleError) throw ruleError
+  if (membershipError) throw membershipError
 
   const attributions = attributionRows ?? []
   const ownerIds = attributions.map((row: any) => row.owner_id)
@@ -138,6 +142,14 @@ export async function getMarketingWorkspace(profile: Profile): Promise<Marketing
     createdAt: row.created_at,
   }))
   const partnerLedger = ledger.filter(entry => entry.recipientType !== 'abrobiz' && entry.entryType === 'original')
+  const activeMemberships = membershipRows ?? []
+  const managedSalesIds = profile.adminRole === 'marketing_admin'
+    ? activeMemberships.filter((row: any) => row.marketing_admin_id === profile.id).map((row: any) => row.sales_person_id)
+    : activeMemberships.map((row: any) => row.sales_person_id)
+  const { data: salesPoolRows, error: salesPoolError } = profile.adminRole === 'marketing_admin'
+    ? await supabase.rpc('marketing_admin_list_sales_pool')
+    : { data: [], error: null }
+  if (salesPoolError) throw salesPoolError
   return {
     customers,
     ledger,
@@ -151,6 +163,8 @@ export async function getMarketingWorkspace(profile: Profile): Promise<Marketing
       commissionPaid: partnerLedger.filter(entry => entry.status === 'paid').reduce((sum, entry) => sum + entry.amountEtb, 0),
     },
     team: (teamRows ?? []).map((row: any) => ({ id: row.id, name: row.name || 'Unnamed', email: row.email || '—', platformId: row.platform_id || '—', role: row.admin_role })),
+    managedSalesIds,
+    salesPool: (salesPoolRows ?? []).map((row: any) => ({ id: row.id, platformId: row.platform_id, name: row.name || 'Unnamed Sales Person', isAssignedToMe: Boolean(row.is_assigned_to_me), isAssignedElsewhere: Boolean(row.is_assigned_elsewhere) })),
     referralCodes: (codeRows ?? []).map((row: any) => ({ id: row.id, salesPersonId: row.sales_person_id, code: row.code, label: row.label, isActive: row.is_active })),
     commissionRule: ruleRows?.[0] ? { id: ruleRows[0].id, name: ruleRows[0].name, salesPersonRate: Number(ruleRows[0].sales_person_rate), marketingAdminRate: Number(ruleRows[0].marketing_admin_rate), abrobizRate: Number(ruleRows[0].abrobiz_rate) } : null,
   }
@@ -158,6 +172,11 @@ export async function getMarketingWorkspace(profile: Profile): Promise<Marketing
 
 export async function rotateReferralCode(salesPersonId: string): Promise<void> {
   const { error } = await supabase.rpc('super_admin_rotate_marketing_referral_code', { p_sales_person_id: salesPersonId })
+  if (error) throw error
+}
+
+export async function manageSalesTeam(salesPersonId: string, action: 'add' | 'remove'): Promise<void> {
+  const { error } = await supabase.rpc('marketing_admin_manage_sales_team', { p_sales_person_id: salesPersonId, p_action: action })
   if (error) throw error
 }
 
