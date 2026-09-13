@@ -113,7 +113,7 @@ export async function getMarketingWorkspace(profile: Profile): Promise<Marketing
 
   const businessIds = (businessRows ?? []).map((row: any) => row.id)
   const { data: paymentRows, error: paymentError } = businessIds.length
-    ? await supabase.from('payments').select('id, business_id, plan_id, amount_etb, status, created_at, updated_at, plans(name, price_etb)').in('business_id', businessIds).order('created_at', { ascending: false }).limit(2000)
+    ? await supabase.from('payments').select('id, business_id, plan_id, amount_etb, status, created_at, reviewed_at, plans(name, price_etb)').in('business_id', businessIds).order('created_at', { ascending: false }).limit(2000)
     : { data: [], error: null }
   if (paymentError) throw paymentError
 
@@ -165,7 +165,7 @@ export async function getMarketingWorkspace(profile: Profile): Promise<Marketing
       paidAmount: submittedAmount,
       paymentId: latest?.id ?? null,
       paymentCreatedAt: latest?.created_at ?? null,
-      paymentUpdatedAt: latest?.updated_at ?? null,
+      paymentUpdatedAt: latest?.reviewed_at ?? latest?.created_at ?? null,
       daysPending,
       lastReminderAt: null,
       salesPersonName: row.sales_person_id ? teamById.get(row.sales_person_id)?.name ?? null : null,
