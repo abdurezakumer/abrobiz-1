@@ -337,11 +337,12 @@ export default function BusinessSettings() {
       </Section>
 
       <Section title="Social links">
+        <p style={{ color: 'rgba(10,12,16,0.5)', fontSize: 12.5, lineHeight: 1.55, margin: '-3px 0 14px' }}>Add your public social profiles. After saving, configured links appear as labeled icons in your public website footer.</p>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
-          <Field label="Facebook URL"><input value={form.social.facebookUrl ?? ''} onChange={e => patch('social', { ...form.social, facebookUrl: e.target.value })} style={inputStyle} /></Field>
-          <Field label="Instagram URL"><input value={form.social.instagramUrl ?? ''} onChange={e => patch('social', { ...form.social, instagramUrl: e.target.value })} style={inputStyle} /></Field>
-          <Field label="TikTok URL"><input value={form.social.tiktokUrl ?? ''} onChange={e => patch('social', { ...form.social, tiktokUrl: e.target.value })} style={inputStyle} /></Field>
-          <Field label="Telegram handle"><input value={form.social.telegramHandle ?? ''} onChange={e => patch('social', { ...form.social, telegramHandle: e.target.value })} style={inputStyle} /></Field>
+          <Field label="Facebook URL"><input type="url" inputMode="url" placeholder="https://facebook.com/your-page" value={form.social.facebookUrl ?? ''} onChange={e => patch('social', { ...form.social, facebookUrl: e.target.value })} style={inputStyle} /></Field>
+          <Field label="Instagram URL"><input type="url" inputMode="url" placeholder="https://instagram.com/your-profile" value={form.social.instagramUrl ?? ''} onChange={e => patch('social', { ...form.social, instagramUrl: e.target.value })} style={inputStyle} /></Field>
+          <Field label="TikTok URL"><input type="url" inputMode="url" placeholder="https://tiktok.com/@your-profile" value={form.social.tiktokUrl ?? ''} onChange={e => patch('social', { ...form.social, tiktokUrl: e.target.value })} style={inputStyle} /></Field>
+          <Field label="Telegram handle"><input inputMode="text" placeholder="@your-handle" value={form.social.telegramHandle ?? ''} onChange={e => patch('social', { ...form.social, telegramHandle: e.target.value })} style={inputStyle} /></Field>
         </div>
       </Section>
     </DashboardLayout>
