@@ -1,15 +1,16 @@
 import { type ReactNode } from 'react'
 import { Link, useLocation, useParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Facebook, Instagram, Send, Menu as MenuIcon, X } from 'lucide-react'
+import { Clock, Facebook, Instagram, Mail, MapPin, Phone, Send, Menu as MenuIcon, X } from 'lucide-react'
 import { useState } from 'react'
 import type { Business, Language } from '../types'
 import type { StorefrontTheme } from '../lib/storefrontTheme'
 import type { StorefrontEntitlements } from '../lib/useStorefrontData'
-import { t } from '../lib/i18n'
-import { storefrontPath } from '../lib/storefrontUrl'
-import { safeHttpsUrl, safeImageUrl, safeTelegramUrl } from '../lib/safeUrl'
+import { DAY_LABELS, t } from '../lib/i18n'
+import { publicStorefrontUrl, storefrontPath } from '../lib/storefrontUrl'
+import { safeHttpsUrl, safeImageUrl, safeMailto, safeTel, safeTelegramUrl } from '../lib/safeUrl'
 import AmbientBackdrop from './AmbientBackdrop'
+import BusinessLocation from './BusinessLocation'
 
 function pageLabel(itemLabel: string): string {
   if (itemLabel === 'Service') return 'Services'
@@ -25,11 +26,12 @@ function bookLabel(itemLabel: string): string {
 }
 
 export default function StorefrontLayout({
-  business, theme, itemLabel, lang, setLang, entitlements, children,
+  business, theme, itemLabel, categoryLabel, lang, setLang, entitlements, children,
 }: {
   business: Business
   theme: StorefrontTheme
   itemLabel: string
+  categoryLabel?: string
   lang: Language
   setLang: (l: Language) => void
   entitlements: StorefrontEntitlements
@@ -52,6 +54,7 @@ export default function StorefrontLayout({
   const logoUrl = safeImageUrl(business.logoUrl)
   const facebookUrl = safeHttpsUrl(business.social.facebookUrl)
   const instagramUrl = safeHttpsUrl(business.social.instagramUrl)
+  const tiktokUrl = safeHttpsUrl(business.social.tiktokUrl)
   const telegramUrl = safeTelegramUrl(business.social.telegramHandle)
 
   return (
@@ -133,26 +136,71 @@ export default function StorefrontLayout({
 
       <main style={{ position: 'relative', zIndex: 1, flex: 1 }}>{children}</main>
 
-      <footer style={{ borderTop: `1px solid ${theme.border}`, padding: '24px 20px', background: theme.heroBg }}>
-        <div style={{ maxWidth: 720, margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-          <span style={{ fontSize: 11.5, color: theme.textDim }}>{t('poweredBy', lang)} AbroBiz</span>
-          <div style={{ display: 'flex', gap: 10 }}>
-            {facebookUrl && <a href={facebookUrl} target="_blank" rel="noopener noreferrer" style={socialIcon(theme)}><Facebook size={13} /></a>}
-            {instagramUrl && <a href={instagramUrl} target="_blank" rel="noopener noreferrer" style={socialIcon(theme)}><Instagram size={13} /></a>}
-            {telegramUrl && <a href={telegramUrl} target="_blank" rel="noopener noreferrer" style={socialIcon(theme)}><Send size={13} /></a>}
-          </div>
-        </div>
-      </footer>
+      <StorefrontFooter business={business} theme={theme} lang={lang} categoryLabel={categoryLabel} navItems={navItems} logoUrl={logoUrl} facebookUrl={facebookUrl} instagramUrl={instagramUrl} tiktokUrl={tiktokUrl} telegramUrl={telegramUrl} />
 
       <style>{`
         @media (max-width: 720px) {
           .storefront-nav-desktop { display: none !important; }
           .storefront-nav-toggle { display: block !important; }
+          .storefront-footer-grid { grid-template-columns: 1fr !important; }
         }
       `}</style>
     </div>
   )
 }
+
+type NavItem = { href: string; section: string; label: string }
+
+function StorefrontFooter({ business, theme, lang, categoryLabel, navItems, logoUrl, facebookUrl, instagramUrl, tiktokUrl, telegramUrl }: { business: Business; theme: StorefrontTheme; lang: Language; categoryLabel?: string; navItems: NavItem[]; logoUrl: string | null; facebookUrl: string | null; instagramUrl: string | null; tiktokUrl: string | null; telegramUrl: string | null }) {
+  const phoneUrl = safeTel(business.phone)
+  const emailUrl = safeMailto(business.email)
+  const hasHours = Object.values(business.openingHours).some(hours => hours && (hours.closed || Boolean(hours.open) || Boolean(hours.close)))
+  const socialLinks = [
+    facebookUrl && { href: facebookUrl, label: 'Facebook', icon: <Facebook size={14} aria-hidden /> },
+    instagramUrl && { href: instagramUrl, label: 'Instagram', icon: <Instagram size={14} aria-hidden /> },
+    tiktokUrl && { href: tiktokUrl, label: 'TikTok', icon: <span aria-hidden style={{ fontSize: 11, fontWeight: 800 }}>♪</span> },
+    telegramUrl && { href: telegramUrl, label: 'Telegram', icon: <Send size={14} aria-hidden /> },
+  ].filter(Boolean) as { href: string; label: string; icon: React.ReactNode }[]
+
+  return (
+    <footer aria-labelledby="storefront-footer-title" style={{ borderTop: `1px solid ${theme.border}`, padding: '38px 20px 24px', background: theme.heroBg }}>
+      <div className="storefront-footer-grid" style={{ maxWidth: 1120, margin: '0 auto', display: 'grid', gridTemplateColumns: '1.35fr .8fr 1fr 1fr', gap: 30 }}>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+            {logoUrl ? <img src={logoUrl} alt="" width={38} height={38} decoding="async" style={{ width: 38, height: 38, borderRadius: 12, objectFit: 'cover' }} /> : <div aria-hidden style={{ width: 38, height: 38, borderRadius: 12, background: business.accentColor }} />}
+            <div><h2 id="storefront-footer-title" style={{ margin: 0, fontSize: 16, fontFamily: 'Outfit, sans-serif' }}>{business.name}</h2>{categoryLabel && categoryLabel !== 'Business' && <div style={{ marginTop: 3, color: theme.textDim, fontSize: 11.5 }}>{categoryLabel}</div>}</div>
+          </div>
+          {business.description && <p style={{ maxWidth: 300, margin: '16px 0 0', color: theme.textDim, fontSize: 12.5, lineHeight: 1.65 }}>{business.description}</p>}
+          {socialLinks.length > 0 && <div aria-label="Social media" style={{ display: 'flex', gap: 8, marginTop: 17 }}>{socialLinks.map(social => <a key={social.label} href={social.href} target="_blank" rel="noopener noreferrer" aria-label={social.label} style={socialIcon(theme)}>{social.icon}</a>)}</div>}
+        </div>
+        <div>
+          <h3 style={footerHeading}>Explore</h3>
+          <nav aria-label="Footer navigation" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>{navItems.map(item => <a key={item.section} href={item.href} style={footerLink(theme)}>{item.label}</a>)}</nav>
+        </div>
+        <div>
+          <h3 style={footerHeading}>Contact</h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 9, color: theme.textDim, fontSize: 12.5, lineHeight: 1.45 }}>
+            {phoneUrl && <a href={phoneUrl} style={footerLink(theme)}><Phone size={14} aria-hidden /> {business.phone}</a>}
+            {emailUrl && <a href={emailUrl} style={footerLink(theme)}><Mail size={14} aria-hidden /> {business.email}</a>}
+            {business.address && <span style={{ display: 'flex', alignItems: 'flex-start', gap: 7 }}><MapPin size={14} color={business.accentColor} aria-hidden /> {business.address}</span>}
+            <a href={publicStorefrontUrl(business.slug)} style={footerLink(theme)}><ExternalWebsiteIcon /> Website</a>
+          </div>
+          {hasHours && <div style={{ marginTop: 19 }}><h3 style={footerHeading}><Clock size={14} aria-hidden /> Hours</h3><div style={{ display: 'flex', flexDirection: 'column', gap: 4, color: theme.textDim, fontSize: 11.5 }}>{(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const).map(day => { const hours = business.openingHours[day]; return <div key={day} style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}><span>{DAY_LABELS[day][lang]}</span><span>{hours.closed ? t('closed', lang) : `${hours.open} – ${hours.close}`}</span></div> })}</div></div>}
+        </div>
+        <BusinessLocation business={business} theme={theme} lang={lang} />
+      </div>
+      <div style={{ maxWidth: 1120, margin: '30px auto 0', paddingTop: 16, borderTop: `1px solid ${theme.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, color: theme.textDim, fontSize: 11.5 }}>
+        <span>{t('poweredBy', lang)} <a href="https://abrobiz.com" style={{ color: theme.text, textDecoration: 'none', fontWeight: 700 }}>AbroBiz</a></span>
+        <div style={{ display: 'flex', gap: 12 }}><a href="/terms" style={footerLink(theme)}>Terms</a><a href="/privacy" style={footerLink(theme)}>Privacy</a></div>
+      </div>
+    </footer>
+  )
+}
+
+function ExternalWebsiteIcon() { return <span aria-hidden style={{ width: 14, textAlign: 'center', color: '#D4A853' }}>↗</span> }
+
+const footerHeading: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 6, margin: '0 0 13px', color: 'inherit', fontSize: 12.5, fontWeight: 700 }
+const footerLink = (theme: StorefrontTheme): React.CSSProperties => ({ display: 'inline-flex', alignItems: 'center', gap: 7, color: theme.textDim, textDecoration: 'none' })
 
 function socialIcon(theme: StorefrontTheme): React.CSSProperties {
   return { width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', border: `1px solid ${theme.border}`, color: theme.text, textDecoration: 'none' }

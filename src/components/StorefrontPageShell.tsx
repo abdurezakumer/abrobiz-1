@@ -71,7 +71,7 @@ export default function StorefrontPageShell({
   const theme = themeFor(data.business.templateSlug, data.templateConfig)
 
   return (
-    <StorefrontLayout business={data.business} theme={theme} itemLabel={data.labels.itemLabel} lang={data.lang} setLang={data.setLang} entitlements={data.entitlements}>
+    <StorefrontLayout business={data.business} theme={theme} itemLabel={data.labels.itemLabel} categoryLabel={data.labels.label} lang={data.lang} setLang={data.setLang} entitlements={data.entitlements}>
       {render({ ...data, theme })}
     </StorefrontLayout>
   )

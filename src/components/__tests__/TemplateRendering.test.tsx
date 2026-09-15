@@ -1,6 +1,7 @@
-import { render } from '@testing-library/react'
+import { fireEvent, render } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { TemplateFeatured, TemplateHero } from '../TemplateShowcase'
+import BusinessLocation from '../BusinessLocation'
 import { TEMPLATE_REGISTRY } from '../../lib/templateRegistry'
 import { themeFor } from '../../lib/storefrontTheme'
 import type { Business, Item } from '../../types'
@@ -81,6 +82,16 @@ describe('storefront template rendering', () => {
     const minimalBusiness = business(definition.slug, false)
     const view = render(<TemplateHero business={minimalBusiness} theme={themeFor(definition.slug, definition.config)} labels={labels} lang="en" open todayHours={hours.mon} />)
     expect(view.getByRole('heading', { name: /Harbor & Hill Studio/ })).toBeInTheDocument()
+    view.unmount()
+  })
+
+  it('keeps the location map deferred until a visitor requests it', () => {
+    const completeBusiness = business('location-test', true)
+    const view = render(<BusinessLocation business={completeBusiness} theme={themeFor('clean-minimal')} />)
+    expect(view.queryByTitle('Map showing Harbor & Hill Studio')).not.toBeInTheDocument()
+    fireEvent.click(view.getByRole('button', { name: 'Load map for Harbor & Hill Studio' }))
+    expect(view.getByTitle('Map showing Harbor & Hill Studio')).toHaveAttribute('loading', 'lazy')
+    expect(view.getByRole('link', { name: /View on map/i })).toHaveAttribute('target', '_blank')
     view.unmount()
   })
 })
