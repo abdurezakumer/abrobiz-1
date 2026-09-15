@@ -101,7 +101,7 @@ async function generate(client: ReturnType<typeof createClient>, userId: string,
   const { data: previous } = await client.from('ai_website_copy_generations').select('content').eq('business_id', input.businessId).eq('language', input.language).eq('status', 'APPROVED').order('created_at', { ascending: false }).limit(1).maybeSingle()
   const apiKey = Deno.env.get('GEMINI_API_KEY')
   if (!apiKey) return json({ error: 'AI copy generation is not configured yet. Please contact support.' }, 503, req)
-  const model = (Deno.env.get('GEMINI_MODEL') || 'gemini-2.0-flash').replace(/^models\//, '').replace(/[^A-Za-z0-9._-]/g, '').slice(0, 80)
+  const model = (Deno.env.get('GEMINI_MODEL') || 'gemini-3.5-flash').replace(/^models\//, '').replace(/[^A-Za-z0-9._-]/g, '').slice(0, 80)
   if (!model) return json({ error: 'AI copy generation is not configured yet.' }, 503, req)
 
   const requested = input.section === 'all' ? 'all sections' : `only the ${input.section} section`

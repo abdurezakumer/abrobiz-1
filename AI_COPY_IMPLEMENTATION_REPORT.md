@@ -27,7 +27,7 @@ The platform does not overwrite `businesses`, `categories`, or `items`. Prices, 
 3. Store it only as a Supabase Edge Function secret:
 
    ```bash
-   supabase secrets set GEMINI_API_KEY=YOUR_GEMINI_API_KEY GEMINI_MODEL=gemini-2.0-flash --project-ref YOUR_PROJECT_REF
+   supabase secrets set GEMINI_API_KEY=YOUR_GEMINI_API_KEY GEMINI_MODEL=gemini-3.5-flash --project-ref YOUR_PROJECT_REF
    ```
 
 4. Deploy the function through the normal controlled Supabase deployment process:
