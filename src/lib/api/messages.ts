@@ -16,7 +16,7 @@ function mapMessage(row: any): ContactMessage {
 }
 
 /** Called from the public Contact page — works for anonymous visitors on a published business. */
-export async function submitContactMessage(input: { businessId: string; name: string; email: string; phone: string; message: string; turnstileToken?: string | null }): Promise<void> {
+export async function submitContactMessage(input: { businessId: string; name: string; email: string; phone: string; message: string }): Promise<void> {
   const { error } = await supabase.functions.invoke('submit-contact', {
     body: input,
   })

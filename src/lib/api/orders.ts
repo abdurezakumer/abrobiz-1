@@ -39,7 +39,6 @@ export async function submitOrder(input: {
   notes: string
   items: CartLine[]
   idempotencyKey?: string
-  turnstileToken?: string | null
 }): Promise<{ id: string; totalEtb: number }> {
   const { data, error } = await supabase.functions.invoke('submit-order', {
     headers: { 'Idempotency-Key': input.idempotencyKey ?? crypto.randomUUID() },

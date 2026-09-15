@@ -15,7 +15,7 @@ function mapReview(row: any): Review {
 }
 
 /** Public. Always lands unapproved — the business owner moderates before it's visible to anyone else. */
-export async function submitReview(input: { businessId: string; customerName: string; rating: number; comment: string; turnstileToken?: string | null }): Promise<void> {
+export async function submitReview(input: { businessId: string; customerName: string; rating: number; comment: string }): Promise<void> {
   const { error } = await supabase.functions.invoke('submit-review', {
     body: input,
   })

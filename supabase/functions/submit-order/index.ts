@@ -3,7 +3,6 @@ import { corsHeaders } from '../_shared/cors.ts'
 import { enforceRateLimits } from '../_shared/rateLimit.ts'
 import { isRecord, readJsonBody, validUuid } from '../_shared/requestSecurity.ts'
 import { logFailure } from '../_shared/observability.ts'
-import { requireTurnstile } from '../_shared/turnstile.ts'
 import { TelegramClient } from '../_shared/telegram.ts'
 import { notifyBusinessOwner } from '../_shared/ownerNotifications.ts'
 
@@ -45,9 +44,6 @@ if (import.meta.main) {
         { scope: 'order-business', limit: 10, windowSeconds: 900, identity: businessId },
       ])
       if (limited) return limited
-      const turnstileFailure = await requireTurnstile(req, body.turnstileToken, 'order')
-      if (turnstileFailure) return turnstileFailure
-
       const db = createAdminClient()
       const { data, error } = await db.rpc('submit_order_idempotent', {
         p_idempotency_key: idempotencyKey,

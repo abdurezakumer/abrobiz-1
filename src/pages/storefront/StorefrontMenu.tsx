@@ -8,8 +8,6 @@ import { cartCount, cartTotal, addToCart as addToCartFn, changeCartQty } from '.
 import type { Item, Language } from '../../types'
 import { safeImageUrl } from '../../lib/safeUrl'
 import { friendlyError } from '../../lib/errors'
-import TurnstileWidget from '../../components/TurnstileWidget'
-import { turnstileEnabled } from '../../lib/turnstile'
 
 export default function StorefrontMenu() {
   return (
@@ -164,8 +162,6 @@ function CartDrawer({ business, theme, items, cart, cartTotal, onChangeQty, onCl
   const [notes, setNotes] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
-  const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
-  const [turnstileResetKey, setTurnstileResetKey] = useState(0)
 
   const lines: { item: Item; qty: number }[] = Object.entries(cart)
     .map(([id, qty]) => ({ item: items.find((i: Item) => i.id === id), qty: qty as number }))
@@ -178,21 +174,15 @@ function CartDrawer({ business, theme, items, cart, cartTotal, onChangeQty, onCl
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (turnstileEnabled && !turnstileToken) {
-      setError('Complete the security check to place your order.')
-      return
-    }
     setSubmitting(true)
     setError('')
     try {
       const cartLines: CartLine[] = lines.map(l => ({ itemId: l.item.id, quantity: l.qty }))
-      await submitOrder({ businessId: business.id, customerName: name, phone, fulfillmentType: fulfillment, address, notes, items: cartLines, turnstileToken })
+      await submitOrder({ businessId: business.id, customerName: name, phone, fulfillmentType: fulfillment, address, notes, items: cartLines })
       onOrderComplete()
       setStep('done')
     } catch (err) {
       setError(friendlyError(err))
-      setTurnstileToken(null)
-      setTurnstileResetKey(value => value + 1)
     } finally {
       setSubmitting(false)
     }
@@ -254,9 +244,8 @@ function CartDrawer({ business, theme, items, cart, cartTotal, onChangeQty, onCl
             )}
             <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Notes (optional)" rows={2} style={{ ...inputStyle, resize: 'vertical' }} />
             <div style={{ fontSize: 13, color: theme.textDim, textAlign: 'center' }}>Pay on {fulfillment} · Total: {cartTotal} {business.currency}</div>
-            <TurnstileWidget action="order" onToken={setTurnstileToken} resetKey={turnstileResetKey} />
             {error && <div style={{ color: '#F87171', fontSize: 12.5 }}>{error}</div>}
-            <button type="submit" disabled={submitting || (turnstileEnabled && !turnstileToken)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: business.accentColor, color: '#0A0C10', border: 'none', borderRadius: 10, padding: 13, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+            <button type="submit" disabled={submitting} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: business.accentColor, color: '#0A0C10', border: 'none', borderRadius: 10, padding: 13, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
               <Send size={14} /> {submitting ? 'Placing order…' : 'Place order'}
             </button>
           </form>

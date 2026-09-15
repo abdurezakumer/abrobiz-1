@@ -4,8 +4,6 @@ import { Star, Send, CheckCircle2 } from 'lucide-react'
 import { listApprovedReviews, submitReview } from '../lib/api/reviews'
 import type { Review } from '../types'
 import type { StorefrontTheme } from '../lib/storefrontTheme'
-import TurnstileWidget from './TurnstileWidget'
-import { turnstileEnabled } from '../lib/turnstile'
 import { friendlyError } from '../lib/errors'
 
 function StarPicker({ value, onChange }: { value: number; onChange: (n: number) => void }) {
@@ -29,8 +27,6 @@ export default function StorefrontReviews({ businessId, accentColor, theme }: { 
   const [submitting, setSubmitting] = useState(false)
   const [sent, setSent] = useState(false)
   const [error, setError] = useState('')
-  const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
-  const [turnstileResetKey, setTurnstileResetKey] = useState(0)
 
   useEffect(() => {
     listApprovedReviews(businessId).then(setReviews)
@@ -40,19 +36,14 @@ export default function StorefrontReviews({ businessId, accentColor, theme }: { 
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (turnstileEnabled && !turnstileToken) return
     setSubmitting(true)
     setError('')
     try {
-      await submitReview({ businessId, customerName: name, rating, comment, turnstileToken })
+      await submitReview({ businessId, customerName: name, rating, comment })
       setSent(true)
       setName(''); setComment(''); setRating(5)
-      setTurnstileToken(null)
-      setTurnstileResetKey(value => value + 1)
     } catch (err) {
       setError(friendlyError(err))
-      setTurnstileToken(null)
-      setTurnstileResetKey(value => value + 1)
     } finally {
       setSubmitting(false)
     }
@@ -93,10 +84,9 @@ export default function StorefrontReviews({ businessId, accentColor, theme }: { 
           <StarPicker value={rating} onChange={setRating} />
           <input required value={name} onChange={e => setName(e.target.value)} placeholder="Your name" style={inputStyle} />
           <textarea value={comment} onChange={e => setComment(e.target.value)} placeholder="Your experience (optional)" rows={2} style={{ ...inputStyle, resize: 'vertical' }} />
-          <TurnstileWidget action="review" onToken={setTurnstileToken} resetKey={turnstileResetKey} />
           {error && <div role="alert" style={{ color: '#F87171', fontSize: 12.5 }}>{error}</div>}
           <div style={{ display: 'flex', gap: 8 }}>
-            <button type="submit" disabled={submitting || (turnstileEnabled && !turnstileToken)} style={{ display: 'flex', alignItems: 'center', gap: 6, background: accentColor, color: '#0A0C10', border: 'none', borderRadius: 9, padding: '9px 16px', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>
+            <button type="submit" disabled={submitting} style={{ display: 'flex', alignItems: 'center', gap: 6, background: accentColor, color: '#0A0C10', border: 'none', borderRadius: 9, padding: '9px 16px', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>
               <Send size={12} /> {submitting ? 'Sending…' : 'Submit'}
             </button>
             <button type="button" onClick={() => setShowForm(false)} style={{ background: 'none', border: 'none', color: theme.textDim, fontSize: 12.5, cursor: 'pointer' }}>Cancel</button>

@@ -26,7 +26,6 @@ export async function submitBooking(input: {
   requestedDate: string
   requestedTime: string
   notes?: string
-  turnstileToken?: string | null
 }): Promise<void> {
   const { error } = await supabase.functions.invoke('submit-booking', {
     body: input,
