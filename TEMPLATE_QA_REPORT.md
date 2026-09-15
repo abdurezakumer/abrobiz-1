@@ -9,7 +9,7 @@ This QA pass preserved the existing template architecture, database schema, auth
 - Template registry: 37 unique templates verified.
 - Complete-data rendering: 37/37 templates rendered successfully.
 - Minimal-data rendering: 37/37 templates rendered successfully without requiring optional images, contact data, or catalog content.
-- Automated suite: 11 test files, 130 tests passed.
+- Automated suite: 11 test files, 131 tests passed.
 - TypeScript: passed.
 - ESLint: passed with 0 errors and 9 pre-existing warnings.
 - Production build: passed.

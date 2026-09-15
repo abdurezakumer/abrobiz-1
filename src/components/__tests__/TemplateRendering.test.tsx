@@ -1,7 +1,9 @@
 import { fireEvent, render } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
+import { MemoryRouter } from 'react-router-dom'
 import { TemplateFeatured, TemplateHero } from '../TemplateShowcase'
 import BusinessLocation from '../BusinessLocation'
+import StorefrontLayout from '../StorefrontLayout'
 import { TEMPLATE_REGISTRY } from '../../lib/templateRegistry'
 import { themeFor } from '../../lib/storefrontTheme'
 import type { Business, Item } from '../../types'
@@ -92,6 +94,22 @@ describe('storefront template rendering', () => {
     fireEvent.click(view.getByRole('button', { name: 'Load map for Harbor & Hill Studio' }))
     expect(view.getByTitle('Map showing Harbor & Hill Studio')).toHaveAttribute('loading', 'lazy')
     expect(view.getByRole('link', { name: /View on map/i })).toHaveAttribute('target', '_blank')
+    view.unmount()
+  })
+
+  it('renders the shared footer with available business information', () => {
+    const completeBusiness = business('footer-test', true)
+    const view = render(
+      <MemoryRouter initialEntries={['/demo/footer-test']}>
+        <StorefrontLayout business={completeBusiness} theme={themeFor('clean-minimal')} itemLabel="Service" categoryLabel="Fitness" lang="en" setLang={() => {}} entitlements={{ bookings: true, ordering: false, reviews: false, siteActive: true }}>
+          <div>Storefront content</div>
+        </StorefrontLayout>
+      </MemoryRouter>,
+    )
+    expect(view.getByRole('contentinfo')).toBeInTheDocument()
+    expect(view.getByRole('heading', { name: 'Harbor & Hill Studio' })).toBeInTheDocument()
+    expect(view.getByRole('link', { name: 'Terms' })).toBeInTheDocument()
+    expect(view.getAllByText('Bole, Addis Ababa').length).toBeGreaterThan(0)
     view.unmount()
   })
 })

@@ -142,8 +142,11 @@ export default function StorefrontLayout({
         @media (max-width: 720px) {
           .storefront-nav-desktop { display: none !important; }
           .storefront-nav-toggle { display: block !important; }
-          .storefront-footer-grid { grid-template-columns: 1fr !important; }
+          .storefront-footer-grid { grid-template-columns: 1fr !important; gap: 26px !important; }
+          .storefront-footer { padding-left: 18px !important; padding-right: 18px !important; }
         }
+        .storefront-footer a:hover { color: ${theme.text} !important; }
+        .storefront-footer a:focus-visible, .storefront-footer button:focus-visible { outline: 2px solid ${business.accentColor}; outline-offset: 3px; }
       `}</style>
     </div>
   )
@@ -163,12 +166,12 @@ function StorefrontFooter({ business, theme, lang, categoryLabel, navItems, logo
   ].filter(Boolean) as { href: string; label: string; icon: React.ReactNode }[]
 
   return (
-    <footer aria-labelledby="storefront-footer-title" style={{ borderTop: `1px solid ${theme.border}`, padding: '38px 20px 24px', background: theme.heroBg }}>
+    <footer className="storefront-footer" aria-labelledby="storefront-footer-title" style={{ position: 'relative', zIndex: 2, width: '100%', borderTop: `1px solid ${theme.border}`, padding: 'clamp(42px, 6vw, 68px) 20px 24px', background: theme.heroBg, color: theme.text, fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif' }}>
       <div className="storefront-footer-grid" style={{ maxWidth: 1120, margin: '0 auto', display: 'grid', gridTemplateColumns: '1.35fr .8fr 1fr 1fr', gap: 30 }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
             {logoUrl ? <img src={logoUrl} alt="" width={38} height={38} decoding="async" style={{ width: 38, height: 38, borderRadius: 12, objectFit: 'cover' }} /> : <div aria-hidden style={{ width: 38, height: 38, borderRadius: 12, background: business.accentColor }} />}
-            <div><h2 id="storefront-footer-title" style={{ margin: 0, fontSize: 16, fontFamily: 'Outfit, sans-serif' }}>{business.name}</h2>{categoryLabel && categoryLabel !== 'Business' && <div style={{ marginTop: 3, color: theme.textDim, fontSize: 11.5 }}>{categoryLabel}</div>}</div>
+            <div><h2 id="storefront-footer-title" style={{ margin: 0, fontSize: 18, lineHeight: 1.15, fontFamily: theme.headingFont, letterSpacing: '-.02em' }}>{business.name}</h2>{categoryLabel && categoryLabel !== 'Business' && <div style={{ marginTop: 5, color: theme.textDim, fontSize: 11.5, letterSpacing: '.08em', textTransform: 'uppercase' }}>{categoryLabel}</div>}</div>
           </div>
           {business.description && <p style={{ maxWidth: 300, margin: '16px 0 0', color: theme.textDim, fontSize: 12.5, lineHeight: 1.65 }}>{business.description}</p>}
           {socialLinks.length > 0 && <div aria-label="Social media" style={{ display: 'flex', gap: 8, marginTop: 17 }}>{socialLinks.map(social => <a key={social.label} href={social.href} target="_blank" rel="noopener noreferrer" aria-label={social.label} style={socialIcon(theme)}>{social.icon}</a>)}</div>}
@@ -189,7 +192,7 @@ function StorefrontFooter({ business, theme, lang, categoryLabel, navItems, logo
         </div>
         <BusinessLocation business={business} theme={theme} lang={lang} />
       </div>
-      <div style={{ maxWidth: 1120, margin: '30px auto 0', paddingTop: 16, borderTop: `1px solid ${theme.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, color: theme.textDim, fontSize: 11.5 }}>
+      <div style={{ maxWidth: 1120, margin: '34px auto 0', paddingTop: 18, borderTop: `1px solid ${theme.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, color: theme.textDim, fontSize: 11.5 }}>
         <span>{t('poweredBy', lang)} <a href="https://abrobiz.com" style={{ color: theme.text, textDecoration: 'none', fontWeight: 700 }}>AbroBiz</a></span>
         <div style={{ display: 'flex', gap: 12 }}><a href="/terms" style={footerLink(theme)}>Terms</a><a href="/privacy" style={footerLink(theme)}>Privacy</a></div>
       </div>
@@ -199,7 +202,7 @@ function StorefrontFooter({ business, theme, lang, categoryLabel, navItems, logo
 
 function ExternalWebsiteIcon() { return <span aria-hidden style={{ width: 14, textAlign: 'center', color: '#D4A853' }}>↗</span> }
 
-const footerHeading: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 6, margin: '0 0 13px', color: 'inherit', fontSize: 12.5, fontWeight: 700 }
+const footerHeading: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 6, margin: '0 0 13px', color: 'inherit', fontSize: 13, fontWeight: 700, fontFamily: 'Outfit, Inter, ui-sans-serif, system-ui, sans-serif', letterSpacing: '.02em' }
 const footerLink = (theme: StorefrontTheme): React.CSSProperties => ({ display: 'inline-flex', alignItems: 'center', gap: 7, color: theme.textDim, textDecoration: 'none' })
 
 function socialIcon(theme: StorefrontTheme): React.CSSProperties {
