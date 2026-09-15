@@ -40,7 +40,7 @@ function business(slug: string, complete: boolean): Business {
     languages: ['en'],
     accentColor: '#D4A853',
     openingHours: hours,
-    social: {},
+    social: complete ? { facebookUrl: 'https://facebook.com/harborhill', instagramUrl: 'https://instagram.com/harborhill', tiktokUrl: 'https://tiktok.com/@harborhill', telegramHandle: 'harborhill' } : {},
     currency: 'ETB',
     timezone: 'Africa/Addis_Ababa',
     isPublished: true,
@@ -109,6 +109,7 @@ describe('storefront template rendering', () => {
     expect(view.getByRole('contentinfo')).toBeInTheDocument()
     expect(view.getByRole('heading', { name: 'Harbor & Hill Studio' })).toBeInTheDocument()
     expect(view.getByRole('link', { name: 'Terms' })).toBeInTheDocument()
+    expect(view.getByRole('link', { name: 'Facebook' })).toHaveAttribute('href', 'https://facebook.com/harborhill')
     expect(view.getAllByText('Bole, Addis Ababa').length).toBeGreaterThan(0)
     view.unmount()
   })

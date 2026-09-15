@@ -1,7 +1,7 @@
 import { type ReactNode } from 'react'
 import { Link, useLocation, useParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Clock, Facebook, Instagram, Mail, MapPin, Phone, Send, Menu as MenuIcon, X } from 'lucide-react'
+import { Clock, Facebook, Instagram, Mail, MapPin, Music2, Phone, Send, Menu as MenuIcon, X } from 'lucide-react'
 import { useState } from 'react'
 import type { Business, Language } from '../types'
 import type { StorefrontTheme } from '../lib/storefrontTheme'
@@ -161,7 +161,7 @@ function StorefrontFooter({ business, theme, lang, categoryLabel, navItems, logo
   const socialLinks = [
     facebookUrl && { href: facebookUrl, label: 'Facebook', icon: <Facebook size={14} aria-hidden /> },
     instagramUrl && { href: instagramUrl, label: 'Instagram', icon: <Instagram size={14} aria-hidden /> },
-    tiktokUrl && { href: tiktokUrl, label: 'TikTok', icon: <span aria-hidden style={{ fontSize: 11, fontWeight: 800 }}>♪</span> },
+    tiktokUrl && { href: tiktokUrl, label: 'TikTok', icon: <Music2 size={14} aria-hidden /> },
     telegramUrl && { href: telegramUrl, label: 'Telegram', icon: <Send size={14} aria-hidden /> },
   ].filter(Boolean) as { href: string; label: string; icon: React.ReactNode }[]
 
@@ -174,7 +174,7 @@ function StorefrontFooter({ business, theme, lang, categoryLabel, navItems, logo
             <div><h2 id="storefront-footer-title" style={{ margin: 0, fontSize: 18, lineHeight: 1.15, fontFamily: theme.headingFont, letterSpacing: '-.02em' }}>{business.name}</h2>{categoryLabel && categoryLabel !== 'Business' && <div style={{ marginTop: 5, color: theme.textDim, fontSize: 11.5, letterSpacing: '.08em', textTransform: 'uppercase' }}>{categoryLabel}</div>}</div>
           </div>
           {business.description && <p style={{ maxWidth: 300, margin: '16px 0 0', color: theme.textDim, fontSize: 12.5, lineHeight: 1.65 }}>{business.description}</p>}
-          {socialLinks.length > 0 && <div aria-label="Social media" style={{ display: 'flex', gap: 8, marginTop: 17 }}>{socialLinks.map(social => <a key={social.label} href={social.href} target="_blank" rel="noopener noreferrer" aria-label={social.label} style={socialIcon(theme)}>{social.icon}</a>)}</div>}
+          {socialLinks.length > 0 && <div aria-label="Social media" style={{ marginTop: 19 }}><h3 style={footerHeading}>Follow us</h3><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>{socialLinks.map(social => <a key={social.label} href={social.href} target="_blank" rel="noopener noreferrer" aria-label={social.label} style={{ ...socialIcon(theme), width: 'auto', minWidth: 28, padding: '0 9px', borderRadius: 99, gap: 6, fontSize: 11.5 }}>{social.icon}<span>{social.label}</span></a>)}</div></div>}
         </div>
         <div>
           <h3 style={footerHeading}>Explore</h3>
