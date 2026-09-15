@@ -18,7 +18,8 @@ export default function StorefrontPageShell({
   useEffect(() => {
     const business = data.business
     if (!business) return
-    const description = (business.description || business.aboutContent || `Discover ${business.name} on AbroBiz.`).slice(0, 160)
+    const copy = data.approvedCopy[data.lang] ?? data.approvedCopy.en
+    const description = (copy?.seo?.description || copy?.hero?.subheadline || business.description || business.aboutContent || `Discover ${business.name} on AbroBiz.`).slice(0, 160)
     document.title = `${business.name} | AbroBiz`
     const canonical = publicStorefrontUrl(business.slug)
     const setMeta = (key: string, value: string, attribute: 'name' | 'property' = 'name') => {
@@ -50,7 +51,7 @@ export default function StorefrontPageShell({
     schema.textContent = JSON.stringify({ '@context': 'https://schema.org', '@type': 'LocalBusiness', name: business.name, description, url: canonical, image: business.coverUrl || business.logoUrl, telephone: business.phone || undefined, email: business.email || undefined, address: business.address || undefined })
     document.head.appendChild(schema)
     return () => { document.getElementById(schemaId)?.remove() }
-  }, [data.business])
+  }, [data.business, data.lang, data.approvedCopy])
 
   if (data.business === undefined) return null
 

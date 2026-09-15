@@ -14,6 +14,7 @@ import type { Business, BusinessCategory, Language, Template, WeeklyHours } from
 import { IMAGE_UPLOAD_ACCEPT, takeSelectedFile } from '../lib/fileUpload'
 import TemplateSelector from '../components/TemplateSelector'
 import { BUILTIN_TEMPLATES } from '../lib/templateRegistry'
+import AICopyGenerator from '../components/AICopyGenerator'
 
 const ALL_LANGUAGES: { code: Language; label: string }[] = [
   { code: 'en', label: 'English' },
@@ -262,6 +263,10 @@ export default function BusinessSettings() {
             )}
           </div>
         </div>
+      </Section>
+
+      <Section title="AI website copy">
+        <AICopyGenerator businessId={form.id} languages={form.languages} />
       </Section>
 
       <Section title="Languages">

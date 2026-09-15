@@ -18,13 +18,14 @@ export default function StorefrontHome() {
   return (
     <StorefrontPageShell
       pagePath="/home"
-      render={({ business, categories, items, labels, lang, theme, entitlements }) => {
+      render={({ business, categories, items, labels, lang, theme, entitlements, approvedCopy }) => {
         if (!business) return null
         const open = isOpenNow(business.openingHours, business.timezone)
         const featured = items.filter(i => i.isFeatured && i.isAvailable).slice(0, 4)
         const fallback = featured.length === 0 ? items.filter(i => i.isAvailable).slice(0, 4) : []
         const highlight = featured.length > 0 ? featured : fallback
-        const aboutSnippet = (business.aboutContent || business.description || '').slice(0, 220)
+        const copy = approvedCopy[lang] ?? approvedCopy.en
+        const aboutSnippet = (copy?.about?.description || business.aboutContent || business.description || '').slice(0, 220)
         const todayKey = currentWeekday(business.timezone)
         const todayHours = business.openingHours[todayKey]
         const featuredFirst = theme.composition.startsWith('fitness') || theme.composition.startsWith('clinical') || theme.composition.startsWith('barber')
@@ -34,7 +35,7 @@ export default function StorefrontHome() {
           <>
             <LegacyRouteScroller />
             <section id="home" style={{ scrollMarginTop: 72 }}>
-            <TemplateHero business={business} theme={theme} labels={labels} lang={lang} open={open} todayHours={todayHours} />
+            <TemplateHero business={business} theme={theme} labels={labels} lang={lang} open={open} todayHours={todayHours} copy={copy} />
 
             {/* About teaser */}
             {!featuredFirst && aboutSnippet && (
@@ -47,7 +48,7 @@ export default function StorefrontHome() {
               </motion.div>
             )}
 
-            <TemplateFeatured items={highlight} business={business} theme={theme} lang={lang} title={featuredTitle} />
+            <TemplateFeatured items={highlight} business={business} theme={theme} lang={lang} title={featuredTitle} copy={copy} />
 
             <QuickFacts business={business} theme={theme} todayHours={todayHours} />
 
@@ -71,7 +72,7 @@ export default function StorefrontHome() {
             </section>
 
             <section id="about" style={{ scrollMarginTop: 72, borderTop: `1px solid ${theme.border}` }}>
-              <AboutSection business={business} theme={theme} />
+              <AboutSection business={business} theme={theme} copy={copy} />
             </section>
 
             {business.galleryUrls.length > 0 && (
@@ -81,7 +82,7 @@ export default function StorefrontHome() {
             )}
 
             <section id="contact" style={{ scrollMarginTop: 72, borderTop: `1px solid ${theme.border}` }}>
-              <ContactSection business={business} lang={lang} theme={theme} />
+              <ContactSection business={business} lang={lang} theme={theme} copy={copy} />
             </section>
 
             {entitlements.bookings && (

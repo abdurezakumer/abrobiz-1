@@ -4,6 +4,7 @@ import type { Business, Item, Language } from '../types'
 import type { TemplateComposition } from '../types'
 import type { StorefrontTheme } from '../lib/storefrontTheme'
 import type { StorefrontLabels } from '../lib/useStorefrontData'
+import type { GeneratedCopy } from '../lib/aiCopy'
 import { safeImageUrl } from '../lib/safeUrl'
 import SpotlightHero from './SpotlightHero'
 import AnimatedHeading from './AnimatedHeading'
@@ -18,11 +19,15 @@ interface ShowcaseProps {
   lang: Language
   open: boolean
   todayHours: { open: string; close: string; closed: boolean }
+  copy?: GeneratedCopy
 }
 
-export function TemplateHero({ business, theme, labels, lang, open, todayHours }: ShowcaseProps) {
+export function TemplateHero({ business, theme, labels, lang, open, todayHours, copy }: ShowcaseProps) {
   const image = safeImageUrl(business.coverUrl) ?? safeImageUrl(business.galleryUrls[0]) ?? undefined
   const logo = safeImageUrl(business.logoUrl) ?? undefined
+  const headline = copy?.hero?.headline || business.name
+  const description = copy?.hero?.subheadline || business.description
+  if (copy) business = { ...business, name: headline, description }
   const cta = labels.itemLabel === 'Service' ? 'View services' : labels.itemLabel === 'Product' ? 'Shop products' : labels.itemLabel === 'Room / Package' ? 'View rooms' : 'Explore the menu'
   const status = <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, color: open ? '#4ADE80' : '#F87171', fontSize: 12.5, fontWeight: 650 }}><i style={{ width: 7, height: 7, borderRadius: 99, background: 'currentColor' }} />{open ? t('currentlyOpen', lang) : t('currentlyClosed', lang)}</span>
   const actions = <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 25 }}><a href="#menu" style={{ ...primaryButton, background: business.accentColor, borderRadius: theme.composition === 'minimal' ? 8 : 999, color: theme.bg }}>{cta}<ArrowRight size={15} /></a><a href="#contact" style={{ ...secondaryButton, color: theme.text, borderColor: theme.border }}>Contact us</a></div>
@@ -81,8 +86,17 @@ function nicheEyebrow(composition: TemplateComposition): string {
   return 'Made for your next step'
 }
 
-export function TemplateFeatured({ items, business, theme, lang, title = 'Featured' }: { items: Item[]; business: Business; theme: StorefrontTheme; lang: Language; title?: string }) {
+export function TemplateFeatured({ items, business, theme, lang, title = 'Featured', copy }: { items: Item[]; business: Business; theme: StorefrontTheme; lang: Language; title?: string; copy?: GeneratedCopy }) {
   if (items.length === 0) return null
+  if (copy?.services) {
+    const generatedById = new Map(copy.services.map(item => [item.sourceId, item]))
+    items = items.map(item => {
+      const generated = generatedById.get(item.id)
+      if (!generated) return item
+      const existing = item.translations[lang] ?? item.translations.en ?? { name: '', description: '' }
+      return { ...item, translations: { ...item.translations, [lang]: { name: generated.title, description: generated.shortDescription || existing.description } } }
+    })
+  }
   const cards = items.slice(0, 4)
   if (theme.composition === 'minimal') return <div style={{ maxWidth: 820, margin: '0 auto', padding: '12px 22px 58px' }}><div style={{ borderTop: `1px solid ${theme.border}` }}><h2 style={{ fontFamily: theme.headingFont, fontSize: 23, margin: '25px 0 12px' }}>{title}</h2>{cards.map(item => { const tr = item.translations[lang] ?? item.translations.en; const image = safeImageUrl(item.imageUrl); return <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 0', borderBottom: `1px solid ${theme.border}` }}>{image && <img src={image} alt={tr?.name ?? ''} width={56} height={56} loading="lazy" decoding="async" style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 10 }} />}<div style={{ flex: 1 }}><strong style={{ fontSize: 14 }}>{tr?.name}</strong>{tr?.description && <p style={{ margin: '4px 0 0', color: theme.textDim, fontSize: 12.5 }}>{tr.description}</p>}</div><span style={{ color: business.accentColor, fontSize: 13, fontWeight: 700 }}>{item.price} {business.currency}</span></div>})}</div></div>
   const masonry = theme.composition === 'salon-fashion' || theme.composition === 'barber-classic'

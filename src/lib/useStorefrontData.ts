@@ -5,6 +5,7 @@ import { listItems } from './api/items'
 import { supabase } from './supabaseClient'
 import type { Business, Category, Item, Language, TemplateConfig } from '../types'
 import { retryRead } from './retry'
+import { getApprovedWebsiteCopies } from './aiCopy'
 
 export interface StorefrontLabels {
   label: string
@@ -29,6 +30,7 @@ export interface StorefrontData {
   setLang: (l: Language) => void
   entitlements: StorefrontEntitlements
   templateConfig: TemplateConfig
+  approvedCopy: Partial<Record<Language, import('./aiCopy').GeneratedCopy>>
 }
 
 const DEFAULT_LABELS: StorefrontLabels = { label: 'Business', itemLabel: 'Item', categoryLabel: 'Category', icon: 'Store' }
@@ -62,10 +64,12 @@ export function useStorefrontData(slug: string | undefined, pagePath: string): S
   const [lang, setLang] = useState<Language>('en')
   const [entitlements, setEntitlements] = useState<StorefrontEntitlements>(DEFAULT_ENTITLEMENTS)
   const [templateConfig, setTemplateConfig] = useState<TemplateConfig>({})
+  const [approvedCopy, setApprovedCopy] = useState<StorefrontData['approvedCopy']>({})
 
   useEffect(() => {
     if (!slug) {
       setBusiness(null)
+      setApprovedCopy({})
       return
     }
     const businessSlug = slug
@@ -101,6 +105,7 @@ export function useStorefrontData(slug: string | undefined, pagePath: string): S
         if (!ent.siteActive) {
           setCategories([])
           setItems([])
+          setApprovedCopy({})
           return
         }
 
@@ -112,6 +117,9 @@ export function useStorefrontData(slug: string | undefined, pagePath: string): S
         if (cancelled) return
         setCategories(cats.filter(c => !c.isHidden))
         setItems(its)
+        const copy = await getApprovedWebsiteCopies(biz.id, new Set(its.map(item => item.id))).catch(() => ({}))
+        if (cancelled) return
+        setApprovedCopy(copy)
         setTemplateConfig((template.data?.config ?? {}) as TemplateConfig)
         setLabels(DEFAULT_LABELS)
         if (trackView) void trackPageView(biz.id, pagePath).catch(() => {})
@@ -160,5 +168,5 @@ export function useStorefrontData(slug: string | undefined, pagePath: string): S
     }
   }, [slug, pagePath])
 
-  return { business, categories, items, labels, lang, setLang, entitlements, templateConfig }
+  return { business, categories, items, labels, lang, setLang, entitlements, templateConfig, approvedCopy }
 }

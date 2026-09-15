@@ -75,3 +75,6 @@ verify_jwt = true
 
 [functions.notify-payment-reviewed]
 verify_jwt = true
+
+[functions.generate-website-copy]
+verify_jwt = true

@@ -7,20 +7,21 @@ import { DAY_LABELS, t } from '../../lib/i18n'
 import { safeHttpsUrl, safeMailto, safeTel } from '../../lib/safeUrl'
 import TurnstileWidget from '../../components/TurnstileWidget'
 import { turnstileEnabled } from '../../lib/turnstile'
+import type { GeneratedCopy } from '../../lib/aiCopy'
 
 export default function StorefrontContact() {
   return (
     <StorefrontPageShell
       pagePath="/contact"
-      render={({ business, lang, theme }) => {
+      render={({ business, lang, theme, approvedCopy }) => {
         if (!business) return null
-        return <ContactSection business={business} lang={lang} theme={theme} />
+        return <ContactSection business={business} lang={lang} theme={theme} copy={approvedCopy[lang] ?? approvedCopy.en} />
       }}
     />
   )
 }
 
-export function ContactSection({ business, lang, theme }: any) {
+export function ContactSection({ business, lang, theme, copy }: { business: any; lang: any; theme: any; copy?: GeneratedCopy }) {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
@@ -62,6 +63,7 @@ export function ContactSection({ business, lang, theme }: any) {
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} style={{ textAlign: 'center', marginBottom: 32 }}>
         <span style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: 1, color: business.accentColor, textTransform: 'uppercase' }}>Contact</span>
         <h1 style={{ fontFamily: theme.headingFont ?? 'Outfit, sans-serif', fontSize: 28, fontWeight: 700, marginTop: 8 }}>Get in touch</h1>
+        {copy?.contact?.intro && <p style={{ maxWidth: 500, margin: '10px auto 0', color: theme.textDim, fontSize: 14, lineHeight: 1.65 }}>{copy.contact.intro}</p>}
       </motion.div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 32 }} className="contact-grid">
