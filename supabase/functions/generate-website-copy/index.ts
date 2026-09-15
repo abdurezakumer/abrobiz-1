@@ -7,7 +7,8 @@ import { logFailure } from '../_shared/observability.ts'
 import { COPY_LANGUAGES, COPY_SECTIONS, COPY_TONES, sha256, validateGeneratedCopy, type CopyLanguage, type CopySection, type CopyTone, type GeneratedCopy } from '../_shared/aiCopy.ts'
 
 const MAX_BODY_BYTES = 16 * 1024
-const GENERATION_VERSION = '1.0.0'
+const GENERATION_VERSION = '1.0.1'
+const FALLBACK_MODELS = ['gemini-3.6-flash', 'gemini-3.5-flash']
 
 function json(body: unknown, status = 200, req?: Request): Response {
   return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders(req), 'Content-Type': 'application/json' } })
@@ -101,7 +102,7 @@ async function generate(client: ReturnType<typeof createClient>, userId: string,
   const { data: previous } = await client.from('ai_website_copy_generations').select('content').eq('business_id', input.businessId).eq('language', input.language).eq('status', 'APPROVED').order('created_at', { ascending: false }).limit(1).maybeSingle()
   const apiKey = Deno.env.get('GEMINI_API_KEY')
   if (!apiKey) return json({ error: 'AI copy generation is not configured yet. Please contact support.' }, 503, req)
-  const model = (Deno.env.get('GEMINI_MODEL') || 'gemini-3.5-flash').replace(/^models\//, '').replace(/[^A-Za-z0-9._-]/g, '').slice(0, 80)
+  const model = (Deno.env.get('GEMINI_MODEL') || 'gemini-3.6-flash').replace(/^models\//, '').replace(/[^A-Za-z0-9._-]/g, '').slice(0, 80)
   if (!model) return json({ error: 'AI copy generation is not configured yet.' }, 503, req)
 
   const requested = input.section === 'all' ? 'all sections' : `only the ${input.section} section`
@@ -113,16 +114,23 @@ async function generate(client: ReturnType<typeof createClient>, userId: string,
     'For services, return only source item IDs from the source items array and rewrite their names/descriptions without changing their prices.',
     JSON.stringify({ source, section: input.section }),
   ].join('\n')
-  let response: Response
-  try {
-    response = await fetchWithTimeout(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-      body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { temperature: 0.35, responseMimeType: 'application/json', responseSchema: schemaFor(input.section) } }),
-    }, 20_000)
-  } catch {
-    return json({ error: 'The AI writing service is temporarily unavailable. Please try again later.' }, 503, req)
+  let response: Response | null = null
+  let selectedModel = model
+  const models = [...new Set([model, ...FALLBACK_MODELS])]
+  for (const candidate of models) {
+    try {
+      response = await fetchWithTimeout(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(candidate)}:generateContent`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+        body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { temperature: 0.35, responseMimeType: 'application/json', responseSchema: schemaFor(input.section) } }),
+      }, 20_000)
+      selectedModel = candidate
+      if (response.ok || ![400, 404].includes(response.status)) break
+    } catch {
+      return json({ error: 'The AI writing service is temporarily unavailable. Please try again later.' }, 503, req)
+    }
   }
+  if (!response) return json({ error: 'The AI writing service is temporarily unavailable. Please try again later.' }, 503, req)
   if (!response.ok) {
     logFailure(req, { function_name: 'generate-website-copy', operation: 'gemini_generate', error_category: response.status === 429 ? 'RATE_LIMITED' : 'DEPENDENCY_ERROR', error_code: `HTTP_${response.status}`, status: 503, provider: 'gemini' })
     return json({ error: response.status === 429 ? 'The AI writing service is busy. Please try again later.' : 'The AI writing service is temporarily unavailable. Please try again later.' }, 503, req)
@@ -137,7 +145,7 @@ async function generate(client: ReturnType<typeof createClient>, userId: string,
   if (!validateGeneratedCopy(parsed, sourceIds, input.section)) return json({ error: 'The AI returned copy in an unsafe or unsupported format. Please try again.' }, 502, req)
   const content = mergeCopy(previous?.content, parsed, input.section, sourceIds)
   if (!validateGeneratedCopy(content, sourceIds, 'all')) return json({ error: 'The generated copy could not be safely combined with your current website copy.' }, 502, req)
-  const { data: generation, error: insertError } = await client.from('ai_website_copy_generations').insert({ business_id: input.businessId, owner_id: userId, language: input.language, tone: input.tone, status: 'DRAFT', content, source_hash: sourceHash, model, generation_version: GENERATION_VERSION }).select('id, business_id, language, tone, status, content, source_hash, generation_version, created_at, updated_at').single()
+  const { data: generation, error: insertError } = await client.from('ai_website_copy_generations').insert({ business_id: input.businessId, owner_id: userId, language: input.language, tone: input.tone, status: 'DRAFT', content, source_hash: sourceHash, model: selectedModel, generation_version: GENERATION_VERSION }).select('id, business_id, language, tone, status, content, source_hash, generation_version, created_at, updated_at').single()
   if (insertError || !generation) {
     logFailure(req, { function_name: 'generate-website-copy', operation: 'save_draft', error_category: 'DATABASE_ERROR', error_code: insertError?.code ?? 'unknown', status: 500 })
     return json({ error: 'The copy was generated but could not be saved. Please try again.' }, 500, req)
