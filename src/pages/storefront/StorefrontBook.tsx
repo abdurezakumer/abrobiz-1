@@ -5,6 +5,7 @@ import StorefrontPageShell from '../../components/StorefrontPageShell'
 import { submitBooking } from '../../lib/api/bookings'
 import TurnstileWidget from '../../components/TurnstileWidget'
 import { turnstileEnabled } from '../../lib/turnstile'
+import { friendlyError } from '../../lib/errors'
 
 function heading(itemLabel: string): string {
   if (itemLabel === 'Service') return 'Book an Appointment'
@@ -42,6 +43,7 @@ export function BookSection({ business, itemLabel, theme }: any) {
   const [sent, setSent] = useState(false)
   const [error, setError] = useState('')
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
+  const [turnstileResetKey, setTurnstileResetKey] = useState(0)
 
   const inputStyle: React.CSSProperties = {
     background: theme.card, border: `1px solid ${theme.border}`, borderRadius: 10, padding: '11px 13px',
@@ -68,8 +70,10 @@ export function BookSection({ business, itemLabel, theme }: any) {
         turnstileToken,
       })
       setSent(true)
-    } catch {
-      setError("Couldn't submit your request — please try again.")
+    } catch (err) {
+      setError(friendlyError(err))
+      setTurnstileToken(null)
+      setTurnstileResetKey(value => value + 1)
     } finally {
       setSubmitting(false)
     }
@@ -106,7 +110,7 @@ export function BookSection({ business, itemLabel, theme }: any) {
           <input type="number" min={1} value={partySize} onChange={e => setPartySize(e.target.value ? parseInt(e.target.value) : '')} placeholder="Party size (optional)" style={inputStyle} />
         )}
         <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Anything else we should know? (optional)" rows={3} style={{ ...inputStyle, resize: 'vertical' }} />
-        <TurnstileWidget action="booking" onToken={setTurnstileToken} />
+        <TurnstileWidget action="booking" onToken={setTurnstileToken} resetKey={turnstileResetKey} />
         {error && <div style={{ color: '#F87171', fontSize: 12.5 }}>{error}</div>}
         <button type="submit" disabled={submitting || (turnstileEnabled && !turnstileToken)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: business.accentColor, color: '#0A0C10', border: 'none', borderRadius: 10, padding: '12px', fontSize: 14, fontWeight: 600, cursor: 'pointer', marginTop: 4 }}>
           <Send size={14} /> {submitting ? 'Sending…' : 'Request booking'}

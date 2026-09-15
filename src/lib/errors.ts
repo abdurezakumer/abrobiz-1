@@ -7,6 +7,7 @@ export function friendlyError(error: unknown): string {
     return "You don't have permission to do that. If this keeps happening, make sure you're logged in and try again."
   }
   if (/too many requests|rate limit/i.test(msg)) return 'Too many requests. Please wait a few minutes and try again.'
+  if (/verification failed|security check/i.test(msg)) return 'The security check could not be verified. Complete it again and try once more.'
   if (/JWT expired/i.test(msg)) return 'Your session expired — please log in again.'
   if (/exceeded the maximum/i.test(msg) || /Payload too large/i.test(msg) || /file is too large/i.test(msg)) return 'That file is too large. Choose a smaller photo and try again.'
   if (/unsupported or malformed/i.test(msg)) return 'This photo format is not supported. Please choose a JPG, PNG, or WebP photo.'
@@ -40,5 +41,5 @@ export async function edgeFunctionError(error: unknown): Promise<Error> {
       // Keep the original error below when the response is not JSON.
     }
   }
-  return new Error(candidate?.message || 'The AbroBiz email service is unavailable. Please try again.')
+  return new Error(candidate?.message || 'The AbroBiz request could not be completed. Please try again.')
 }

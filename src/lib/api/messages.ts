@@ -1,4 +1,5 @@
 import { supabase } from '../supabaseClient'
+import { edgeFunctionError } from '../errors'
 import type { ContactMessage } from '../../types'
 
 function mapMessage(row: any): ContactMessage {
@@ -19,7 +20,7 @@ export async function submitContactMessage(input: { businessId: string; name: st
   const { error } = await supabase.functions.invoke('submit-contact', {
     body: input,
   })
-  if (error) throw error
+  if (error) throw await edgeFunctionError(error)
 }
 
 export async function listMessages(businessId: string): Promise<ContactMessage[]> {

@@ -41,9 +41,17 @@ if (import.meta.main) {
       if (turnstileFailure) return turnstileFailure
 
       const db = createAdminClient()
-      const { data: business } = await db.from('businesses').select('id').eq('id', businessId).eq('is_published', true).eq('is_blocked', false).maybeSingle()
+      const { data: business, error: businessError } = await db.from('businesses').select('id').eq('id', businessId).eq('is_published', true).eq('is_blocked', false).maybeSingle()
+      if (businessError) {
+        logFailure(req, { function_name: 'submit-booking', operation: 'load_business', error_category: 'DATABASE_ERROR', error_code: businessError.code ?? 'unknown', status: 503 })
+        return json({ error: 'Booking service is temporarily unavailable.' }, 503, req)
+      }
       if (!business) return json({ error: 'Business is not available.' }, 404, req)
-      const { data: entitlement } = await db.rpc('get_business_entitlements', { p_business_id: businessId })
+      const { data: entitlement, error: entitlementError } = await db.rpc('get_business_entitlements', { p_business_id: businessId })
+      if (entitlementError) {
+        logFailure(req, { function_name: 'submit-booking', operation: 'load_entitlements', error_category: 'DATABASE_ERROR', error_code: entitlementError.code ?? 'unknown', status: 503 })
+        return json({ error: 'Booking service is temporarily unavailable.' }, 503, req)
+      }
       if (!entitlement?.bookings) return json({ error: 'Booking is not available for this business.' }, 403, req)
       const { error } = await db.from('bookings').insert({ business_id: businessId, customer_name: name, phone, party_size: partySize, requested_date: date, requested_time: time, notes })
       if (error) {

@@ -8,6 +8,7 @@ import { safeHttpsUrl, safeMailto, safeTel } from '../../lib/safeUrl'
 import TurnstileWidget from '../../components/TurnstileWidget'
 import { turnstileEnabled } from '../../lib/turnstile'
 import type { GeneratedCopy } from '../../lib/aiCopy'
+import { friendlyError } from '../../lib/errors'
 
 export default function StorefrontContact() {
   return (
@@ -30,6 +31,7 @@ export function ContactSection({ business, lang, theme, copy }: { business: any;
   const [sent, setSent] = useState(false)
   const [error, setError] = useState('')
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
+  const [turnstileResetKey, setTurnstileResetKey] = useState(0)
   const mapsUrl = safeHttpsUrl(business.mapsUrl)
   const phoneUrl = safeTel(business.phone)
   const emailUrl = safeMailto(business.email)
@@ -46,8 +48,10 @@ export function ContactSection({ business, lang, theme, copy }: { business: any;
       await submitContactMessage({ businessId: business.id, name, email, phone, message, turnstileToken })
       setSent(true)
       setName(''); setEmail(''); setPhone(''); setMessage('')
-    } catch {
-      setError("Couldn't send your message — please try again.")
+    } catch (err) {
+      setError(friendlyError(err))
+      setTurnstileToken(null)
+      setTurnstileResetKey(value => value + 1)
     } finally {
       setSubmitting(false)
     }
@@ -111,7 +115,7 @@ export function ContactSection({ business, lang, theme, copy }: { business: any;
               <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Email (optional)" style={inputStyle} />
               <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="Phone (optional)" style={inputStyle} />
               <textarea required value={message} onChange={e => setMessage(e.target.value)} placeholder="Message" rows={4} style={{ ...inputStyle, resize: 'vertical' }} />
-              <TurnstileWidget action="contact" onToken={setTurnstileToken} />
+              <TurnstileWidget action="contact" onToken={setTurnstileToken} resetKey={turnstileResetKey} />
               {error && <div style={{ color: '#F87171', fontSize: 12.5 }}>{error}</div>}
               <button type="submit" disabled={submitting || (turnstileEnabled && !turnstileToken)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: business.accentColor, color: '#0A0C10', border: 'none', borderRadius: 10, padding: '12px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
                 <Send size={14} /> {submitting ? 'Sending…' : 'Send message'}
