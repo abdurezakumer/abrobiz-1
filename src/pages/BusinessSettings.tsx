@@ -15,6 +15,7 @@ import { IMAGE_UPLOAD_ACCEPT, takeSelectedFile } from '../lib/fileUpload'
 import TemplateSelector from '../components/TemplateSelector'
 import { BUILTIN_TEMPLATES } from '../lib/templateRegistry'
 import AICopyGenerator from '../components/AICopyGenerator'
+import { hasFeature } from '../lib/entitlements'
 
 const ALL_LANGUAGES: { code: Language; label: string }[] = [
   { code: 'en', label: 'English' },
@@ -25,7 +26,7 @@ const ALL_LANGUAGES: { code: Language; label: string }[] = [
 const DAYS: (keyof WeeklyHours)[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
 
 export default function BusinessSettings() {
-  const { business, refreshBusiness } = useAuth()
+  const { business, subscription, refreshBusiness } = useAuth()
   const [form, setForm] = useState<Business | null>(business)
   const [templates, setTemplates] = useState<Template[]>(BUILTIN_TEMPLATES)
   const [categories, setCategories] = useState<BusinessCategory[]>([])
@@ -266,7 +267,7 @@ export default function BusinessSettings() {
       </Section>
 
       <Section title="AI website copy">
-        <AICopyGenerator businessId={form.id} languages={form.languages} />
+        <AICopyGenerator businessId={form.id} languages={form.languages} enabled={hasFeature(subscription, 'aiCopy')} planName={subscription?.plan?.name} />
       </Section>
 
       <Section title="Languages">

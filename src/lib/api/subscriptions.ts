@@ -18,6 +18,7 @@ function mapSubscription(row: any): Subscription {
             bookings: !!row.plans.feature_flags?.bookings,
             ordering: !!row.plans.feature_flags?.ordering,
             reviews: !!row.plans.feature_flags?.reviews,
+            aiCopy: !!row.plans.feature_flags?.aiCopy,
           },
           isTrial: row.plans.is_trial,
           trialDays: row.plans.trial_days ?? undefined,

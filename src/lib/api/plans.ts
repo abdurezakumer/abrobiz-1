@@ -13,6 +13,7 @@ function mapPlan(row: any): Plan {
       bookings: !!row.feature_flags?.bookings,
       ordering: !!row.feature_flags?.ordering,
       reviews: !!row.feature_flags?.reviews,
+      aiCopy: !!row.feature_flags?.aiCopy,
     },
     isTrial: row.is_trial,
     trialDays: row.trial_days ?? undefined,

@@ -111,7 +111,7 @@ function TemplatesTab() {
 
 function PlansTab() {
   const [plans, setPlans] = useState<Plan[]>([])
-  const [form, setForm] = useState({ name: '', slug: '', priceEtb: 0, features: '', bookings: false, ordering: false, reviews: false })
+  const [form, setForm] = useState({ name: '', slug: '', priceEtb: 0, features: '', bookings: false, ordering: false, reviews: false, aiCopy: false })
   const [showForm, setShowForm] = useState(false)
 
   function load() { adminListAllPlans().then(setPlans) }
@@ -122,9 +122,9 @@ function PlansTab() {
     await createPlan({
       slug: form.slug, name: form.name, priceEtb: form.priceEtb, billingInterval: 'month',
       features: form.features.split(',').map(f => f.trim()).filter(Boolean),
-      featureFlags: { bookings: form.bookings, ordering: form.ordering, reviews: form.reviews },
+      featureFlags: { bookings: form.bookings, ordering: form.ordering, reviews: form.reviews, aiCopy: form.aiCopy },
     })
-    setForm({ name: '', slug: '', priceEtb: 0, features: '', bookings: false, ordering: false, reviews: false })
+    setForm({ name: '', slug: '', priceEtb: 0, features: '', bookings: false, ordering: false, reviews: false, aiCopy: false })
     setShowForm(false)
     load()
   }
@@ -143,10 +143,10 @@ function PlansTab() {
             <div style={{ fontSize: 12, color: 'rgba(10,12,16,0.45)' }}>{plan.priceEtb} ETB/{plan.billingInterval} · {plan.features.join(', ')}</div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            {(['bookings', 'ordering', 'reviews'] as const).map(flag => (
+            {(['bookings', 'ordering', 'reviews', 'aiCopy'] as const).map(flag => (
               <label key={flag} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, color: 'rgba(10,12,16,0.55)', cursor: 'pointer', textTransform: 'capitalize' }}>
-                <input type="checkbox" checked={plan.featureFlags[flag]} onChange={() => toggleFlag(plan, flag)} style={{ width: 13, height: 13 }} />
-                {flag}
+                <input type="checkbox" checked={!!plan.featureFlags[flag]} onChange={() => toggleFlag(plan, flag)} style={{ width: 13, height: 13 }} />
+                {flag === 'aiCopy' ? 'AI copy' : flag}
               </label>
             ))}
             <ToggleActive active={plan.isActive} onToggle={async () => { await updatePlan(plan.id, { isActive: !plan.isActive }); load() }} />
@@ -162,10 +162,10 @@ function PlansTab() {
           </div>
           <input placeholder="Features, comma separated" value={form.features} onChange={e => setForm({ ...form, features: e.target.value })} style={{ ...formInput, width: '100%', marginBottom: 8 }} />
           <div style={{ display: 'flex', gap: 14, marginBottom: 10 }}>
-            {(['bookings', 'ordering', 'reviews'] as const).map(flag => (
+            {(['bookings', 'ordering', 'reviews', 'aiCopy'] as const).map(flag => (
               <label key={flag} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'rgba(10,12,16,0.6)', cursor: 'pointer', textTransform: 'capitalize' }}>
                 <input type="checkbox" checked={form[flag]} onChange={e => setForm({ ...form, [flag]: e.target.checked })} style={{ width: 14, height: 14 }} />
-                {flag}
+                {flag === 'aiCopy' ? 'AI copy' : flag}
               </label>
             ))}
           </div>

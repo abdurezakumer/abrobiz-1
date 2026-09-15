@@ -154,6 +154,7 @@ export interface PlanFeatureFlags {
   bookings: boolean
   ordering: boolean
   reviews: boolean
+  aiCopy?: boolean
 }
 
 export interface Plan {

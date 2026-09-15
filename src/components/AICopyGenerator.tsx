@@ -7,7 +7,7 @@ import type { Language } from '../types'
 const sectionLabels: Record<CopySection, string> = { all: 'Full website', hero: 'Homepage hero', about: 'About section', services: 'Services / menu', contact: 'Contact intro', location: 'Location intro', seo: 'SEO metadata' }
 const toneLabels: Record<CopyTone, string> = { professional: 'Professional', premium: 'Premium', friendly: 'Friendly', modern: 'Modern', minimal: 'Minimal', persuasive: 'Persuasive' }
 
-export default function AICopyGenerator({ businessId, languages }: { businessId: string; languages: Language[] }) {
+export default function AICopyGenerator({ businessId, languages, enabled = true, planName }: { businessId: string; languages: Language[]; enabled?: boolean; planName?: string }) {
   const [language, setLanguage] = useState<Language>(languages[0] ?? 'en')
   const [tone, setTone] = useState<CopyTone>('professional')
   const [section, setSection] = useState<CopySection>('all')
@@ -16,6 +16,16 @@ export default function AICopyGenerator({ businessId, languages }: { businessId:
   const [applying, setApplying] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+
+  if (!enabled) {
+    return (
+      <div style={{ border: '1px solid rgba(138,100,23,.2)', borderRadius: 14, padding: 16, background: 'linear-gradient(135deg, #fffdf8, #fff)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#8A6417', fontWeight: 700, fontSize: 14 }}><Sparkles size={16} /> Professional copy assistant</div>
+        <p style={{ color: 'rgba(10,12,16,.62)', fontSize: 12.5, lineHeight: 1.55, margin: '8px 0 0' }}>Coming soon on your current plan. Upgrade to a higher plan to unlock AI-powered website copy.</p>
+        {planName && <div style={{ color: 'rgba(10,12,16,.42)', fontSize: 11.5, marginTop: 8 }}>Current plan: {planName}</div>}
+      </div>
+    )
+  }
 
   async function handleGenerate() {
     setBusy(true); setError(''); setMessage('')

@@ -80,6 +80,12 @@ async function generate(client: ReturnType<typeof createClient>, userId: string,
     logFailure(req, { function_name: 'generate-website-copy', operation: 'load_business_source', error_category: 'DATABASE_ERROR', error_code: categoryResult.error?.code ?? categoriesResult.error?.code ?? itemsResult.error?.code ?? 'unknown', status: 503 })
     return json({ error: 'Your business information could not be loaded. Please try again.' }, 503, req)
   }
+  const { data: entitlement, error: entitlementError } = await client.rpc('get_business_entitlements', { p_business_id: input.businessId })
+  if (entitlementError) {
+    logFailure(req, { function_name: 'generate-website-copy', operation: 'load_entitlements', error_category: 'DATABASE_ERROR', error_code: entitlementError.code ?? 'unknown', status: 503 })
+    return json({ error: 'AI copy availability could not be checked. Please try again later.' }, 503, req)
+  }
+  if (!entitlement?.aiCopy) return json({ error: 'AI website copy is coming soon on your current plan. Upgrade to a higher plan to use it.' }, 403, req)
   const category = categoryResult.data
   const categories = categoriesResult.data
   const items = itemsResult.data
