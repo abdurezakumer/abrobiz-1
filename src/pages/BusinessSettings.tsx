@@ -10,8 +10,10 @@ import { DAY_LABELS } from '../lib/i18n'
 import { listActiveTemplates, mergeTemplateOptions } from '../lib/api/templates'
 import { publicStorefrontUrl } from '../lib/storefrontUrl'
 import { safeImageUrl } from '../lib/safeUrl'
-import type { Business, BusinessCategory, Language, Template, TemplateSlug, WeeklyHours } from '../types'
+import type { Business, BusinessCategory, Language, Template, WeeklyHours } from '../types'
 import { IMAGE_UPLOAD_ACCEPT, takeSelectedFile } from '../lib/fileUpload'
+import TemplateSelector from '../components/TemplateSelector'
+import { BUILTIN_TEMPLATES } from '../lib/templateRegistry'
 
 const ALL_LANGUAGES: { code: Language; label: string }[] = [
   { code: 'en', label: 'English' },
@@ -19,22 +21,12 @@ const ALL_LANGUAGES: { code: Language; label: string }[] = [
   { code: 'or', label: 'Afaan Oromo' },
 ]
 
-const DEFAULT_TEMPLATES: Template[] = [
-  { id: 'modern-dark', slug: 'modern-dark', name: 'Modern Dark', description: '', config: { bg: '#111318' }, isBuiltin: true, isActive: true, sortOrder: 10, createdAt: '' },
-  { id: 'clean-minimal', slug: 'clean-minimal', name: 'Clean Minimal', description: '', config: { bg: '#F6F3EE' }, isBuiltin: true, isActive: true, sortOrder: 20, createdAt: '' },
-  { id: 'traditional-warm', slug: 'traditional-warm', name: 'Traditional Warm', description: '', config: { bg: '#5A3E2B' }, isBuiltin: true, isActive: true, sortOrder: 30, createdAt: '' },
-  { id: 'restaurant-cafe', slug: 'restaurant-cafe', name: 'Restaurant & Café Editorial', description: 'Warm cream, espresso, amber and editorial typography.', config: { bg: '#FAF8F3', visualStyle: 'heritage', layout: 'restaurant-cafe' }, isBuiltin: true, isActive: true, sortOrder: 35, createdAt: '' },
-  { id: 'aurora-glass', slug: 'aurora-glass', name: 'Aurora Glass', description: '', config: { bg: '#07131A' }, isBuiltin: true, isActive: true, sortOrder: 40, createdAt: '' },
-  { id: 'luxury-editorial', slug: 'luxury-editorial', name: 'Luxury Editorial', description: '', config: { bg: '#110F0D' }, isBuiltin: true, isActive: true, sortOrder: 50, createdAt: '' },
-  { id: 'heritage-boutique', slug: 'heritage-boutique', name: 'Heritage Boutique', description: '', config: { bg: '#2A1B16' }, isBuiltin: true, isActive: true, sortOrder: 60, createdAt: '' },
-]
-
 const DAYS: (keyof WeeklyHours)[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
 
 export default function BusinessSettings() {
   const { business, refreshBusiness } = useAuth()
   const [form, setForm] = useState<Business | null>(business)
-  const [templates, setTemplates] = useState<Template[]>(DEFAULT_TEMPLATES)
+  const [templates, setTemplates] = useState<Template[]>(BUILTIN_TEMPLATES)
   const [categories, setCategories] = useState<BusinessCategory[]>([])
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -46,7 +38,7 @@ export default function BusinessSettings() {
 
   useEffect(() => setForm(business), [business])
   useEffect(() => {
-    listActiveTemplates().then(remote => setTemplates(mergeTemplateOptions(remote, DEFAULT_TEMPLATES))).catch(() => {})
+    listActiveTemplates().then(remote => setTemplates(mergeTemplateOptions(remote, BUILTIN_TEMPLATES))).catch(() => {})
   }, [])
   useEffect(() => { listBusinessCategories().then(setCategories).catch(() => {}) }, [])
 
@@ -311,18 +303,13 @@ export default function BusinessSettings() {
 
       <Section title="Template">
         <a href="/demo/restaurant-cafe" target="_blank" rel="noreferrer" style={{ display: 'inline-block', marginBottom: 12, color: '#8A6417', fontSize: 12.5, textDecoration: 'underline' }}>Preview the Restaurant & Café demo ↗</a>
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-          {templates.map(tpl => (
-            <button
-              key={tpl.slug}
-              onClick={() => patch('templateSlug', tpl.slug)}
-              style={{ borderRadius: 12, overflow: 'hidden', border: form.templateSlug === tpl.slug ? '2px solid #D4A853' : '2px solid transparent', cursor: 'pointer', width: 130 }}
-            >
-              <div style={{ height: 60, background: safeImageUrl(tpl.previewUrl) ? `url("${safeImageUrl(tpl.previewUrl)}") center/cover` : tpl.config.bg ?? '#F6F3EE' }} />
-              <div style={{ fontSize: 12, padding: '6px 8px', textAlign: 'left' }}>{tpl.name}</div>
-            </button>
-          ))}
-        </div>
+        <TemplateSelector
+          templates={templates}
+          selectedSlug={form.templateSlug}
+          onSelect={slug => patch('templateSlug', slug)}
+          businessType={categories.find(category => category.id === form.categoryId)?.slug}
+          previewBusiness={form}
+        />
       </Section>
 
       <Section title="Opening hours">

@@ -3,6 +3,14 @@ export type TemplateSlug = string
 export type Role = 'admin' | 'super_admin' | 'owner'
 export type AdminRole = 'none' | 'super_admin' | 'operations' | 'support' | 'finance' | 'content' | 'marketing_admin' | 'sales_person'
 export type StorefrontVisualStyle = 'minimal' | 'grid' | 'warm' | 'aurora' | 'luxury' | 'heritage'
+export type TemplateComposition =
+  | 'editorial' | 'split' | 'bento' | 'minimal' | 'hospitality' | 'corporate'
+  | 'fitness-command' | 'fitness-coach' | 'fitness-personal' | 'fitness-athletic' | 'fitness-club'
+  | 'clinical-trust' | 'clinical-smile' | 'clinical-cosmetic'
+  | 'spa-ritual' | 'spa-wellness' | 'spa-balance'
+  | 'massage-therapy' | 'massage-flow' | 'massage-wellness'
+  | 'salon-editorial' | 'salon-studio' | 'salon-fashion'
+  | 'barber-luxe' | 'barber-modern' | 'barber-classic'
 
 export interface TemplateConfig {
   bg?: string
@@ -14,6 +22,13 @@ export interface TemplateConfig {
   visualStyle?: StorefrontVisualStyle
   layout?: 'standard' | 'restaurant-cafe'
   headingFont?: string
+  /** Presentation metadata. Kept in config for backwards compatibility with the existing templates table. */
+  composition?: TemplateComposition
+  category?: string
+  supportedBusinessTypes?: string[]
+  features?: string[]
+  version?: string
+  status?: 'DRAFT' | 'ACTIVE' | 'DEPRECATED'
 }
 
 export interface Template {

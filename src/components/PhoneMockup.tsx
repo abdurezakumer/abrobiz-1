@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion'
-import { ArrowUpRight, Coffee, Heart, Scissors, ShoppingBag, Star, UtensilsCrossed } from 'lucide-react'
+import { ArrowUpRight, Coffee, Heart, Scissors, ShoppingBag, UtensilsCrossed } from 'lucide-react'
 import AbroBizLogo from './AbroBizLogo'
 
 interface Preview {

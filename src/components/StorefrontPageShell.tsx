@@ -1,8 +1,9 @@
+import { useEffect } from 'react'
 import { useParams } from 'react-router-dom'
 import { useStorefrontData, type StorefrontData } from '../lib/useStorefrontData'
 import { themeFor, type StorefrontTheme } from '../lib/storefrontTheme'
 import StorefrontLayout from './StorefrontLayout'
-import { businessSlugFromHostname } from '../lib/storefrontUrl'
+import { businessSlugFromHostname, publicStorefrontUrl } from '../lib/storefrontUrl'
 
 export default function StorefrontPageShell({
   pagePath, render,
@@ -13,6 +14,43 @@ export default function StorefrontPageShell({
   const { slug: routeSlug } = useParams<{ slug: string }>()
   const slug = routeSlug ?? businessSlugFromHostname() ?? undefined
   const data = useStorefrontData(slug, pagePath)
+
+  useEffect(() => {
+    const business = data.business
+    if (!business) return
+    const description = (business.description || business.aboutContent || `Discover ${business.name} on AbroBiz.`).slice(0, 160)
+    document.title = `${business.name} | AbroBiz`
+    const canonical = publicStorefrontUrl(business.slug)
+    const setMeta = (key: string, value: string, attribute: 'name' | 'property' = 'name') => {
+      let element = document.head.querySelector<HTMLMetaElement>(`meta[${attribute}="${key}"]`)
+      if (!element) {
+        element = document.createElement('meta')
+        element.setAttribute(attribute, key)
+        document.head.appendChild(element)
+      }
+      element.content = value
+    }
+    setMeta('description', description)
+    setMeta('og:title', business.name, 'property')
+    setMeta('og:description', description, 'property')
+    setMeta('og:url', canonical, 'property')
+    setMeta('og:type', 'website', 'property')
+    if (business.coverUrl) setMeta('og:image', business.coverUrl, 'property')
+    setMeta('twitter:card', 'summary_large_image')
+    setMeta('twitter:title', business.name)
+    setMeta('twitter:description', description)
+    let link = document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]')
+    if (!link) { link = document.createElement('link'); link.rel = 'canonical'; document.head.appendChild(link) }
+    link.href = canonical
+    const schemaId = 'abrobiz-business-schema'
+    document.getElementById(schemaId)?.remove()
+    const schema = document.createElement('script')
+    schema.id = schemaId
+    schema.type = 'application/ld+json'
+    schema.textContent = JSON.stringify({ '@context': 'https://schema.org', '@type': 'LocalBusiness', name: business.name, description, url: canonical, image: business.coverUrl || business.logoUrl, telephone: business.phone || undefined, email: business.email || undefined, address: business.address || undefined })
+    document.head.appendChild(schema)
+    return () => { document.getElementById(schemaId)?.remove() }
+  }, [data.business])
 
   if (data.business === undefined) return null
 

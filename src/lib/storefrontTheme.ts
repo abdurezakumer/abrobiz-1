@@ -1,4 +1,5 @@
-import type { StorefrontVisualStyle, TemplateConfig, TemplateSlug, WeeklyHours } from '../types'
+import type { StorefrontVisualStyle, TemplateComposition, TemplateConfig, TemplateSlug, WeeklyHours } from '../types'
+import { templateComposition, templateDefinition } from './templateRegistry'
 
 export interface StorefrontTheme {
   bg: string
@@ -10,26 +11,28 @@ export interface StorefrontTheme {
   visualStyle: StorefrontVisualStyle
   layout: 'standard' | 'restaurant-cafe'
   headingFont: string
+  composition: TemplateComposition
 }
 
 export const THEMES: Record<TemplateSlug, StorefrontTheme> = {
-  'modern-dark': { bg: '#111318', card: '#191C22', text: '#F5F3EF', textDim: 'rgba(245,243,239,0.55)', border: 'rgba(255,255,255,0.08)', heroBg: '#0A0C10', visualStyle: 'grid', layout: 'standard', headingFont: 'Outfit, sans-serif' },
-  'clean-minimal': { bg: '#FBFAF8', card: '#FFFFFF', text: '#161616', textDim: 'rgba(22,22,22,0.55)', border: 'rgba(22,22,22,0.08)', heroBg: '#F6F3EE', visualStyle: 'minimal', layout: 'standard', headingFont: 'Outfit, sans-serif' },
-  'traditional-warm': { bg: '#3E2A1C', card: '#4A3323', text: '#F5EDE0', textDim: 'rgba(245,237,224,0.6)', border: 'rgba(245,237,224,0.12)', heroBg: '#2E1F15', visualStyle: 'warm', layout: 'standard', headingFont: 'Outfit, sans-serif' },
-  'aurora-glass': { bg: '#07131A', card: 'rgba(18,44,54,0.72)', text: '#E9FBF7', textDim: 'rgba(233,251,247,0.62)', border: 'rgba(164,255,231,0.16)', heroBg: '#041016', visualStyle: 'aurora', layout: 'standard', headingFont: 'Outfit, sans-serif' },
-  'luxury-editorial': { bg: '#110F0D', card: '#1D1814', text: '#F7E9D3', textDim: 'rgba(247,233,211,0.62)', border: 'rgba(215,174,104,0.2)', heroBg: '#0A0908', visualStyle: 'luxury', layout: 'standard', headingFont: 'Georgia, serif' },
-  'heritage-boutique': { bg: '#2A1B16', card: '#3A251D', text: '#F7EBDD', textDim: 'rgba(247,235,221,0.64)', border: 'rgba(247,206,151,0.18)', heroBg: '#1C110D', visualStyle: 'heritage', layout: 'standard', headingFont: 'Georgia, serif' },
-  'restaurant-cafe': { bg: '#FAF8F3', card: '#FFFDF9', text: '#2C1A0E', textDim: 'rgba(44,26,14,0.62)', border: '#EAD9C8', heroBg: '#1A0E07', visualStyle: 'heritage', layout: 'restaurant-cafe', headingFont: "'Playfair Display', Georgia, serif" },
+  'modern-dark': { bg: '#111318', card: '#191C22', text: '#F5F3EF', textDim: 'rgba(245,243,239,0.55)', border: 'rgba(255,255,255,0.08)', heroBg: '#0A0C10', visualStyle: 'grid', layout: 'standard', headingFont: 'Outfit, sans-serif', composition: 'bento' },
+  'clean-minimal': { bg: '#FBFAF8', card: '#FFFFFF', text: '#161616', textDim: 'rgba(22,22,22,0.55)', border: 'rgba(22,22,22,0.08)', heroBg: '#F6F3EE', visualStyle: 'minimal', layout: 'standard', headingFont: 'Outfit, sans-serif', composition: 'minimal' },
+  'traditional-warm': { bg: '#3E2A1C', card: '#4A3323', text: '#F5EDE0', textDim: 'rgba(245,237,224,0.6)', border: 'rgba(245,237,224,0.12)', heroBg: '#2E1F15', visualStyle: 'warm', layout: 'standard', headingFont: 'Outfit, sans-serif', composition: 'editorial' },
+  'aurora-glass': { bg: '#07131A', card: 'rgba(18,44,54,0.72)', text: '#E9FBF7', textDim: 'rgba(233,251,247,0.62)', border: 'rgba(164,255,231,0.16)', heroBg: '#041016', visualStyle: 'aurora', layout: 'standard', headingFont: 'Outfit, sans-serif', composition: 'split' },
+  'luxury-editorial': { bg: '#110F0D', card: '#1D1814', text: '#F7E9D3', textDim: 'rgba(247,233,211,0.62)', border: 'rgba(215,174,104,0.2)', heroBg: '#0A0908', visualStyle: 'luxury', layout: 'standard', headingFont: 'Georgia, serif', composition: 'editorial' },
+  'heritage-boutique': { bg: '#2A1B16', card: '#3A251D', text: '#F7EBDD', textDim: 'rgba(247,235,221,0.64)', border: 'rgba(247,206,151,0.18)', heroBg: '#1C110D', visualStyle: 'heritage', layout: 'standard', headingFont: 'Georgia, serif', composition: 'editorial' },
+  'restaurant-cafe': { bg: '#FAF8F3', card: '#FFFDF9', text: '#2C1A0E', textDim: 'rgba(44,26,14,0.62)', border: '#EAD9C8', heroBg: '#1A0E07', visualStyle: 'heritage', layout: 'restaurant-cafe', headingFont: "'Playfair Display', Georgia, serif", composition: 'editorial' },
 }
 
 export function themeFor(slug: TemplateSlug, config?: TemplateConfig): StorefrontTheme {
-  const base = THEMES[slug] ?? THEMES['clean-minimal']
+  const base = THEMES[slug] ?? { ...THEMES['clean-minimal'], ...(templateDefinition(slug)?.config ?? {}) }
   return {
     ...base,
     ...(config ?? {}),
     visualStyle: config?.visualStyle ?? base.visualStyle,
     layout: config?.layout ?? base.layout,
     headingFont: config?.headingFont ?? base.headingFont,
+    composition: templateComposition(slug, config ?? base),
   }
 }
 

@@ -1,4 +1,4 @@
-import { Component, type ErrorInfo, type ReactNode } from 'react'
+import { Component, type ReactNode } from 'react'
 
 interface Props { children: ReactNode }
 interface State { failed: boolean }
@@ -12,7 +12,7 @@ export default class ErrorBoundary extends Component<Props, State> {
     return { failed: true }
   }
 
-  componentDidCatch(_error: Error, _info: ErrorInfo): void {
+  componentDidCatch(): void {
     // Production diagnostics belong in the hosting/observability platform;
     // never print stack traces or user/session data to the browser console.
   }

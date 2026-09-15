@@ -20,7 +20,8 @@ export function addToCart(cart: CartState, itemId: string): CartState {
 export function changeCartQty(cart: CartState, itemId: string, delta: number): CartState {
   const next = (cart[itemId] ?? 0) + delta
   if (next <= 0) {
-    const { [itemId]: _drop, ...rest } = cart
+    const rest = { ...cart }
+    delete rest[itemId]
     return rest
   }
   return { ...cart, [itemId]: next }

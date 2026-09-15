@@ -66,7 +66,7 @@ export async function disconnectTelegram(kind: 'business' | 'admin'): Promise<vo
 export async function notifyAdminsOfPayment(paymentId: string): Promise<void> {
   try {
     await supabase.functions.invoke('notify-payment-submitted', { body: { paymentId } })
-  } catch (err) {
+  } catch {
     // Telegram is non-critical for payment submission. Keep provider errors
     // out of the browser console; the Edge Function records safe diagnostics.
   }

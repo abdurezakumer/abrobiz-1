@@ -1,8 +1,9 @@
 import { supabase } from '../supabaseClient'
 import type { Template } from '../../types'
+import { BUILTIN_TEMPLATES, enrichTemplate } from '../templateRegistry'
 
 function mapTemplate(row: any): Template {
-  return {
+  return enrichTemplate({
     id: row.id,
     slug: row.slug,
     name: row.name,
@@ -14,7 +15,7 @@ function mapTemplate(row: any): Template {
     isActive: !!row.is_active,
     sortOrder: row.sort_order ?? 100,
     createdAt: row.created_at,
-  }
+  })
 }
 
 export async function listActiveTemplates(): Promise<Template[]> {
@@ -31,8 +32,9 @@ export async function listActiveTemplates(): Promise<Template[]> {
 
 /** Keeps the owner UI usable while a newly-added template migration is being deployed. */
 export function mergeTemplateOptions(remote: Template[], fallback: Template[]): Template[] {
-  const bySlug = new Map(fallback.map(template => [template.slug, template]))
-  remote.forEach(template => bySlug.set(template.slug, template))
+  const available = (template: Template) => template.isActive && template.config.status !== 'DEPRECATED'
+  const bySlug = new Map([...BUILTIN_TEMPLATES, ...fallback].filter(available).map(template => [template.slug, template]))
+  remote.filter(available).forEach(template => bySlug.set(template.slug, enrichTemplate(template)))
   return [...bySlug.values()].sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name))
 }
 

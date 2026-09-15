@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Check, ChevronRight, ChevronLeft } from 'lucide-react'
+import { ChevronRight, ChevronLeft } from 'lucide-react'
 import { listBusinessCategories } from '../lib/api/businessCategories'
 import { createBusinessWithTrial, getMyBusiness, isSlugAvailable, updateBusiness } from '../lib/api/businesses'
 import { categoryIcon } from '../lib/icons'
@@ -10,17 +10,8 @@ import { isValidBusinessSlug, slugify } from '../lib/slugify'
 import { listActiveTemplates, mergeTemplateOptions } from '../lib/api/templates'
 import { friendlyError } from '../lib/errors'
 import type { BusinessCategory, Template, TemplateSlug } from '../types'
-import { safeImageUrl } from '../lib/safeUrl'
-
-const DEFAULT_TEMPLATES: Template[] = [
-  { id: 'modern-dark', slug: 'modern-dark', name: 'Modern Dark', description: 'Bold, moody, great for evening/nightlife spots', config: { bg: '#111318' }, isBuiltin: true, isActive: true, sortOrder: 10, createdAt: '' },
-  { id: 'clean-minimal', slug: 'clean-minimal', name: 'Clean Minimal', description: 'Light, crisp, works for almost any business', config: { bg: '#F6F3EE' }, isBuiltin: true, isActive: true, sortOrder: 20, createdAt: '' },
-  { id: 'traditional-warm', slug: 'traditional-warm', name: 'Traditional Warm', description: 'Earthy tones, welcoming, culturally rich', config: { bg: '#5A3E2B' }, isBuiltin: true, isActive: true, sortOrder: 30, createdAt: '' },
-  { id: 'restaurant-cafe', slug: 'restaurant-cafe', name: 'Restaurant & Café Editorial', description: 'Warm cream, espresso, amber and editorial typography for restaurants, cafés and bakeries.', config: { bg: '#FAF8F3', visualStyle: 'heritage', layout: 'restaurant-cafe' }, isBuiltin: true, isActive: true, sortOrder: 35, createdAt: '' },
-  { id: 'aurora-glass', slug: 'aurora-glass', name: 'Aurora Glass', description: 'Luminous glass surfaces with a calm, modern glow.', config: { bg: '#07131A' }, isBuiltin: true, isActive: true, sortOrder: 40, createdAt: '' },
-  { id: 'luxury-editorial', slug: 'luxury-editorial', name: 'Luxury Editorial', description: 'High-end hospitality styling with cinematic gold accents.', config: { bg: '#110F0D' }, isBuiltin: true, isActive: true, sortOrder: 50, createdAt: '' },
-  { id: 'heritage-boutique', slug: 'heritage-boutique', name: 'Heritage Boutique', description: 'Rich, warm and crafted for distinctive local brands.', config: { bg: '#2A1B16' }, isBuiltin: true, isActive: true, sortOrder: 60, createdAt: '' },
-]
+import TemplateSelector from '../components/TemplateSelector'
+import { BUILTIN_TEMPLATES } from '../lib/templateRegistry'
 
 export default function SetupWizard() {
   const navigate = useNavigate()
@@ -28,7 +19,7 @@ export default function SetupWizard() {
   const { refreshBusiness } = useAuth()
   const [step, setStep] = useState(0)
   const [categories, setCategories] = useState<BusinessCategory[]>([])
-  const [templates, setTemplates] = useState<Template[]>(DEFAULT_TEMPLATES)
+  const [templates, setTemplates] = useState<Template[]>(BUILTIN_TEMPLATES)
   const [categoryId, setCategoryId] = useState('')
   const [name, setName] = useState('')
   const [slug, setSlug] = useState('')
@@ -46,7 +37,7 @@ export default function SetupWizard() {
 
   useEffect(() => {
     listBusinessCategories().then(setCategories)
-    listActiveTemplates().then(remote => setTemplates(mergeTemplateOptions(remote, DEFAULT_TEMPLATES))).catch(() => {})
+    listActiveTemplates().then(remote => setTemplates(mergeTemplateOptions(remote, BUILTIN_TEMPLATES))).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -59,6 +50,11 @@ export default function SetupWizard() {
     if (category?.slug === 'restaurant' || category?.slug === 'cafe') setTemplateSlug('restaurant-cafe')
     if (category?.slug === 'salon' || category?.slug === 'hotel') setTemplateSlug('luxury-editorial')
     if (category?.slug === 'retail') setTemplateSlug('clean-minimal')
+    const nicheDefaults: Record<string, TemplateSlug> = {
+      fitness: 'luxury-gym', dental: 'dental-trust', spa: 'spa-luxe', massage: 'massage-center', 'hair-salon': 'hair-luxury', barbershop: 'barber-luxe',
+      'real-estate': 'property-atelier', healthcare: 'clinic-modern', professional: 'studio-corporate', events: 'event-house',
+    }
+    if (category?.slug && nicheDefaults[category.slug]) setTemplateSlug(nicheDefaults[category.slug])
   }, [categories, categoryId, templateTouched])
 
   useEffect(() => {
@@ -186,30 +182,14 @@ export default function SetupWizard() {
                 <h1 style={heading}>Pick a look</h1>
                 <p style={subheading}>You can change this anytime from Settings.</p>
                 <a href="/demo/restaurant-cafe" target="_blank" rel="noreferrer" style={{ display: 'inline-block', marginTop: 10, color: '#D4A853', fontSize: 12.5, textDecoration: 'underline' }}>Preview the Restaurant & Café demo ↗</a>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: 14, marginTop: 24 }}>
-                  {templates.map(tpl => {
-                    const selected = templateSlug === tpl.slug
-                    return (
-                      <button
-                        key={tpl.slug}
-                        onClick={() => { setTemplateTouched(true); setTemplateSlug(tpl.slug) }}
-                        style={{
-                          borderRadius: 14, cursor: 'pointer', overflow: 'hidden', textAlign: 'left',
-                          border: selected ? '1.5px solid #D4A853' : '1.5px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)',
-                        }}
-                      >
-                        <div style={{ height: 70, background: safeImageUrl(tpl.previewUrl) ? `url("${safeImageUrl(tpl.previewUrl)}") center/cover` : tpl.config.bg ?? '#F6F3EE' }} />
-                        <div style={{ padding: 12 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <span style={{ fontSize: 13.5, fontWeight: 600, color: '#F0EDE7' }}>{tpl.name}</span>
-                            {selected && <Check size={14} color="#D4A853" />}
-                          </div>
-                          <p style={{ fontSize: 11.5, color: 'rgba(240,237,231,0.45)', marginTop: 4, lineHeight: 1.4 }}>{tpl.description}</p>
-                        </div>
-                      </button>
-                    )
-                  })}
-                </div>
+                <TemplateSelector
+                  templates={templates}
+                  selectedSlug={templateSlug}
+                  onSelect={slug => { setTemplateTouched(true); setTemplateSlug(slug) }}
+                  businessType={categories.find(category => category.id === categoryId)?.slug}
+                  dark
+                  confirmSwitch={false}
+                />
               </div>
             )}
           </motion.div>

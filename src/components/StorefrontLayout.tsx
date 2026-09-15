@@ -46,7 +46,7 @@ export default function StorefrontLayout({
     { href: anchor('menu'), section: 'menu', label: pageLabel(itemLabel) },
     ...(entitlements.bookings ? [{ href: anchor('book'), section: 'book', label: bookLabel(itemLabel) }] : []),
     { href: anchor('about'), section: 'about', label: 'About' },
-    { href: anchor('gallery'), section: 'gallery', label: 'Gallery' },
+    ...(business.galleryUrls.length > 0 ? [{ href: anchor('gallery'), section: 'gallery', label: 'Gallery' }] : []),
     { href: anchor('contact'), section: 'contact', label: 'Contact' },
   ]
   const logoUrl = safeImageUrl(business.logoUrl)
@@ -110,7 +110,7 @@ export default function StorefrontLayout({
           )}
         </nav>
 
-        <button onClick={() => setMobileOpen(true)} className="storefront-nav-toggle" style={{ display: 'none', background: 'none', border: 'none', color: theme.text }}>
+        <button type="button" aria-label="Open navigation menu" aria-expanded={mobileOpen} onClick={() => setMobileOpen(true)} className="storefront-nav-toggle" style={{ display: 'none', background: 'none', border: 'none', color: theme.text }}>
           <MenuIcon size={22} />
         </button>
       </header>
@@ -120,7 +120,7 @@ export default function StorefrontLayout({
           initial={{ opacity: 0 }} animate={{ opacity: 1 }}
           style={{ position: 'fixed', inset: 0, background: theme.bg, zIndex: 50, display: 'flex', flexDirection: 'column', padding: 24 }}
         >
-          <button onClick={() => setMobileOpen(false)} style={{ alignSelf: 'flex-end', background: 'none', border: 'none', color: theme.text, marginBottom: 24 }}>
+          <button type="button" aria-label="Close navigation menu" onClick={() => setMobileOpen(false)} style={{ alignSelf: 'flex-end', background: 'none', border: 'none', color: theme.text, marginBottom: 24 }}>
             <X size={24} />
           </button>
           {navItems.map(item => (

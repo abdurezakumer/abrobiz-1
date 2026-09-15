@@ -39,7 +39,10 @@ export default function TurnstileWidget({ action, onToken, resetKey = 0 }: { act
   const widgetId = useRef<string | undefined>(undefined)
   const onTokenRef = useRef(onToken)
   const [state, setState] = useState<'loading' | 'ready' | 'expired' | 'error'>('loading')
-  onTokenRef.current = onToken
+
+  useEffect(() => {
+    onTokenRef.current = onToken
+  }, [onToken])
 
   useEffect(() => {
     if (!turnstileEnabled || !container.current) return

@@ -10,7 +10,10 @@ const SAFE_DOMAIN = /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/
 /** Normalizes a browser/forwarded host without accepting paths or user info. */
 export function normalizeHostname(input: string): string | null {
   const raw = input.trim().toLowerCase().replace(/\.$/, '')
-  if (!raw || /[\u0000-\u0020\u007f/\\@]/.test(raw)) return null
+  if (!raw || [...raw].some(char => {
+    const code = char.charCodeAt(0)
+    return code <= 0x20 || code === 0x7f
+  }) || /[/\\@]/.test(raw)) return null
 
   let hostname = raw
   const colon = raw.lastIndexOf(':')

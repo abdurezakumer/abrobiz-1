@@ -6,8 +6,11 @@ export default function GoogleSignInButton({ onError, disabled = false, referral
   const buttonRef = useRef<HTMLDivElement>(null)
   const onErrorRef = useRef(onError)
   const referralCodeRef = useRef(referralCode)
-  onErrorRef.current = onError
-  referralCodeRef.current = referralCode
+
+  useEffect(() => {
+    onErrorRef.current = onError
+    referralCodeRef.current = referralCode
+  }, [onError, referralCode])
 
   useEffect(() => {
     if (disabled || !buttonRef.current) return

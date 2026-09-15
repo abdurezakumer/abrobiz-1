@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { ArrowLeft, Mail } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
 import { signUp, friendlyAuthError } from '../lib/authActions'
 import { validatePassword, passwordStrength } from '../lib/passwordPolicy'
 import GoogleSignInButton from '../components/GoogleSignInButton'
