@@ -55,7 +55,6 @@ if (import.meta.main) {
       // client-library response transformer. The SDK fallback is retained for
       // compatibility with projects whose Auth endpoint is proxied.
       let code = ''
-      let user: { id: string; email?: string } | null = null
       const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
       const supabaseUrl = Deno.env.get('SUPABASE_URL')
       if (serviceRoleKey && supabaseUrl) {
@@ -66,7 +65,6 @@ if (import.meta.main) {
         })
         const payload = await response.json().catch(() => ({})) as Record<string, any>
         code = typeof payload.email_otp === 'string' ? payload.email_otp : ''
-        user = payload.user && typeof payload.user.id === 'string' ? { id: payload.user.id, email: payload.user.email } : null
         if (!response.ok && !code) {
           // Some Supabase Auth deployments do not expose the admin endpoint
           // response shape consistently. Fall through to the SDK path before
@@ -85,7 +83,6 @@ if (import.meta.main) {
           options: { data: { name, phone, ...(referralCode ? { referral_code: referralCode } : {}) }, redirectTo },
         })
         code = generated.data?.properties?.email_otp ?? ''
-        user = generated.data?.user?.id ? { id: generated.data.user.id, email: generated.data.user.email } : null
         if (generated.error) {
           logFailure(req, { function_name: 'signup', operation: 'generate_signup_otp', error_category: 'AUTHENTICATION_ERROR', error_code: generated.error.name ?? 'unknown', status: 200 })
           return json(GENERIC_RESPONSE, 200, req)
@@ -102,7 +99,7 @@ if (import.meta.main) {
         return json({ error: 'AbroBiz could not send your verification email. Please try again.' }, 503, req)
       }
 
-      return json({ ...GENERIC_RESPONSE, otpLength: code.length, session: null, user }, 200, req)
+      return json({ ...GENERIC_RESPONSE, session: null }, 200, req)
     } catch (error) {
       logFailure(req, { function_name: 'signup', operation: 'auth_signup', error_category: 'INTERNAL_ERROR', error_code: error instanceof Error ? error.name : 'UnknownError', status: 503 })
       return json({ error: 'AbroBiz sign-up is temporarily unavailable. Please try again.' }, 503, req)

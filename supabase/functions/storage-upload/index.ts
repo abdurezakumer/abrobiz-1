@@ -45,12 +45,11 @@ if (import.meta.main) {
       if (limited) return limited
 
       const db = createAdminClient()
-      const { data: profile } = await db.from('profiles').select('role').eq('id', userData.user.id).maybeSingle()
-      const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin'
-      const businessQuery = db.from('businesses').select('id').eq('id', businessId)
-      const { data: business } = isAdmin
-        ? await businessQuery.maybeSingle()
-        : await businessQuery.eq('owner_id', userData.user.id).maybeSingle()
+      const { data: ownedBusiness } = await db.from('businesses').select('id').eq('id', businessId).eq('owner_id', userData.user.id).maybeSingle()
+      const permission = config.bucket === 'payment-proofs' ? 'payments.review' : 'businesses.manage'
+      const { data: permitted, error: permissionError } = await caller.rpc('has_admin_permission', { p_permission: permission })
+      const canManageRequestedBusiness = Boolean(ownedBusiness || (!permissionError && permitted === true))
+      const business = canManageRequestedBusiness ? { id: businessId } : null
       if (!business) return json({ error: 'Not found or not authorized.' }, 403, req)
 
       const body = await readBinaryBody(req, config.maxBytes)

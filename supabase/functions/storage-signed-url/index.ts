@@ -36,12 +36,9 @@ if (import.meta.main) {
       if (limited) return limited
 
       const db = createAdminClient()
-      const { data: profile } = await db.from('profiles').select('role').eq('id', userData.user.id).maybeSingle()
-      const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin'
-      const businessQuery = db.from('businesses').select('id').eq('id', match[1])
-      const { data: business } = isAdmin
-        ? await businessQuery.maybeSingle()
-        : await businessQuery.eq('owner_id', userData.user.id).maybeSingle()
+      const { data: ownedBusiness } = await db.from('businesses').select('id').eq('id', match[1]).eq('owner_id', userData.user.id).maybeSingle()
+      const { data: permitted, error: permissionError } = await caller.rpc('has_admin_permission', { p_permission: 'payments.read' })
+      const business = ownedBusiness || (!permissionError && permitted === true) ? { id: match[1] } : null
       if (!business) return json({ error: 'Not found or not authorized.' }, 403, req)
       const { data, error } = await db.storage.from('payment-proofs').createSignedUrl(path, 600, { download: true })
       if (error || !data?.signedUrl) return json({ error: 'Could not prepare the file.' }, 404, req)

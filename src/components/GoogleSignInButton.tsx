@@ -18,11 +18,11 @@ export default function GoogleSignInButton({ onError, disabled = false, referral
     let cleanup: (() => void) | undefined
     setLoading(true)
 
-    initializeGoogleSignInButton(buttonRef.current, async credential => {
+    initializeGoogleSignInButton(buttonRef.current, async (credential, nonce) => {
       if (disposed) return
       setLoading(true)
       try {
-        await signInWithGoogleCredential(credential, referralCodeRef.current)
+        await signInWithGoogleCredential(credential, referralCodeRef.current, nonce)
       } catch (err) {
         onErrorRef.current(friendlyAuthError(err))
       } finally {

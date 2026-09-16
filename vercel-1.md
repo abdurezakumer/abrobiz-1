@@ -247,7 +247,7 @@ supabase.cmd secrets set --project-ref $env:SUPABASE_PROJECT_REF `
   MAIL_SERVER="smtp.gmail.com" `
   MAIL_PORT="587" `
   MAIL_USERNAME="oneabdre@gmail.com" `
-  MAIL_PASSWORD="PASTE_APP_PASSWORD_HERE" `
+  MAIL_PASSWORD=<YOUR_SMTP_OR_GMAIL_APP_PASSWORD>
   MAIL_USE_TLS="true" `
   MAIL_FROM="AbroBiz <oneabdre@gmail.com>"
 ```

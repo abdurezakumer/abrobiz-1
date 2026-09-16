@@ -203,8 +203,8 @@ frontend, so it keeps normal JWT verification.
 ## 3. Set secrets
 
 ```bash
-supabase secrets set TELEGRAM_BOT_TOKEN=123456789:AAF...
-supabase secrets set TELEGRAM_WEBHOOK_SECRET=$(openssl rand -hex 20)
+supabase secrets set TELEGRAM_BOT_TOKEN=<YOUR_TELEGRAM_BOT_TOKEN>
+supabase secrets set TELEGRAM_WEBHOOK_SECRET=<YOUR_TELEGRAM_WEBHOOK_SECRET>
 supabase secrets set SUPPORT_EMAIL=support@abrobiz.com
 # Optional: set the support Telegram username without the @ symbol.
 supabase secrets set SUPPORT_TELEGRAM_USERNAME=your_support_username
@@ -331,7 +331,7 @@ will point at `localhost`.
 ```bash
 cd app
 supabase functions deploy subscription-cron --no-verify-jwt
-supabase secrets set CRON_SECRET=$(openssl rand -hex 20)
+supabase secrets set CRON_SECRET=<YOUR_CRON_SECRET>
 ```
 
 Run migration `0007_subscription_cron.sql` in the SQL Editor if you haven't
@@ -428,7 +428,7 @@ AbroBiz wording, for example:
 
 ```bash
 cd app
-supabase secrets set RESEND_API_KEY=re_your_key_here
+supabase secrets set RESEND_API_KEY=<YOUR_RESEND_API_KEY>
 supabase secrets set EMAIL_DOMAIN=abrobiz.com
 supabase secrets set SITE_URL=https://abrobiz.com
 supabase secrets set APP_NAME=AbroBiz
@@ -449,7 +449,7 @@ Needs 2-Step Verification on the Gmail account, then a Google Account →
 supabase secrets set MAIL_SERVER=smtp.gmail.com
 supabase secrets set MAIL_PORT=587
 supabase secrets set MAIL_USERNAME=oneabdre@gmail.com
-supabase secrets set MAIL_PASSWORD=your16charapppassword
+supabase secrets set MAIL_PASSWORD=<YOUR_SMTP_OR_GMAIL_APP_PASSWORD>
 supabase secrets set MAIL_USE_TLS=true
 supabase secrets set 'MAIL_FROM=Abdre <oneabdre@gmail.com>'
 supabase secrets set SITE_URL=https://abrobiz.com

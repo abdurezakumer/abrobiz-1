@@ -26,6 +26,7 @@ interface GoogleIdentityApi {
     id: {
       initialize(options: {
         client_id: string
+        nonce?: string
         callback: (response: { credential?: string }) => void | Promise<void>
         ux_mode?: 'popup' | 'redirect'
         auto_select?: boolean

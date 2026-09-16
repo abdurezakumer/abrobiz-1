@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useState, useCallback, useRef, type ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from './supabaseClient'
 import { getMyBusiness } from './api/businesses'
@@ -11,6 +11,7 @@ interface AuthContextValue {
   business: Business | null
   subscription: Subscription | null
   loading: boolean
+  mfa: { required: boolean; currentLevel: string | null; nextLevel: string | null }
   refreshBusiness: () => Promise<void>
   refreshProfile: () => Promise<void>
   signOut: () => Promise<void>
@@ -18,46 +19,59 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined)
 
+function mapProfileRow(row: any, email: string | undefined): Profile {
+  return {
+    id: row.id,
+    role: row.role,
+    platformId: row.platform_id ?? `ABZ-${String(row.id).replaceAll('-', '').slice(0, 12).toUpperCase()}`,
+    adminRole: row.admin_role ?? (row.role === 'admin' || row.role === 'super_admin' ? 'super_admin' : 'none'),
+    name: row.name,
+    phone: row.phone,
+    email,
+    emailVerifiedAt: row.email_verified_at ?? null,
+    termsAcceptedAt: row.terms_accepted_at ?? null,
+    privacyAcceptedAt: row.privacy_accepted_at ?? null,
+    legalVersion: row.legal_version ?? null,
+    marketingPolicyAcceptedAt: row.marketing_policy_accepted_at ?? null,
+    marketingPolicyVersion: row.marketing_policy_version ?? null,
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
   const [business, setBusiness] = useState<Business | null>(null)
   const [subscription, setSubscription] = useState<Subscription | null>(null)
   const [loading, setLoading] = useState(true)
+  const [mfa, setMfa] = useState<AuthContextValue['mfa']>({ required: false, currentLevel: null, nextLevel: null })
+  const generationRef = useRef(0)
+  const mountedRef = useRef(true)
+  const lastActivityRef = useRef<number | null>(null)
 
-  const loadForSession = useCallback(async (s: Session | null) => {
+  const loadForSession = useCallback(async (s: Session | null, generation: number) => {
+    const current = () => mountedRef.current && generationRef.current === generation
     if (!s) {
+      if (current()) {
+        setProfile(null)
+        setBusiness(null)
+        setSubscription(null)
+        setMfa({ required: false, currentLevel: null, nextLevel: null })
+      }
+      return
+    }
+    if (current()) {
       setProfile(null)
       setBusiness(null)
       setSubscription(null)
-      return
     }
-    setProfile(null)
-    setBusiness(null)
-    setSubscription(null)
     const { data: profileRow, error: profileError } = await supabase
       .from('profiles')
       .select('id, role, platform_id, admin_role, name, phone, email_verified_at, terms_accepted_at, privacy_accepted_at, legal_version, marketing_policy_accepted_at, marketing_policy_version')
       .eq('id', s.user.id)
       .single()
 
-    if (profileRow) {
-      setProfile({
-        id: profileRow.id,
-        role: profileRow.role,
-        platformId: profileRow.platform_id ?? `ABZ-${String(profileRow.id).replaceAll('-', '').slice(0, 12).toUpperCase()}`,
-        adminRole: profileRow.admin_role ?? (profileRow.role === 'admin' || profileRow.role === 'super_admin' ? 'super_admin' : 'none'),
-        name: profileRow.name,
-        phone: profileRow.phone,
-        email: s.user.email ?? undefined,
-        emailVerifiedAt: profileRow.email_verified_at ?? null,
-        termsAcceptedAt: profileRow.terms_accepted_at ?? null,
-        privacyAcceptedAt: profileRow.privacy_accepted_at ?? null,
-        legalVersion: profileRow.legal_version ?? null,
-        marketingPolicyAcceptedAt: profileRow.marketing_policy_accepted_at ?? null,
-        marketingPolicyVersion: profileRow.marketing_policy_version ?? null,
-      })
-    } else if (profileError) {
+    let resolvedProfile: Profile | null = profileRow ? mapProfileRow(profileRow, s.user.email ?? undefined) : null
+    if (!resolvedProfile && profileError) {
       // Keep existing sessions readable during the migration rollout. The
       // production migration adds the full selection above.
       const { data: legacyProfile } = await supabase
@@ -66,28 +80,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .eq('id', s.user.id)
         .single()
       if (legacyProfile) {
-        setProfile({
-          id: legacyProfile.id,
-          role: legacyProfile.role,
-          platformId: legacyProfile.platform_id ?? `ABZ-${String(legacyProfile.id).replaceAll('-', '').slice(0, 12).toUpperCase()}`,
-          adminRole: legacyProfile.admin_role ?? (legacyProfile.role === 'admin' || legacyProfile.role === 'super_admin' ? 'super_admin' : 'none'),
-          name: legacyProfile.name,
-          phone: legacyProfile.phone,
-          email: s.user.email ?? undefined,
-          emailVerifiedAt: legacyProfile.email_verified_at ?? null,
-          marketingPolicyAcceptedAt: null,
-          marketingPolicyVersion: null,
-        })
-      } else {
-        setProfile(null)
+        resolvedProfile = mapProfileRow(legacyProfile, s.user.email ?? undefined)
       }
     }
 
-    if (profileRow?.role === 'owner') {
+    if (!current()) return
+    setProfile(resolvedProfile)
+
+    const privileged = resolvedProfile?.role === 'admin' || resolvedProfile?.role === 'super_admin' || resolvedProfile?.adminRole === 'super_admin'
+    if (privileged) {
+      const { data: assurance } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+      if (!current()) return
+      setMfa({ required: true, currentLevel: assurance?.currentLevel ?? null, nextLevel: assurance?.nextLevel ?? null })
+    } else {
+      setMfa({ required: false, currentLevel: null, nextLevel: null })
+    }
+
+    if (resolvedProfile?.role === 'owner') {
       const biz = await getMyBusiness()
+      if (!current()) return
       setBusiness(biz)
       if (biz) {
         const sub = await getSubscription(biz.id)
+        if (!current()) return
         setSubscription(sub)
       } else {
         setSubscription(null)
@@ -150,33 +165,53 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let mounted = true
+    mountedRef.current = true
 
-    supabase.auth.getSession().then(async ({ data }) => {
+    const syncSession = async (nextSession: Session | null) => {
+      const generation = generationRef.current + 1
+      generationRef.current = generation
       if (!mounted) return
-      setSession(data.session)
-      await loadForSession(data.session)
-      if (mounted) setLoading(false)
-    })
-
-    const { data: sub } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
-      setSession(newSession)
+      setSession(nextSession)
       setLoading(true)
-      await loadForSession(newSession)
-      setLoading(false)
-    })
+      lastActivityRef.current = Date.now()
+      await loadForSession(nextSession, generation)
+      if (mounted && generationRef.current === generation) setLoading(false)
+    }
+
+    supabase.auth.getSession().then(({ data }) => void syncSession(data.session))
+
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => { void syncSession(newSession) })
 
     return () => {
       mounted = false
+      mountedRef.current = false
+      generationRef.current += 1
       sub.subscription.unsubscribe()
     }
   }, [loadForSession])
+
+  useEffect(() => {
+    const privileged = profile?.role === 'admin' || profile?.role === 'super_admin' || profile?.adminRole === 'super_admin'
+    if (!privileged || !session) return
+    const touch = () => { lastActivityRef.current = Date.now() }
+    const events = ['pointerdown', 'keydown', 'touchstart'] as const
+    events.forEach(event => window.addEventListener(event, touch, { passive: true }))
+    const timer = window.setInterval(() => {
+      const lastActivity = lastActivityRef.current ?? Date.now()
+      if (Date.now() - lastActivity >= 30 * 60 * 1000) void supabase.auth.signOut()
+    }, 60 * 1000)
+    return () => {
+      events.forEach(event => window.removeEventListener(event, touch))
+      window.clearInterval(timer)
+    }
+  }, [profile?.adminRole, profile?.role, session])
 
   const signOut = useCallback(async () => {
     await supabase.auth.signOut()
   }, [])
 
   return (
-    <AuthContext.Provider value={{ session, profile, business, subscription, loading, refreshBusiness, refreshProfile, signOut }}>
+    <AuthContext.Provider value={{ session, profile, business, subscription, loading, mfa, refreshBusiness, refreshProfile, signOut }}>
       {children}
     </AuthContext.Provider>
   )

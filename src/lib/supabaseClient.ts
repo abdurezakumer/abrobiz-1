@@ -32,5 +32,9 @@ export const supabase = createClient(url, anonKey, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
+    // Keep the browser key branded and independent of the Supabase project
+    // slug. The value is still a bearer-token container; XSS prevention and
+    // server-side authorization remain the real security boundary.
+    storageKey: 'abrobiz-auth-token',
   },
 })

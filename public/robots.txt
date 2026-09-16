@@ -1,0 +1,13 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /dashboard
+Disallow: /login
+Disallow: /register
+Disallow: /setup
+Disallow: /reset-password
+Disallow: /verify-email
+Disallow: /legal-acceptance
+Disallow: /marketing-policy
+
+Sitemap: https://abrobiz.com/sitemap.xml

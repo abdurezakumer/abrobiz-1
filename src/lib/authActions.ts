@@ -22,7 +22,7 @@ export async function signUp(
     body: { email, password, name, phone, termsAccepted, privacyAccepted, ...(turnstileToken ? { turnstileToken } : {}), ...(referralCode?.trim() ? { referralCode: referralCode.trim() } : {}) },
   })
   if (error) throw await edgeFunctionError(error)
-  return data as { session: import('@supabase/supabase-js').Session | null; user: { id: string; email?: string } | null; requiresVerification?: boolean; otpLength?: number }
+  return data as { session: null; requiresVerification?: boolean }
 }
 
 export async function signIn(email: string, password: string, turnstileToken?: string | null) {
@@ -36,21 +36,29 @@ export async function signIn(email: string, password: string, turnstileToken?: s
   return data
 }
 
-export async function initializeGoogleSignInButton(container: HTMLElement, onCredential: (credential: string) => void): Promise<() => void> {
+function createGoogleNonce(): string {
+  const bytes = new Uint8Array(32)
+  crypto.getRandomValues(bytes)
+  return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('')
+}
+
+export async function initializeGoogleSignInButton(container: HTMLElement, onCredential: (credential: string, nonce: string) => void): Promise<() => void> {
   const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID?.trim()
   if (!clientId) throw new Error('Google sign-in is not configured for AbroBiz yet.')
   await loadGoogleIdentityServices()
   const google = window.google
   if (!google?.accounts?.id) throw new Error('Google sign-in is temporarily unavailable.')
+  const nonce = createGoogleNonce()
 
   google.accounts.id.initialize({
     client_id: clientId,
+    nonce,
     ux_mode: 'popup',
     auto_select: false,
     cancel_on_tap_outside: true,
     callback: response => {
       if (!response.credential) return
-      onCredential(response.credential)
+      onCredential(response.credential, nonce)
     },
   })
   google.accounts.id.renderButton(container, {
@@ -66,8 +74,8 @@ export async function initializeGoogleSignInButton(container: HTMLElement, onCre
   return () => { container.replaceChildren() }
 }
 
-export async function signInWithGoogleCredential(credential: string, referralCode?: string | null): Promise<void> {
-  const { data, error } = await supabase.auth.signInWithIdToken({ provider: 'google', token: credential })
+export async function signInWithGoogleCredential(credential: string, referralCode?: string | null, nonce?: string): Promise<void> {
+  const { data, error } = await supabase.auth.signInWithIdToken({ provider: 'google', token: credential, ...(nonce ? { nonce } : {}) })
   if (error) throw error
 
   // The Google ID-token flow cannot send custom user metadata during the

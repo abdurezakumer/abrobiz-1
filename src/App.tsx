@@ -36,6 +36,7 @@ const AdminTelegram = lazy(() => import('./pages/admin/AdminTelegram'))
 const AdminMarketing = lazy(() => import('./pages/admin/AdminMarketing'))
 const AdminManagement = lazy(() => import('./pages/admin/AdminManagement'))
 const AdminAudit = lazy(() => import('./pages/admin/AdminAudit'))
+const MfaSetup = lazy(() => import('./pages/MfaSetup'))
 const TemplateDemo = lazy(() => import('./pages/TemplateDemo'))
 
 function HostStorefront({ page }: { page: ReactNode }) {
@@ -60,6 +61,7 @@ export default function App() {
         <Route path="/verify-email" element={<VerifyEmail />} />
         <Route path="/legal-acceptance" element={<RequireAuth><LegalAcceptance /></RequireAuth>} />
         <Route path="/marketing-policy" element={<RequireAuth><MarketingPolicy /></RequireAuth>} />
+        <Route path="/security/mfa" element={<RequireAuth><MfaSetup /></RequireAuth>} />
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/terms" element={<Terms />} />
         <Route path="/privacy" element={<Privacy />} />

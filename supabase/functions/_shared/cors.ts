@@ -13,6 +13,13 @@ function configuredOrigins(): string[] {
   return values.filter(value => value !== '*')
 }
 
+function configuredDevelopmentOrigins(): string[] {
+  const environment = (Deno.env.get('APP_ENV') ?? 'production').trim().toLowerCase()
+  if (environment === 'production') return []
+  return (Deno.env.get('CORS_ALLOWED_DEV_ORIGINS') ?? '')
+    .split(',').map(value => value.trim()).filter(Boolean)
+}
+
 function isStrictOrigin(value: string): boolean {
   try {
     const parsed = new URL(value)
@@ -42,7 +49,8 @@ export function isAllowedTenantOrigin(origin: string): boolean {
 
 export function isAllowedOrigin(origin: string | null, configured = configuredOrigins()): boolean {
   if (!origin || !isStrictOrigin(origin)) return false
-  if ([...defaultOrigins, ...configured.filter(isSafeConfiguredOrigin)].includes(origin)) return true
+  const development = configuredDevelopmentOrigins().filter(isSafeConfiguredOrigin)
+  if ([...defaultOrigins, ...configured.filter(isSafeConfiguredOrigin), ...development].includes(origin)) return true
   return isAllowedTenantOrigin(origin)
 }
 

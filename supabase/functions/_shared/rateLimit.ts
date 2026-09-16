@@ -14,11 +14,14 @@ function json(body: unknown, status: number, retryAfter?: number, req?: Request)
 }
 
 function requestAddress(req: Request): string {
-  const cloudflare = req.headers.get('cf-connecting-ip')
-  if (cloudflare) return cloudflare.trim()
-  const forwarded = req.headers.get('x-forwarded-for')
-  if (forwarded) return forwarded.split(',')[0].trim()
-  return req.headers.get('x-real-ip')?.trim() || 'unknown'
+  // Do not trust arbitrary X-Forwarded-For values. The ingress must declare
+  // the one header it overwrites with the client address; direct callers and
+  // unconfigured deployments deliberately fall back to a shared bucket.
+  const configured = (Deno.env.get('TRUSTED_CLIENT_IP_HEADER') ?? 'cf-connecting-ip').trim().toLowerCase()
+  if (configured !== 'cf-connecting-ip' && configured !== 'x-real-ip') return 'unknown'
+  const value = req.headers.get(configured)?.trim() ?? ''
+  if (/^(?:\d{1,3}\.){3}\d{1,3}$/.test(value) || /^[0-9a-f:]{3,45}$/i.test(value)) return value
+  return 'unknown'
 }
 
 /** Returns a 429/503 response when blocked, otherwise null. */

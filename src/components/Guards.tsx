@@ -84,36 +84,39 @@ export function RequireOwner({ children }: { children: ReactNode }) {
 }
 
 export function RequireAdmin({ children }: { children: ReactNode }) {
-  const { session, profile, loading } = useAuth()
+  const { session, profile, loading, mfa = { required: false, currentLevel: null, nextLevel: null } } = useAuth()
   const location = useLocation()
   if (loading) return <FullScreenSpinner />
   if (!session) return <Navigate to="/login" state={{ from: location }} replace />
   if (profile && !profile.emailVerifiedAt) return <Navigate to={'/verify-email?email=' + encodeURIComponent(session.user.email ?? '')} state={{ from: { pathname: safeInternalPath(location.pathname) } }} replace />
   if (profile && (!profile.termsAcceptedAt || !profile.privacyAcceptedAt || profile.legalVersion !== '2026-01')) return <Navigate to="/legal-acceptance" state={{ from: location }} replace />
   if (profile?.role !== 'admin' && profile?.role !== 'super_admin') return <Navigate to="/dashboard" replace />
+  if (mfa.required && mfa.currentLevel !== 'aal2') return <Navigate to="/security/mfa" state={{ from: location }} replace />
   if (needsMarketingPolicy(profile) && location.pathname !== '/marketing-policy') return <Navigate to="/marketing-policy" state={{ from: location }} replace />
   return <>{children}</>
 }
 
 export function RequireAdminPermission({ permission, children }: { permission: AdminPermission; children: ReactNode }) {
-  const { session, profile, loading } = useAuth()
+  const { session, profile, loading, mfa = { required: false, currentLevel: null, nextLevel: null } } = useAuth()
   const location = useLocation()
   if (loading) return <FullScreenSpinner />
   if (!session) return <Navigate to="/login" state={{ from: location }} replace />
   if (profile && !profile.emailVerifiedAt) return <Navigate to={'/verify-email?email=' + encodeURIComponent(session.user.email ?? '')} replace />
   if (profile && (!profile.termsAcceptedAt || !profile.privacyAcceptedAt || profile.legalVersion !== '2026-01')) return <Navigate to="/legal-acceptance" replace />
   if (needsMarketingPolicy(profile) && location.pathname !== '/marketing-policy') return <Navigate to="/marketing-policy" state={{ from: location }} replace />
+  if ((profile?.role === 'admin' || profile?.role === 'super_admin') && mfa.required && mfa.currentLevel !== 'aal2') return <Navigate to="/security/mfa" state={{ from: location }} replace />
   if (!hasAdminPermission(profile, permission)) return <Navigate to="/admin" replace />
   return <>{children}</>
 }
 
 export function RequireSuperAdmin({ children }: { children: ReactNode }) {
-  const { session, profile, loading } = useAuth()
+  const { session, profile, loading, mfa = { required: false, currentLevel: null, nextLevel: null } } = useAuth()
   const location = useLocation()
   if (loading) return <FullScreenSpinner />
   if (!session) return <Navigate to="/login" state={{ from: location }} replace />
   if (profile && !profile.emailVerifiedAt) return <Navigate to={'/verify-email?email=' + encodeURIComponent(session.user.email ?? '')} replace />
   if (profile && (!profile.termsAcceptedAt || !profile.privacyAcceptedAt || profile.legalVersion !== '2026-01')) return <Navigate to="/legal-acceptance" replace />
   if (profile?.role !== 'super_admin' && profile?.adminRole !== 'super_admin') return <Navigate to="/admin" replace />
+  if (mfa.required && mfa.currentLevel !== 'aal2') return <Navigate to="/security/mfa" state={{ from: location }} replace />
   return <>{children}</>
 }
