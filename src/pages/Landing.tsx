@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { QrCode, Palette, Globe2, Check, ArrowRight, UserPlus, LayoutTemplate, Rocket, TrendingUp, Search, ArrowUpRight, Store, Sparkles } from 'lucide-react'
+import { QrCode, Palette, Globe2, Check, ArrowRight, UserPlus, LayoutTemplate, Rocket, TrendingUp, Search, ArrowUpRight, Store, Sparkles, ShieldCheck } from 'lucide-react'
 import { listPlans } from '../lib/api/plans'
 import { listPublishedShowcaseBusinesses, type PublicShowcaseBusiness } from '../lib/api/businesses'
 import { publicStorefrontUrl } from '../lib/storefrontUrl'
@@ -206,6 +206,25 @@ export default function Landing() {
         </div>
       </div>
 
+      {/* Public product and data-use explanation for visitors and OAuth review. */}
+      <section id="data-use" style={{ maxWidth: 1000, margin: '0 auto', padding: '12px 20px 64px' }}>
+        <div style={{ maxWidth: 680, margin: '0 auto', textAlign: 'center' }}>
+          <div style={showcaseEyebrow}><ShieldCheck size={13} /> CLEAR BY DESIGN</div>
+          <h2 style={{ fontFamily: 'Outfit, sans-serif', fontSize: 26, fontWeight: 600, margin: '10px 0' }}>A simple platform, with transparent data use</h2>
+          <p style={{ color: 'rgba(240,237,231,0.55)', fontSize: 14, lineHeight: 1.7, margin: 0 }}>
+            AbroBiz is a website and digital storefront service for business owners. We use account information to authenticate you, secure your workspace, and provide the website tools you request.
+          </p>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginTop: 26 }}>
+          <div style={dataUseCard}><strong>For business owners</strong><p>Manage your brand, catalog, services, bookings, orders, reviews, billing, and published storefront from one AbroBiz account.</p></div>
+          <div style={dataUseCard}><strong>For storefront visitors</strong><p>Explore public business websites and submit information only when you choose to contact, book, order, or review a business.</p></div>
+          <div style={dataUseCard}><strong>Google sign-in</strong><p>Google is used only to authenticate your AbroBiz account and provide basic account details. AbroBiz does not request access to Google Drive, contacts, or unrelated Google data.</p></div>
+        </div>
+        <p style={{ textAlign: 'center', color: 'rgba(240,237,231,0.48)', fontSize: 13, lineHeight: 1.6, margin: '22px auto 0' }}>
+          Read exactly how AbroBiz collects, uses, protects, and shares information in our <Link to="/privacy" style={{ color: '#D4A853', textDecoration: 'none', fontWeight: 600 }}>Privacy Policy</Link>.
+        </p>
+      </section>
+
       {/* Pricing */}
       {plans.length > 0 && (
         <div id="pricing" style={{ maxWidth: 900, margin: '0 auto', padding: '20px 20px 80px' }}>
@@ -314,6 +333,7 @@ const showcaseToolbar: React.CSSProperties = { display: 'flex', gap: 9, padding:
 const showcaseInput: React.CSSProperties = { width: '100%', boxSizing: 'border-box', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#F0EDE7', borderRadius: 10, padding: '10px 12px 10px 36px', outline: 'none', fontSize: 13, fontFamily: 'inherit' }
 const showcaseSelect: React.CSSProperties = { background: '#171A20', border: '1px solid rgba(255,255,255,0.1)', color: '#F0EDE7', borderRadius: 10, padding: '10px 12px', outline: 'none', fontSize: 13, fontFamily: 'inherit' }
 const showcaseEmpty: React.CSSProperties = { border: '1px dashed rgba(255,255,255,0.15)', borderRadius: 16, padding: 28, color: 'rgba(240,237,231,0.45)', textAlign: 'center', fontSize: 13 }
+const dataUseCard: React.CSSProperties = { padding: '18px 18px 16px', borderRadius: 14, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(240,237,231,0.68)', fontSize: 13.5, lineHeight: 1.6 }
 
 function ShowcaseCard({ business, index }: { business: PublicShowcaseBusiness; index: number }) {
   const cover = safeImageUrl(business.coverUrl)
