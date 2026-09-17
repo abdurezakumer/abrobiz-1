@@ -81,6 +81,7 @@ export default function MfaSetup() {
           </>
         )}
         {error && <p role="alert" style={errorStyle}>{error}</p>}
+        <button type="button" onClick={() => navigate('/security/account')} style={secondary}>Manage Google and password sign-in</button>
         <button type="button" onClick={() => void signOut()} style={signOutButton}>Sign out</button>
       </section>
     </main>

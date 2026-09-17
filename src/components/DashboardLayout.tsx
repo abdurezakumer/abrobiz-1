@@ -300,6 +300,9 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                     <span><span style={{ display: 'block', color: 'rgba(10,12,16,0.4)', fontSize: 10, marginBottom: 2 }}>Platform ID</span>{profile.platformId}</span><Copy size={13} />
                   </button>
                 )}
+                <button type="button" onClick={() => { setAccountMenuOpen(false); navigate('/security/account') }} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '12px 16px', border: 0, borderBottom: '1px solid rgba(10,12,16,0.06)', background: '#fff', color: '#0A0C10', cursor: 'pointer', textAlign: 'left', fontSize: 13.5 }}>
+                  <Lock size={15} /> Account security
+                </button>
                 <button
                   onClick={async () => {
                     await signOut()

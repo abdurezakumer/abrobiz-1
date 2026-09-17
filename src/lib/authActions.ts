@@ -121,7 +121,8 @@ export function friendlyAuthError(error: unknown): string {
   const msg = error instanceof Error ? error.message : String(error)
   if (/already registered/i.test(msg)) return 'We could not create the account with those details. Please check them or try logging in.'
   if (/verification (email|code)|sign-up/i.test(msg)) return 'We could not complete AbroBiz sign-up. Please try again.'
-  if (/invalid login credentials|invalid credentials/i.test(msg)) return 'Incorrect email or password.'
+  if (/invalid login credentials|invalid credentials|incorrect email or password/i.test(msg)) return 'Incorrect email or password. If you created this account with Google, choose Continue with Google below.'
+  if (/verification failed|security check/i.test(msg)) return 'The security check could not be verified. Complete it again and try once more.'
   if (/password must be at least|password should be at least/i.test(msg)) return 'Password must be at least 12 characters.'
   if (/lowercase|uppercase|number|special character|128 characters/i.test(msg)) return msg
   if (/unsupported provider|provider.*not enabled|external_google_enabled/i.test(msg)) return 'Google sign-in is not available yet. Please try again later or contact AbroBiz support.'

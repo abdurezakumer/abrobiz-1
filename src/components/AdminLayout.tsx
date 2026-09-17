@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { LayoutDashboard, Building2, CreditCard, SlidersHorizontal, LogOut, Menu as MenuIcon, ShieldCheck, Megaphone, Users, ClipboardList, Copy, Send, TrendingUp } from 'lucide-react'
+import { LayoutDashboard, Building2, CreditCard, SlidersHorizontal, LogOut, Menu as MenuIcon, ShieldCheck, Megaphone, Users, ClipboardList, Copy, Send, TrendingUp, Lock } from 'lucide-react'
 import { useAuth } from '../lib/authContext'
 import { hasAdminPermission } from '../lib/api/adminControl'
 
@@ -16,6 +16,7 @@ const navItems = [
   { to: '/admin/settings', label: 'Settings', icon: SlidersHorizontal, permission: 'templates.manage' as const },
   { to: '/admin/management', label: 'Admin management', icon: Users, superOnly: true },
   { to: '/admin/audit', label: 'Audit trail', icon: ClipboardList, superOnly: true },
+  { to: '/security/account', label: 'Account security', icon: Lock, permission: 'dashboard.read' as const },
 ]
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
