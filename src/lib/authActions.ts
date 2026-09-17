@@ -76,7 +76,20 @@ export async function initializeGoogleSignInButton(container: HTMLElement, onCre
 
 export async function signInWithGoogleCredential(credential: string, referralCode?: string | null, nonce?: string): Promise<void> {
   const { data, error } = await supabase.auth.signInWithIdToken({ provider: 'google', token: credential, ...(nonce ? { nonce } : {}) })
-  if (error) throw error
+  if (error) {
+    // The popup ID-token flow can fail in privacy-focused or mobile browsers
+    // even when the configured Google provider is healthy. For direct login,
+    // recover through Supabase's same-provider OAuth flow. Referral signup
+    // deliberately stays on the original flow so attribution is never lost.
+    if (!referralCode?.trim() && !/cancelled|canceled/i.test(error.message)) {
+      const { error: oauthError } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: `${window.location.origin}/login` },
+      })
+      if (!oauthError) return
+    }
+    throw error
+  }
 
   // The Google ID-token flow cannot send custom user metadata during the
   // provider exchange. Complete attribution after authentication through the
