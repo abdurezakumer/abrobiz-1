@@ -17,6 +17,9 @@ export default function Privacy() {
         <Paragraph>When you create or manage an account, we may collect your name, email address, phone number, login and verification details, business name, location, contact details, branding, catalog information, and plan or payment-submission information.</Paragraph>
         <Paragraph>When you contact support or connect an optional service such as Telegram, we also receive the information needed to respond and provide that connection.</Paragraph>
         <Paragraph>We may also create operational identifiers, such as an AbroBiz platform ID, and retain consent records showing which version of our legal documents you accepted and when.</Paragraph>
+        <h3 style={subheadingStyle}>Google Sign-In</h3>
+        <Paragraph>Google Sign-In is optional. If you choose it, AbroBiz receives the basic identity information provided by Google for authentication, such as your Google account identifier, name, email address, and profile image where available. We use this information to create or maintain your AbroBiz account, authenticate you, and associate activity with that account.</Paragraph>
+        <Paragraph>We do not request access to Google Drive, contacts, calendar, files, or other unrelated Google services. AbroBiz does not ask for or store your Google password.</Paragraph>
       </Section>
 
       <Section id="content" title="2. Information from storefront visitors">
@@ -81,6 +84,7 @@ export default function Privacy() {
 }
 
 const headingStyle: React.CSSProperties = { fontFamily: 'Outfit, sans-serif', fontSize: 18, fontWeight: 650, color: '#F0EDE7', margin: '0 0 9px', letterSpacing: '-0.02em' }
+const subheadingStyle: React.CSSProperties = { fontFamily: 'Outfit, sans-serif', fontSize: 16, fontWeight: 650, color: '#F0EDE7', margin: '18px 0 7px' }
 const linkStyle: React.CSSProperties = { color: '#D4A853', textDecoration: 'none', fontWeight: 600 }
 const privacyNavLinks = [
   { href: '#accounts', label: 'Information we collect' },

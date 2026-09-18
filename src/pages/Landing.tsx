@@ -35,6 +35,9 @@ const FAQS = [
   { question: "Can I change my site's look later?", answer: 'Yes, anytime from your dashboard — template, colors, branding, and content are all editable whenever you like.' },
   { question: 'What languages are supported?', answer: 'English, Amharic, and Afaan Oromo out of the box, per business.' },
   { question: "What's included in Premium?", answer: 'Table/appointment/room bookings, online ordering with a cart and checkout, and customer reviews — all on top of everything in the base plans.' },
+  { question: 'What is an AbroBiz subdomain?', answer: 'Each business can publish its own public storefront at a unique address such as yourbusiness.abrobiz.com.' },
+  { question: 'Can I sign in with Google?', answer: 'Yes. Google Sign-In is optional. AbroBiz uses the basic identity information needed to create or access your account and does not request unrelated Google services.' },
+  { question: 'How can I contact AbroBiz?', answer: 'Email support@abrobiz.com for account, storefront, billing, privacy, or technical questions.' },
 ]
 
 export default function Landing() {
@@ -75,6 +78,7 @@ export default function Landing() {
           <a href="#showcase" style={navLinkStyle}>Live businesses</a>
           <a href="#pricing" style={navLinkStyle}>Pricing</a>
           <a href="#faq" style={navLinkStyle}>FAQ</a>
+          <Link to="/about" style={navLinkStyle}>About</Link>
         </nav>
         <div style={{ display: 'flex', gap: 20, alignItems: 'center' }}>
           <Link to="/login" style={{ color: 'rgba(240,237,231,0.7)', textDecoration: 'none', fontSize: 14 }}>Log in</Link>
@@ -282,7 +286,7 @@ export default function Landing() {
 
       {/* Footer */}
       <footer style={{ borderTop: '1px solid rgba(255,255,255,0.06)', padding: '48px 24px 28px' }}>
-        <div style={{ maxWidth: 1000, margin: '0 auto', display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr', gap: 32 }} className="footer-grid">
+        <div style={{ maxWidth: 1000, margin: '0 auto', display: 'grid', gridTemplateColumns: '1.4fr repeat(3, 1fr)', gap: 32 }} className="footer-grid">
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
               <AbroBizLogo size={26} />
@@ -303,6 +307,11 @@ export default function Landing() {
             <div style={footerHeading}>Legal</div>
             <Link to="/terms" style={footerLink}>Terms of Service</Link>
             <Link to="/privacy" style={footerLink}>Privacy Policy</Link>
+          </div>
+          <div>
+            <div style={footerHeading}>Company & support</div>
+            <Link to="/about" style={footerLink}>About AbroBiz</Link>
+            <Link to="/contact" style={footerLink}>Contact support</Link>
           </div>
         </div>
         <div style={{ maxWidth: 1000, margin: '32px auto 0', paddingTop: 20, borderTop: '1px solid rgba(255,255,255,0.06)', textAlign: 'center', fontSize: 12, color: 'rgba(240,237,231,0.35)' }}>

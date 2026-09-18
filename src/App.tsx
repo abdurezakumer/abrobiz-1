@@ -7,6 +7,8 @@ import { RequireAuth, RequireSetup, RequireGuest, RequireOwner, RequireAdmin, Re
 import Landing from './pages/Landing'
 import Terms from './pages/Terms'
 import Privacy from './pages/Privacy'
+import About from './pages/About'
+import Contact from './pages/Contact'
 import { isBusinessSubdomain } from './lib/storefrontUrl'
 
 const Register = lazy(() => import('./pages/Register'))
@@ -44,6 +46,10 @@ function HostStorefront({ page }: { page: ReactNode }) {
   return isBusinessSubdomain() ? page : <Landing />
 }
 
+function HostPublicPage({ page }: { page: ReactNode }) {
+  return isBusinessSubdomain() ? <StorefrontHome /> : page
+}
+
 function RouteFallback() {
   return <div role="status" aria-live="polite" style={{ minHeight: '100vh', background: '#0A0C10', color: '#F0EDE7', display: 'grid', placeItems: 'center', fontFamily: 'Inter, sans-serif' }}>Loading AbroBiz…</div>
 }
@@ -56,8 +62,8 @@ export default function App() {
       <Routes>
         <Route path="/" element={<HostStorefront page={<StorefrontHome />} />} />
         <Route path="/menu" element={<HostStorefront page={<StorefrontHome />} />} />
-        <Route path="/about" element={<HostStorefront page={<StorefrontHome />} />} />
-        <Route path="/contact" element={<HostStorefront page={<StorefrontHome />} />} />
+        <Route path="/about" element={<HostPublicPage page={<About />} />} />
+        <Route path="/contact" element={<HostPublicPage page={<Contact />} />} />
         <Route path="/book" element={<HostStorefront page={<StorefrontHome />} />} />
         <Route path="/verify-email" element={<VerifyEmail />} />
         <Route path="/legal-acceptance" element={<RequireAuth><LegalAcceptance /></RequireAuth>} />
