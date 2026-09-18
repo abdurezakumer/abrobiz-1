@@ -47,7 +47,7 @@ export default function LegalPageLayout({ title, updated, children, navLinks }: 
               <Mail size={18} color="#D4A853" />
               <div style={{ marginTop: 13, fontFamily: 'Outfit, sans-serif', fontWeight: 600 }}>Questions?</div>
               <p style={{ margin: '7px 0 14px', color: 'rgba(240,237,231,0.58)', fontSize: 12.5, lineHeight: 1.6 }}>Our support team can help clarify how these documents apply to your account.</p>
-              <a href="mailto:support@abrobiz.com" style={{ color: '#D4A853', fontSize: 12.5, fontWeight: 600, textDecoration: 'none' }}>support@abrobiz.com</a>
+              <a href="mailto:abdurezak4525@gmail.com" style={{ color: '#D4A853', fontSize: 12.5, fontWeight: 600, textDecoration: 'none' }}>abdurezak4525@gmail.com</a>
             </div>
           </aside>
         </div>

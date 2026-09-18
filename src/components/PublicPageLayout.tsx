@@ -28,7 +28,7 @@ export default function PublicPageLayout({ title, eyebrow, children }: { title: 
       <footer style={{ position: 'relative', borderTop: '1px solid rgba(255,255,255,0.08)', padding: '24px', color: 'rgba(240,237,231,0.42)', fontSize: 12 }}>
         <div style={{ maxWidth: 900, margin: '0 auto', display: 'flex', justifyContent: 'space-between', gap: 18, flexWrap: 'wrap' }}>
           <Link to="/" style={{ color: 'inherit', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 7 }}><ArrowLeft size={13} /> Back to AbroBiz</Link>
-          <a href="mailto:support@abrobiz.com" style={{ color: 'inherit', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 7 }}><Mail size={13} /> support@abrobiz.com</a>
+          <a href="mailto:abdurezak4525@gmail.com" style={{ color: 'inherit', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 7 }}><Mail size={13} /> abdurezak4525@gmail.com</a>
           <span>Powered by AbroBiz</span>
         </div>
       </footer>

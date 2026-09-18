@@ -73,7 +73,7 @@ export default function Terms() {
       </Section>
 
       <Section id="contact" title="13. Contact AbroBiz">
-        <Paragraph>If you have a question about these terms, contact <a href="mailto:support@abrobiz.com" style={linkStyle}>support@abrobiz.com</a>. Please include the account email and enough context for us to help.</Paragraph>
+        <Paragraph>If you have a question about these terms, contact <a href="mailto:abdurezak4525@gmail.com" style={linkStyle}>abdurezak4525@gmail.com</a>. Please include the account email and enough context for us to help.</Paragraph>
       </Section>
     </LegalPageLayout>
   )

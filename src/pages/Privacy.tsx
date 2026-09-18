@@ -77,7 +77,7 @@ export default function Privacy() {
       </Section>
 
       <Section id="contact" title="14. Contact AbroBiz">
-        <Paragraph>For privacy questions or requests, email <a href="mailto:support@abrobiz.com" style={linkStyle}>support@abrobiz.com</a>. Include the account email and describe the request clearly so we can route it correctly.</Paragraph>
+        <Paragraph>For privacy questions or requests, email <a href="mailto:abdurezak4525@gmail.com" style={linkStyle}>abdurezak4525@gmail.com</a>. Include the account email and describe the request clearly so we can route it correctly.</Paragraph>
       </Section>
     </LegalPageLayout>
   )

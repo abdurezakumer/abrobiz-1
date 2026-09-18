@@ -37,7 +37,7 @@ const FAQS = [
   { question: "What's included in Premium?", answer: 'Table/appointment/room bookings, online ordering with a cart and checkout, and customer reviews — all on top of everything in the base plans.' },
   { question: 'What is an AbroBiz subdomain?', answer: 'Each business can publish its own public storefront at a unique address such as yourbusiness.abrobiz.com.' },
   { question: 'Can I sign in with Google?', answer: 'Yes. Google Sign-In is optional. AbroBiz uses the basic identity information needed to create or access your account and does not request unrelated Google services.' },
-  { question: 'How can I contact AbroBiz?', answer: 'Email support@abrobiz.com for account, storefront, billing, privacy, or technical questions.' },
+  { question: 'How can I contact AbroBiz?', answer: 'Email abdurezak4525@gmail.com for account, storefront, billing, privacy, or technical questions.' },
 ]
 
 export default function Landing() {

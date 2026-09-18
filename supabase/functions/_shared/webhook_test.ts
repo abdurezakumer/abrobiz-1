@@ -71,7 +71,7 @@ Deno.test('/support returns a safe AbroBiz support contact', async () => {
   const { db, tg } = freshCtx()
   await handleUpdate({ update_id: 22, message: { message_id: 22, chat: { id: 102, type: 'private' }, text: '/contact' } }, { db: db as any, tg: tg as any })
   assertStringIncludes(tg.sent[0].text!, 'AbroBiz Support')
-  assertStringIncludes(tg.sent[0].text!, 'support@abrobiz.com')
+  assertStringIncludes(tg.sent[0].text!, 'abdurezak4525@gmail.com')
 })
 
 Deno.test('/admin is restricted and /pending is available only to linked admins', async () => {

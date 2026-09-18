@@ -5,7 +5,7 @@ export default function Contact() {
   return (
     <PublicPageLayout title="We’re here to help you get live." eyebrow="CONTACT ABROBIZ">
       <p>For account, storefront, billing, privacy, or technical questions, email our support team. Tell us what happened, the page or feature involved, and the account email address where possible.</p>
-      <p><a href="mailto:support@abrobiz.com" style={emailStyle}>support@abrobiz.com</a></p>
+      <p><a href="mailto:abdurezak4525@gmail.com" style={emailStyle}>abdurezak4525@gmail.com</a></p>
       <div style={cardStyle}>
         <h2 style={cardHeadingStyle}>Before you write</h2>
         <ul style={{ margin: 0, paddingLeft: 20 }}>

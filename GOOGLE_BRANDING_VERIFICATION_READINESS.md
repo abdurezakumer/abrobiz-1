@@ -84,7 +84,7 @@ The following must be checked in Google Cloud and the production authentication 
 
 - Product name used in public UI, title, logo component, legal pages, and metadata: AbroBiz.
 - Production domain used in public links: `abrobiz.com`.
-- Support contact used in public pages: `support@abrobiz.com`.
+- Support contact used in public pages: `abdurezak4525@gmail.com`.
 - Favicon and touch-icon assets are present under `public/favicon_io/`.
 - `index.html` links the favicon, Apple touch icon, and web manifest.
 - The manifest is branded AbroBiz and uses the favicon assets.
@@ -273,7 +273,7 @@ Complete these checks in Google Cloud Console and the production auth provider:
 - Set the public homepage to `https://abrobiz.com/`.
 - Set the privacy policy URL to `https://abrobiz.com/privacy`.
 - Set the terms URL to `https://abrobiz.com/terms` if the consent configuration provides a terms field.
-- Set the support email to `support@abrobiz.com` or the verified support address used by the business.
+- Set the support email to `abdurezak4525@gmail.com` and verify that address in Google Cloud if required.
 - Upload the AbroBiz logo/favicon asset where Google requests an app logo.
 - Confirm the production JavaScript origin is `https://abrobiz.com` and add `https://www.abrobiz.com` only if that hostname is actually used and configured.
 - Confirm the exact production redirect URI required by the configured Supabase/Auth OAuth flow. Do not use localhost in production.

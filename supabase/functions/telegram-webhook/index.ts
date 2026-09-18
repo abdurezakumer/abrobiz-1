@@ -41,7 +41,7 @@ const infoKeyboard = buildInlineKeyboard([
 ])
 
 function supportMessage(): string {
-  const email = Deno.env.get('SUPPORT_EMAIL')?.trim() || 'support@abrobiz.com'
+  const email = Deno.env.get('SUPPORT_EMAIL')?.trim() || 'abdurezak4525@gmail.com'
   const username = Deno.env.get('SUPPORT_TELEGRAM_USERNAME')?.trim().replace(/^@/, '')
   const lines = [
     '🆘 AbroBiz Support',

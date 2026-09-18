@@ -205,7 +205,7 @@ frontend, so it keeps normal JWT verification.
 ```bash
 supabase secrets set TELEGRAM_BOT_TOKEN=<YOUR_TELEGRAM_BOT_TOKEN>
 supabase secrets set TELEGRAM_WEBHOOK_SECRET=<YOUR_TELEGRAM_WEBHOOK_SECRET>
-supabase secrets set SUPPORT_EMAIL=support@abrobiz.com
+supabase secrets set SUPPORT_EMAIL=abdurezak4525@gmail.com
 # Optional: set the support Telegram username without the @ symbol.
 supabase secrets set SUPPORT_TELEGRAM_USERNAME=your_support_username
 ```
