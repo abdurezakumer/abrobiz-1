@@ -72,6 +72,15 @@ if (import.meta.main) {
           if (existing?.some(file => file.name === `${stableUploadId}.${extension}`)) {
             return json({ path, bucket: config.bucket }, 200, req)
           }
+          // Storage can commit the object before its folder listing catches
+          // up. Check the exact object as a final idempotent recovery path so
+          // a lost mobile response does not make the owner upload twice.
+          const { data: existingSigned, error: existingSignedError } = await db.storage
+            .from(config.bucket)
+            .createSignedUrl(path, 60)
+          if (!existingSignedError && existingSigned?.signedUrl) {
+            return json({ path, bucket: config.bucket }, 200, req)
+          }
         }
         logFailure(req, { function_name: 'storage-upload', operation: 'upload_file', error_category: 'DEPENDENCY_ERROR', error_code: uploadError.name ?? 'unknown', provider: 'storage', status: 502 })
         return json({ error: 'Could not save the file.' }, 500, req)

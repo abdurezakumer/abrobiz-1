@@ -84,13 +84,27 @@ if (import.meta.main) {
         return json({ error: 'The selected payment plan is no longer available at that price. Please choose the plan again.' }, 400, req)
       }
       const proofName = proofMatch?.[2] ?? ''
-      const { data: proofObjects, error: proofLookupError } = await db.storage
-        .from('payment-proofs')
-        // List the tenant folder and compare the exact object name locally.
-        // Storage search behaves differently across hosted Storage versions;
-        // relying on it can make a freshly uploaded proof appear missing.
-        .list(businessId, { limit: 1000 })
-      const proofExists = !proofLookupError && proofObjects?.some(object => object.name === proofName)
+      let proofExists = false
+      for (let attempt = 0; attempt < 3 && !proofExists; attempt += 1) {
+        const { data: proofObjects, error: proofLookupError } = await db.storage
+          .from('payment-proofs')
+          // List the tenant folder and compare the exact object name locally.
+          // Storage search behaves differently across hosted Storage versions;
+          // relying on it can make a freshly uploaded proof appear missing.
+          .list(businessId, { limit: 1000 })
+        proofExists = !proofLookupError && Boolean(proofObjects?.some(object => object.name === proofName))
+
+        // A receipt can be committed by Storage a moment before the folder
+        // listing becomes consistent. An exact signed-URL check avoids
+        // rejecting a valid proof during that short window.
+        if (!proofExists) {
+          const { data: signedProof, error: signedProofError } = await db.storage
+            .from('payment-proofs')
+            .createSignedUrl(proofPath, 60)
+          proofExists = !signedProofError && Boolean(signedProof?.signedUrl)
+        }
+        if (!proofExists && attempt < 2) await new Promise(resolve => setTimeout(resolve, 250 * (attempt + 1)))
+      }
       if (!proofExists) return json({ error: 'Payment proof was not found.' }, 400, req)
       const { data, error } = await db.rpc('submit_payment_idempotent', {
         p_idempotency_key: idempotencyKey,

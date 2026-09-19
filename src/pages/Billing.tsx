@@ -251,10 +251,9 @@ export default function Billing() {
 
   async function handleProofSelection(file: File | null) {
     if (!file) return
+    const previousProofPath = proofPath
+    const previousProofFileName = proofFile?.name ?? proofFileName
     setError('')
-    setProofFile(null)
-    setProofFileName('')
-    setProofPath(null)
     setUploadProgress(0)
     paymentIdempotencyKey.current = null
     setSavingProof(true)
@@ -274,11 +273,17 @@ export default function Billing() {
       setProofFile(file)
       setProofFileName(file.name)
     } catch (err) {
-      setProofPath(null)
-      setProofFile(null)
-      setProofFileName('')
       setUploadProgress(null)
-      setError(friendlyError(err))
+      if (previousProofPath) {
+        // A replacement upload must never destroy a receipt that is already
+        // ready to submit. Keep the previous path usable and let the owner
+        // retry the replacement without starting the payment flow over.
+        setProofPath(previousProofPath)
+        setProofFileName(previousProofFileName)
+        setError('The new receipt could not be saved. Your previous receipt is still ready to submit; please try replacing it again.')
+      } else {
+        setError(friendlyError(err))
+      }
     } finally {
       setSavingProof(false)
     }
