@@ -576,9 +576,10 @@ it on, paste in the Client ID and Client Secret from above, save.
 ## 3. Nothing else to deploy
 
 The "Continue with Google" button is already on both Login and Register —
-it calls `supabase.auth.signInWithOAuth({ provider: 'google' })`, which
-Supabase handles end-to-end once the provider above is configured. No new
-secrets, no new functions.
+it uses Google Identity Services to obtain an identity token and sends that
+token to `supabase.auth.signInWithIdToken({ provider: 'google', ... })`.
+This direct popup flow does not use a redirect callback. No new secrets, no
+new functions.
 
 **One thing worth knowing:** Google already verifies the account's email,
 so Google sign-ins skip this app's own verification flow automatically —
