@@ -36,10 +36,17 @@ export async function signIn(email: string, password: string, turnstileToken?: s
   return data
 }
 
-function createGoogleNonce(): string {
+function createGoogleNonceValue(): string {
   const bytes = new Uint8Array(32)
   crypto.getRandomValues(bytes)
   return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('')
+}
+
+async function createGoogleNonce(): Promise<{ raw: string; hashed: string }> {
+  const raw = createGoogleNonceValue()
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw))
+  const hashed = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')
+  return { raw, hashed }
 }
 
 export async function initializeGoogleSignInButton(container: HTMLElement, onCredential: (credential: string, nonce: string) => void): Promise<() => void> {
@@ -48,11 +55,13 @@ export async function initializeGoogleSignInButton(container: HTMLElement, onCre
   await loadGoogleIdentityServices()
   const google = window.google
   if (!google?.accounts?.id) throw new Error('Google sign-in is temporarily unavailable.')
-  const nonce = createGoogleNonce()
+  const { raw: nonce, hashed: googleNonce } = await createGoogleNonce()
 
   google.accounts.id.initialize({
     client_id: clientId,
-    nonce,
+    // Google receives the hashed nonce; Supabase receives the raw nonce
+    // below when it verifies the returned identity token.
+    nonce: googleNonce,
     ux_mode: 'popup',
     auto_select: false,
     cancel_on_tap_outside: true,
