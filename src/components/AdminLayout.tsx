@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { LayoutDashboard, Building2, CreditCard, SlidersHorizontal, LogOut, Menu as MenuIcon, ShieldCheck, Megaphone, Users, ClipboardList, Copy, Send, TrendingUp, Lock } from 'lucide-react'
+import { LayoutDashboard, Building2, CreditCard, SlidersHorizontal, LogOut, Menu as MenuIcon, ShieldCheck, Megaphone, Users, ClipboardList, Copy, Send, TrendingUp, Lock, LifeBuoy } from 'lucide-react'
 import { useAuth } from '../lib/authContext'
 import { hasAdminPermission } from '../lib/api/adminControl'
 
@@ -13,6 +13,7 @@ const navItems = [
   { to: '/admin/businesses', label: 'Businesses', icon: Building2, permission: 'businesses.read' as const },
   { to: '/admin/payments', label: 'Payments', icon: CreditCard, permission: 'payments.read' as const },
   { to: '/admin/announcements', label: 'Announcements', icon: Megaphone, permission: 'announcements.send' as const },
+  { to: '/admin/support', label: 'Support requests', icon: LifeBuoy, permission: 'support.manage' as const },
   { to: '/admin/settings', label: 'Settings', icon: SlidersHorizontal, permission: 'templates.manage' as const },
   { to: '/admin/management', label: 'Admin management', icon: Users, superOnly: true },
   { to: '/admin/audit', label: 'Audit trail', icon: ClipboardList, superOnly: true },

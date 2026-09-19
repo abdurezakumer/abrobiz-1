@@ -16,6 +16,7 @@ import TemplateSelector from '../components/TemplateSelector'
 import { BUILTIN_TEMPLATES } from '../lib/templateRegistry'
 import AICopyGenerator from '../components/AICopyGenerator'
 import { hasFeature } from '../lib/entitlements'
+import { listMySupportRequests, requestWebsiteAddressChange, type SupportRequest } from '../lib/api/support'
 
 const ALL_LANGUAGES: { code: Language; label: string }[] = [
   { code: 'en', label: 'English' },
@@ -37,12 +38,22 @@ export default function BusinessSettings() {
   const [uploadingCover, setUploadingCover] = useState(false)
   const [uploadingGallery, setUploadingGallery] = useState(false)
   const [uploadError, setUploadError] = useState('')
+  const [supportRequests, setSupportRequests] = useState<SupportRequest[]>([])
+  const [requestedSubdomain, setRequestedSubdomain] = useState('')
+  const [requestMessage, setRequestMessage] = useState('')
+  const [supportBusy, setSupportBusy] = useState(false)
+  const [supportError, setSupportError] = useState('')
+  const [supportSaved, setSupportSaved] = useState(false)
 
   useEffect(() => setForm(business), [business])
   useEffect(() => {
     listActiveTemplates().then(remote => setTemplates(mergeTemplateOptions(remote, BUILTIN_TEMPLATES))).catch(() => {})
   }, [])
   useEffect(() => { listBusinessCategories().then(setCategories).catch(() => {}) }, [])
+  useEffect(() => {
+    if (!business?.id) return
+    listMySupportRequests(business.id).then(setSupportRequests).catch(() => setSupportRequests([]))
+  }, [business?.id])
 
   if (!form) return null
 
@@ -140,6 +151,24 @@ export default function BusinessSettings() {
     }
   }
 
+  async function handleAddressRequest() {
+    if (!form || !requestedSubdomain.trim()) return
+    setSupportBusy(true)
+    setSupportError('')
+    setSupportSaved(false)
+    try {
+      const created = await requestWebsiteAddressChange(form.id, requestedSubdomain.trim().toLowerCase(), requestMessage)
+      setSupportRequests(current => [created, ...current])
+      setRequestedSubdomain('')
+      setRequestMessage('')
+      setSupportSaved(true)
+    } catch (err) {
+      setSupportError(friendlyError(err))
+    } finally {
+      setSupportBusy(false)
+    }
+  }
+
   function toggleLanguage(code: Language) {
     const has = form!.languages.includes(code)
     if (has && form!.languages.length === 1) return
@@ -181,8 +210,22 @@ export default function BusinessSettings() {
           </a>
         </div>
         <p style={{ color: 'rgba(10,12,16,0.45)', fontSize: 12.5, marginTop: 9 }}>
-          Your subdomain is based on your business slug. Contact support if you need to change it.
+          Your address is protected after setup. If you need a change, send a request to AbroBiz Support for review.
         </p>
+        <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid rgba(10,12,16,0.07)' }}>
+          <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 8 }}>Request a different address</div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', flex: '1 1 230px', border: '1px solid rgba(10,12,16,0.1)', borderRadius: 9, padding: '0 10px' }}>
+              <input value={requestedSubdomain} onChange={event => setRequestedSubdomain(event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))} placeholder="new-business-name" aria-label="Requested subdomain" style={{ ...inputStyle, border: 0, paddingLeft: 0, flex: 1, minWidth: 0 }} />
+              <span style={{ color: 'rgba(10,12,16,0.4)', fontSize: 12 }}>.abrobiz.com</span>
+            </div>
+            <button type="button" onClick={() => void handleAddressRequest()} disabled={supportBusy || requestedSubdomain.trim().length < 3} style={{ ...saveBtn, opacity: supportBusy || requestedSubdomain.trim().length < 3 ? .55 : 1 }}>{supportBusy ? 'Sending…' : 'Send request'}</button>
+          </div>
+          <textarea value={requestMessage} onChange={event => setRequestMessage(event.target.value)} rows={2} maxLength={1000} placeholder="Optional: tell support why you need this change." style={{ ...inputStyle, width: '100%', resize: 'vertical', marginTop: 9 }} />
+          {supportSaved && <div style={{ color: '#166534', fontSize: 12.5, marginTop: 8 }}>Request sent. Support will review it and notify you in your AbroBiz account.</div>}
+          {supportError && <div style={{ color: '#B91C1C', fontSize: 12.5, marginTop: 8 }}>{supportError}</div>}
+          {supportRequests.length > 0 && <div style={{ display: 'grid', gap: 7, marginTop: 14 }}>{supportRequests.slice(0, 3).map(request => <div key={request.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', padding: '9px 10px', borderRadius: 9, background: '#F6F3EE', fontSize: 12 }}><span><strong>{request.currentSubdomain}.abrobiz.com</strong> → <strong>{request.requestedSubdomain ?? '—'}.abrobiz.com</strong><small style={{ display: 'block', color: 'rgba(10,12,16,0.48)', marginTop: 3 }}>{new Date(request.createdAt).toLocaleDateString()}</small></span><span style={{ color: request.status === 'completed' ? '#166534' : request.status === 'rejected' ? '#B91C1C' : '#8A6417', fontWeight: 700, textTransform: 'capitalize' }}>{request.status.replace('_', ' ')}</span></div>)}</div>}
+        </div>
       </Section>
 
       <Section title="Branding">

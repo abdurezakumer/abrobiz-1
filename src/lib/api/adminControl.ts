@@ -12,15 +12,15 @@ export const ADMIN_ROLES: Array<{ value: AdminRole; label: string; description: 
   { value: 'super_admin', label: 'Super administrator', description: 'Full platform control and audit access.' },
 ]
 
-export type AdminPermission = 'dashboard.read' | 'businesses.read' | 'businesses.manage' | 'payments.read' | 'payments.review' | 'users.read' | 'templates.manage' | 'announcements.send' | 'support.read' | 'marketing.read' | 'marketing.manage' | 'marketing.referrals' | 'marketing.commissions' | 'marketing.reminders'
+export type AdminPermission = 'dashboard.read' | 'businesses.read' | 'businesses.manage' | 'payments.read' | 'payments.review' | 'users.read' | 'templates.manage' | 'announcements.send' | 'support.read' | 'support.manage' | 'marketing.read' | 'marketing.manage' | 'marketing.referrals' | 'marketing.commissions' | 'marketing.reminders'
 
 export function hasAdminPermission(profile: Profile | null, permission: AdminPermission): boolean {
   if (!profile || (profile.role !== 'admin' && profile.role !== 'super_admin')) return false
   if (profile.role === 'super_admin' || profile.adminRole === 'super_admin') return true
   const matrix: Record<string, AdminPermission[]> = {
-    operations: ['dashboard.read', 'businesses.read', 'businesses.manage', 'payments.read', 'payments.review', 'support.read'],
+    operations: ['dashboard.read', 'businesses.read', 'businesses.manage', 'payments.read', 'payments.review', 'support.read', 'support.manage'],
     finance: ['dashboard.read', 'payments.read', 'payments.review'],
-    support: ['dashboard.read', 'users.read', 'support.read'],
+    support: ['dashboard.read', 'users.read', 'support.read', 'support.manage'],
     content: ['dashboard.read', 'templates.manage', 'announcements.send'],
     marketing_admin: ['dashboard.read', 'marketing.read', 'marketing.manage', 'marketing.referrals', 'marketing.commissions', 'marketing.reminders'],
     sales_person: ['dashboard.read', 'marketing.read', 'marketing.referrals', 'marketing.commissions'],

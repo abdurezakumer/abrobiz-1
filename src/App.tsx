@@ -33,6 +33,7 @@ const AdminBusinesses = lazy(() => import('./pages/admin/AdminBusinesses'))
 const AdminPayments = lazy(() => import('./pages/admin/AdminPayments'))
 const AdminSettings = lazy(() => import('./pages/admin/AdminSettings'))
 const AdminAnnouncements = lazy(() => import('./pages/admin/AdminAnnouncements'))
+const AdminSupport = lazy(() => import('./pages/admin/AdminSupport'))
 const AdminUsers = lazy(() => import('./pages/admin/AdminUsers'))
 const AdminTelegram = lazy(() => import('./pages/admin/AdminTelegram'))
 const AdminMarketing = lazy(() => import('./pages/admin/AdminMarketing'))
@@ -106,6 +107,7 @@ export default function App() {
         <Route path="/admin/payments" element={<RequireAdminPermission permission="payments.read"><AdminPayments /></RequireAdminPermission>} />
         <Route path="/admin/settings" element={<RequireAdminPermission permission="templates.manage"><AdminSettings /></RequireAdminPermission>} />
         <Route path="/admin/announcements" element={<RequireAdminPermission permission="announcements.send"><AdminAnnouncements /></RequireAdminPermission>} />
+        <Route path="/admin/support" element={<RequireAdminPermission permission="support.manage"><AdminSupport /></RequireAdminPermission>} />
         <Route path="/admin/management" element={<RequireSuperAdmin><AdminManagement /></RequireSuperAdmin>} />
         <Route path="/admin/audit" element={<RequireSuperAdmin><AdminAudit /></RequireSuperAdmin>} />
 

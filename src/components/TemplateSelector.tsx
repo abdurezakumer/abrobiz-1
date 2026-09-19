@@ -1,8 +1,9 @@
 import { useMemo, useState, type CSSProperties } from 'react'
 import { Check, Eye, Search, Sparkles, X } from 'lucide-react'
 import type { Business, Template } from '../types'
-import { templateCategory, templateComposition, templateSupportedTypes } from '../lib/templateRegistry'
+import { templateCategory, templateSupportedTypes } from '../lib/templateRegistry'
 import { safeImageUrl } from '../lib/safeUrl'
+import TemplatePreviewSurface from './TemplatePreviewSurface'
 
 const categories = ['All', 'Restaurant', 'Beauty', 'Dental', 'Spa', 'Massage', 'Hair salon', 'Barbershop', 'Real estate', 'Hospitality', 'Healthcare', 'Professional', 'Retail', 'Fitness', 'Events', 'General'] as const
 
@@ -21,6 +22,7 @@ export default function TemplateSelector({
   const [query, setQuery] = useState('')
   const [preview, setPreview] = useState<Template | null>(null)
   const [pending, setPending] = useState<Template | null>(null)
+  const [previewMode, setPreviewMode] = useState<'desktop' | 'mobile'>('desktop')
   const visible = useMemo(() => {
     const normalized = query.trim().toLowerCase()
     return templates.filter(template => {
@@ -75,7 +77,7 @@ export default function TemplateSelector({
                     {template.config.features?.slice(0, 2).map(feature => <span key={feature} style={featurePill(dark)}>{feature}</span>)}
                   </div>
                   <div style={{ display: 'flex', gap: 7 }}>
-                    <button onClick={() => setPreview(template)} style={{ ...smallButton, color: ink, background: dark ? 'rgba(255,255,255,0.08)' : '#F6F3EE' }}><Eye size={13} /> Preview</button>
+                    <button onClick={() => { setPreviewMode('desktop'); setPreview(template) }} style={{ ...smallButton, color: ink, background: dark ? 'rgba(255,255,255,0.08)' : '#F6F3EE' }}><Eye size={13} /> Preview</button>
                     <button onClick={() => requestSelect(template)} disabled={selected} style={{ ...smallButton, flex: 1, justifyContent: 'center', color: selected ? muted : '#0A0C10', background: selected ? (dark ? 'rgba(255,255,255,0.06)' : '#F0EEE9') : '#D4A853' }}>{selected ? 'Current' : 'Use template'}</button>
                   </div>
                 </div>
@@ -87,11 +89,21 @@ export default function TemplateSelector({
 
       {(preview || pending) && (
         <div role="dialog" aria-modal="true" style={overlay} onClick={() => { setPreview(null); setPending(null) }}>
-          <div onClick={event => event.stopPropagation()} style={{ position: 'relative', width: 'min(520px, calc(100% - 32px))', maxHeight: '90vh', overflow: 'auto', borderRadius: 20, background: dark ? '#171A20' : '#fff', color: ink, boxShadow: '0 24px 80px rgba(0,0,0,0.28)' }}>
+          <div onClick={event => event.stopPropagation()} style={{ position: 'relative', width: preview ? 'min(1080px, calc(100% - 24px))' : 'min(520px, calc(100% - 32px))', height: preview ? 'min(94vh, 900px)' : undefined, maxHeight: '94vh', overflow: 'auto', borderRadius: 20, background: dark ? '#171A20' : '#fff', color: ink, boxShadow: '0 24px 80px rgba(0,0,0,0.28)' }}>
             <button aria-label="Close" onClick={() => { setPreview(null); setPending(null) }} style={{ position: 'absolute', top: 12, right: 12, zIndex: 2, display: 'grid', placeItems: 'center', width: 34, height: 34, border: 0, borderRadius: 99, background: dark ? '#252A33' : '#fff', color: ink, cursor: 'pointer' }}><X size={17} /></button>
             {preview && <>
-              <div style={{ minHeight: 180, display: 'flex', alignItems: 'flex-end', padding: 24, background: `linear-gradient(120deg, ${preview.config.heroBg ?? preview.config.bg ?? '#222'}ee, ${preview.config.bg ?? '#111'}aa), ${safeImageUrl(previewBusiness?.coverUrl) ? `url("${safeImageUrl(previewBusiness?.coverUrl)}") center/cover` : 'none'}`, color: preview.config.text ?? '#fff' }}><div><div style={{ fontSize: 11, letterSpacing: 1.5, textTransform: 'uppercase', opacity: .7 }}>{templateCategory(preview)}</div><h2 style={{ margin: '8px 0 0', fontFamily: preview.config.headingFont, fontSize: 32 }}>{previewBusiness?.name ?? preview.name}</h2></div></div>
-              <div style={{ padding: 22 }}><p style={{ margin: 0, color: muted, lineHeight: 1.6 }}>{preview.description}</p><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 14 }}>{[templateComposition(preview.slug, preview.config), ...(preview.config.features ?? [])].map(feature => <span key={feature} style={{ fontSize: 11.5, padding: '6px 9px', borderRadius: 99, background: dark ? 'rgba(255,255,255,0.08)' : '#F6F3EE', color: ink }}>{feature}</span>)}</div><button onClick={() => { requestSelect(preview); setPreview(null) }} style={{ ...smallButton, marginTop: 18, padding: '10px 14px', background: '#D4A853', color: '#0A0C10' }}>Use this template</button></div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '12px 54px 12px 16px', background: dark ? '#171A20' : '#fff', borderBottom: `1px solid ${dark ? 'rgba(255,255,255,0.08)' : 'rgba(10,12,16,0.08)'}` }}>
+                <div><strong style={{ fontSize: 13 }}>{preview.name}</strong><div style={{ color: muted, fontSize: 11, marginTop: 3 }}>{previewBusiness ? 'Previewing your current business content' : 'Full sample preview'}</div></div>
+                <div style={{ display: 'flex', gap: 4, padding: 3, borderRadius: 8, background: dark ? 'rgba(255,255,255,0.08)' : '#F6F3EE' }} role="group" aria-label="Preview size">
+                  {(['desktop', 'mobile'] as const).map(mode => <button key={mode} type="button" onClick={() => setPreviewMode(mode)} aria-pressed={previewMode === mode} style={{ border: 0, borderRadius: 6, padding: '6px 9px', background: previewMode === mode ? '#D4A853' : 'transparent', color: previewMode === mode ? '#0A0C10' : ink, fontSize: 11, cursor: 'pointer' }}>{mode === 'desktop' ? 'Desktop' : 'Mobile'}</button>)}
+                </div>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'center', padding: 18, background: dark ? '#0E1014' : '#ECE9E2', overflow: 'auto' }}>
+                <div style={{ width: previewMode === 'mobile' ? 390 : '100%', maxWidth: previewMode === 'mobile' ? 390 : 980, minWidth: previewMode === 'mobile' ? 320 : undefined, borderRadius: previewMode === 'mobile' ? 22 : 10, overflow: 'hidden', boxShadow: '0 12px 30px rgba(0,0,0,0.2)' }}>
+                  <TemplatePreviewSurface template={preview} business={previewBusiness} />
+                </div>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '12px 16px', background: dark ? '#171A20' : '#fff' }}><button onClick={() => { requestSelect(preview); setPreview(null) }} style={{ ...smallButton, padding: '10px 14px', background: '#D4A853', color: '#0A0C10' }}>Use this template</button></div>
             </>}
             {pending && <div style={{ padding: 26 }}><div style={{ fontSize: 11, letterSpacing: 1.4, textTransform: 'uppercase', color: '#A47721' }}>Switch website design?</div><h2 style={{ margin: '8px 0', fontFamily: 'Outfit, sans-serif' }}>Use {pending.name}?</h2><p style={{ color: muted, lineHeight: 1.6, margin: 0 }}>Your business information, menu, services and settings stay the same. Only the presentation changes.</p><div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 22 }}><button onClick={() => setPending(null)} style={{ ...smallButton, padding: '10px 14px', color: ink, background: dark ? 'rgba(255,255,255,0.08)' : '#F6F3EE' }}>Cancel</button><button onClick={() => { onSelect(pending.slug); setPending(null) }} style={{ ...smallButton, padding: '10px 14px', color: '#0A0C10', background: '#D4A853' }}>Confirm switch</button></div></div>}
           </div>
