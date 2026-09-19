@@ -13,6 +13,43 @@ import { friendlyError } from '../lib/errors'
 import type { Plan, PaymentMethod, Payment } from '../types'
 import { PAYMENT_UPLOAD_ACCEPT, detectedUploadType, takeSelectedFile } from '../lib/fileUpload'
 
+interface PaymentDraft {
+  planId: string | null
+  paymentMethodId: string | null
+  proofPath: string | null
+  proofFileName: string | null
+  note: string
+}
+
+function paymentDraftKey(businessId: string) {
+  return `abrobiz:payment-draft:${businessId}`
+}
+
+function readPaymentDraft(businessId: string): PaymentDraft | null {
+  try {
+    const raw = window.sessionStorage.getItem(paymentDraftKey(businessId))
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as Partial<PaymentDraft>
+    return {
+      planId: typeof parsed.planId === 'string' ? parsed.planId : null,
+      paymentMethodId: typeof parsed.paymentMethodId === 'string' ? parsed.paymentMethodId : null,
+      proofPath: typeof parsed.proofPath === 'string' ? parsed.proofPath : null,
+      proofFileName: typeof parsed.proofFileName === 'string' ? parsed.proofFileName : null,
+      note: typeof parsed.note === 'string' ? parsed.note : '',
+    }
+  } catch {
+    return null
+  }
+}
+
+function writePaymentDraft(businessId: string, draft: PaymentDraft) {
+  try { window.sessionStorage.setItem(paymentDraftKey(businessId), JSON.stringify(draft)) } catch { /* Storage may be unavailable in private mode. */ }
+}
+
+function clearPaymentDraft(businessId: string) {
+  try { window.sessionStorage.removeItem(paymentDraftKey(businessId)) } catch { /* Ignore unavailable browser storage. */ }
+}
+
 export default function Billing() {
   const { business, subscription, refreshBusiness } = useAuth()
   const [plans, setPlans] = useState<Plan[]>([])
@@ -21,6 +58,8 @@ export default function Billing() {
   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null)
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod | null>(null)
   const [proofFile, setProofFile] = useState<File | null>(null)
+  const [proofFileName, setProofFileName] = useState('')
+  const [proofPath, setProofPath] = useState<string | null>(null)
   const [savingProof, setSavingProof] = useState(false)
   const [uploadProgress, setUploadProgress] = useState<number | null>(null)
   const [note, setNote] = useState('')
@@ -32,19 +71,56 @@ export default function Billing() {
   const [error, setError] = useState('')
   const [telegramLink, setTelegramLink] = useState<TelegramLinkStatus | null>(null)
   const paymentIdempotencyKey = useRef<string | null>(null)
-  const paymentProofPath = useRef<string | null>(null)
+  const draftHydrated = useRef(false)
 
   useEffect(() => {
-    listPlans().then(setPlans)
-    listPaymentMethods().then(ms => {
-      setMethods(ms)
-      setSelectedMethod(ms[0] ?? null)
-    }).catch(err => setError(friendlyError(err)))
-    if (business) {
-      listPaymentsForBusiness(business.id).then(setHistory)
-      getOrCreateBusinessTelegramLink(business.id).then(setTelegramLink).catch(() => {})
+    if (!business?.id) return
+    const businessId = business.id
+    draftHydrated.current = false
+    const draft = readPaymentDraft(businessId)
+    Promise.all([listPlans(), listPaymentMethods()])
+      .then(([availablePlans, availableMethods]) => {
+        setPlans(availablePlans)
+        setMethods(availableMethods)
+        void listPaymentsForBusiness(businessId).then(setHistory).catch(() => {})
+        const restoredPlan = draft?.planId ? availablePlans.find(plan => plan.id === draft.planId) ?? null : null
+        const restoredMethod = draft?.paymentMethodId ? availableMethods.find(method => method.id === draft.paymentMethodId) ?? null : null
+        setSelectedPlan(restoredPlan)
+        setSelectedMethod(restoredMethod ?? availableMethods[0] ?? null)
+        setNote(draft?.note ?? '')
+        if (restoredPlan && draft?.proofPath) {
+          setProofPath(draft.proofPath)
+          setProofFileName(draft.proofFileName ?? 'Uploaded receipt')
+        } else {
+          setProofPath(null)
+          setProofFileName('')
+        }
+        draftHydrated.current = true
+      })
+      .catch(err => {
+        draftHydrated.current = true
+        setError(friendlyError(err))
+      })
+    getOrCreateBusinessTelegramLink(businessId).then(setTelegramLink).catch(() => {})
+  }, [business?.id])
+
+  // sessionStorage survives a browser refresh and a trip to a banking app in
+  // the same tab. The receipt itself is already in protected Storage; only
+  // its opaque path and the draft fields are persisted here.
+  useEffect(() => {
+    if (!business?.id || !draftHydrated.current) return
+    if (!selectedPlan && !proofPath && !note) {
+      clearPaymentDraft(business.id)
+      return
     }
-  }, [business])
+    writePaymentDraft(business.id, {
+      planId: selectedPlan?.id ?? null,
+      paymentMethodId: selectedMethod?.id ?? null,
+      proofPath,
+      proofFileName: (proofFile?.name ?? proofFileName) || null,
+      note,
+    })
+  }, [business?.id, note, proofFile?.name, proofFileName, proofPath, selectedMethod?.id, selectedPlan?.id])
 
   useEffect(() => {
     const preventLossWhileWorking = (event: BeforeUnloadEvent) => {
@@ -125,9 +201,10 @@ export default function Billing() {
     if (!file) return
     setError('')
     setProofFile(null)
+    setProofFileName('')
+    setProofPath(null)
     setUploadProgress(0)
     paymentIdempotencyKey.current = null
-    paymentProofPath.current = null
     setSavingProof(true)
     try {
       const detectedType = detectedUploadType(file)
@@ -140,12 +217,14 @@ export default function Billing() {
       const proofPath = await uploadPaymentProof(business.id, file, progress => {
         setUploadProgress(Math.min(99, 8 + Math.round(progress * 0.92)))
       })
-      paymentProofPath.current = proofPath
+      setProofPath(proofPath)
       setUploadProgress(100)
       setProofFile(file)
+      setProofFileName(file.name)
     } catch (err) {
-      paymentProofPath.current = null
+      setProofPath(null)
       setProofFile(null)
+      setProofFileName('')
       setUploadProgress(null)
       setError(friendlyError(err))
     } finally {
@@ -159,7 +238,7 @@ export default function Billing() {
       setError('Please select an available payment method before submitting.')
       return
     }
-    if (!proofFile) {
+    if (!proofPath) {
       setError('Please upload your payment receipt before submitting.')
       return
     }
@@ -175,7 +254,6 @@ export default function Billing() {
     try {
       paymentIdempotencyKey.current ??= crypto.randomUUID()
       const idempotencyKey = paymentIdempotencyKey.current
-      const proofPath = paymentProofPath.current
       if (!proofPath) throw new Error('Please upload your payment receipt before submitting.')
       const payment = await submitPayment({
         businessId: business.id,
@@ -189,13 +267,15 @@ export default function Billing() {
       })
       notifyAdminsOfPayment(payment.id)
       paymentIdempotencyKey.current = null
-      paymentProofPath.current = null
+      setProofPath(null)
       setHistory(previous => [payment, ...previous.filter(item => item.id !== payment.id)])
       setSubmittedPaymentId(payment.id)
       setSubmitted(true)
       setSelectedPlan(null)
       setProofFile(null)
+      setProofFileName('')
       setNote('')
+      clearPaymentDraft(business.id)
       // A successful payment must not be shown as failed just because a
       // follow-up dashboard refresh is temporarily unavailable.
       await listPaymentsForBusiness(business.id).then(setHistory).catch(() => {})
@@ -210,6 +290,8 @@ export default function Billing() {
   if (!business) return null
 
   const submittedPayment = submittedPaymentId ? history.find(payment => payment.id === submittedPaymentId) : undefined
+  const proofReady = Boolean(proofPath)
+  const displayedProofName = proofFile?.name ?? proofFileName
 
   return (
     <DashboardLayout>
@@ -276,7 +358,7 @@ export default function Billing() {
                     </li>
                   ))}
                 </ul>
-                <button onClick={() => { setSelectedPlan(plan); setSubmitted(false); setSubmittedPaymentId(null); setError('') }} style={selectBtn}>Select</button>
+                <button onClick={() => { clearPaymentDraft(business.id); setSelectedPlan(plan); setSelectedMethod(methods[0] ?? null); setProofPath(null); setProofFile(null); setProofFileName(''); setNote(''); setSubmitted(false); setSubmittedPaymentId(null); setError('') }} style={selectBtn}>Select</button>
               </div>
             ))}
           </div>
@@ -285,7 +367,7 @@ export default function Billing() {
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} style={{ background: '#fff', borderRadius: 16, border: '1.5px solid #D4A853', padding: 22, marginBottom: 30 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <div style={{ fontSize: 15, fontWeight: 600 }}>Full payment for {selectedPlan.name} — {selectedPlan.priceEtb} ETB</div>
-            <button onClick={() => setSelectedPlan(null)} style={{ background: 'none', border: 'none', fontSize: 13, color: 'rgba(10,12,16,0.5)', cursor: 'pointer' }}>Cancel</button>
+            <button onClick={() => { clearPaymentDraft(business.id); setSelectedPlan(null); setSelectedMethod(methods[0] ?? null); setProofPath(null); setProofFile(null); setProofFileName(''); setNote('') }} style={{ background: 'none', border: 'none', fontSize: 13, color: 'rgba(10,12,16,0.5)', cursor: 'pointer' }}>Cancel</button>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
@@ -335,10 +417,10 @@ export default function Billing() {
                   </div>
                   <div style={{ fontSize: 11.5, color: 'rgba(10,12,16,0.4)', marginTop: 7 }}>Keep this page open while your receipt is uploading.</div>
                 </div>
-              ) : proofFile ? (
+              ) : proofReady ? (
                 <>
                   <CheckCircle2 size={22} color="#166534" style={{ display: 'block', margin: '0 auto 6px' }} />
-                  <span style={{ fontSize: 13.5, color: '#166534', wordBreak: 'break-word' }}>Uploaded: {proofFile.name}</span>
+                  <span style={{ fontSize: 13.5, color: '#166534', wordBreak: 'break-word' }}>Uploaded: {displayedProofName || 'Receipt photo'}</span>
                   <span style={{ display: 'block', fontSize: 11.5, color: 'rgba(10,12,16,0.45)', marginTop: 5 }}>Tap to choose a different file</span>
                 </>
               ) : (
@@ -364,7 +446,7 @@ export default function Billing() {
               hidden
               onChange={e => void handleProofSelection(takeSelectedFile(e.currentTarget))}
             />
-            <span style={{ fontSize: 11.5, color: '#D4A853', marginTop: 4, display: 'block' }}>{savingProof ? 'Uploading…' : proofFile ? 'Click to change' : 'Choose a file'}</span>
+            <span style={{ fontSize: 11.5, color: '#D4A853', marginTop: 4, display: 'block' }}>{savingProof ? 'Uploading…' : proofReady ? 'Click to change' : 'Choose a file'}</span>
           </label>
 
           <textarea value={note} onChange={e => setNote(e.target.value)} placeholder="Note for admin (optional)" rows={2} style={{ width: '100%', border: '1px solid rgba(10,12,16,0.1)', borderRadius: 9, padding: '9px 11px', fontSize: 13.5, outline: 'none', fontFamily: 'inherit', resize: 'vertical', marginBottom: 16 }} />
@@ -375,7 +457,7 @@ export default function Billing() {
             <span style={stepNumber}>3</span>
             <span style={{ fontSize: 13, fontWeight: 650, color: '#0A0C10' }}>Submit for admin review</span>
           </div>
-          <button type="button" onClick={handleSubmit} disabled={!selectedMethod || !proofFile || savingProof || submitting} style={{ ...selectBtn, width: '100%', opacity: !selectedMethod || !proofFile || savingProof || submitting ? 0.5 : 1 }}>
+          <button type="button" onClick={handleSubmit} disabled={!selectedMethod || !proofReady || savingProof || submitting} style={{ ...selectBtn, width: '100%', opacity: !selectedMethod || !proofReady || savingProof || submitting ? 0.5 : 1 }}>
             {submitting ? 'Submitting…' : 'Submit for approval'}
           </button>
           {telegramLink && telegramPaymentDeepLink(telegramLink.linkToken) && (
