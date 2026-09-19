@@ -401,6 +401,10 @@ before returning. In **Authentication → Email Templates**, edit the relevant
 confirmation / magic-link template so it includes `{{ .Token }}`. That makes
 Supabase send a six-digit OTP instead of only a clickable link.
 
+In the same Email provider settings, set **OTP length** to `6`. The application
+accepts exactly six digits for signup, resend, and verification; the hosted
+Supabase Auth project must generate the same length.
+
 Configure the SMTP provider with the verified AbroBiz sender address. For
 Resend, use the SMTP credentials from Resend's SMTP settings, or configure
 Supabase's supported SMTP provider directly. The Auth template should use

@@ -12,8 +12,7 @@ import { useAuth } from '../lib/authContext'
 export default function VerifyEmail() {
   const [params] = useSearchParams()
   const navigate = useNavigate()
-  const configuredLength = Number(params.get('length'))
-  const otpLength = Number.isInteger(configuredLength) && configuredLength >= 6 && configuredLength <= 10 ? configuredLength : 8
+  const otpLength = 6
   const [email, setEmail] = useState(params.get('email') ?? '')
   const [code, setCode] = useState(() => Array.from({ length: otpLength }, () => ''))
   const [cooldown, setCooldown] = useState(60)

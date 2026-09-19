@@ -88,7 +88,7 @@ if (import.meta.main) {
           return json(GENERIC_RESPONSE, 200, req)
         }
       }
-      if (!code || !/^\d{6,10}$/.test(code)) {
+      if (!code || !/^\d{6}$/.test(code)) {
         logFailure(req, { function_name: 'signup', operation: 'generate_signup_otp', error_category: 'DEPENDENCY_ERROR', provider: 'supabase-auth', status: 503 })
         return json({ error: 'AbroBiz could not prepare your verification code. Please try again.' }, 503, req)
       }

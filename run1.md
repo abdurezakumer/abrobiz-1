@@ -71,7 +71,8 @@ In Supabase Dashboard:
 
 1. Authentication → Providers → Email
 2. Turn **Confirm email** off
-3. Save
+3. Set **OTP length** to `6`
+4. Save
 
 This app sends its own verification email through
 `send-verification-email`. Leaving built-in confirmation on prevents the app
