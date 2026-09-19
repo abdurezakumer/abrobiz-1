@@ -54,6 +54,11 @@ export default function Billing() {
   const { business, subscription, refreshBusiness } = useAuth()
   const [plans, setPlans] = useState<Plan[]>([])
   const [methods, setMethods] = useState<PaymentMethod[]>([])
+  const [plansLoading, setPlansLoading] = useState(true)
+  const [methodsLoading, setMethodsLoading] = useState(true)
+  const [plansError, setPlansError] = useState('')
+  const [methodsError, setMethodsError] = useState('')
+  const [showOptionsOverlay, setShowOptionsOverlay] = useState(true)
   const [history, setHistory] = useState<Payment[]>([])
   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null)
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod | null>(null)
@@ -72,35 +77,79 @@ export default function Billing() {
   const [telegramLink, setTelegramLink] = useState<TelegramLinkStatus | null>(null)
   const paymentIdempotencyKey = useRef<string | null>(null)
   const draftHydrated = useRef(false)
+  const optionsRequestId = useRef(0)
+
+  async function loadBillingOptions(businessId: string, restoreDraft: boolean, showOverlay = false) {
+    const requestId = ++optionsRequestId.current
+    const draft = restoreDraft ? readPaymentDraft(businessId) : null
+    draftHydrated.current = false
+    setPlansLoading(true)
+    setMethodsLoading(true)
+    setPlansError('')
+    setMethodsError('')
+    if (showOverlay) setShowOptionsOverlay(true)
+
+    let plansFinished = false
+    let methodsFinished = false
+    const finish = () => {
+      if (requestId !== optionsRequestId.current || !plansFinished || !methodsFinished) return
+      draftHydrated.current = true
+      setShowOptionsOverlay(false)
+    }
+
+    const plansRequest = listPlans()
+      .then(availablePlans => {
+        if (requestId !== optionsRequestId.current) return
+        setPlans(availablePlans)
+        const restoredPlan = draft?.planId ? availablePlans.find(plan => plan.id === draft.planId) ?? null : null
+        setSelectedPlan(current => {
+          if (current && availablePlans.some(plan => plan.id === current.id)) return current
+          return restoredPlan
+        })
+        if (restoredPlan && draft?.proofPath) {
+          setProofPath(current => current ?? draft.proofPath)
+          setProofFileName(current => current || draft.proofFileName || 'Uploaded receipt')
+        }
+        if (draft?.note) setNote(current => current || draft.note)
+      })
+      .catch(err => {
+        if (requestId === optionsRequestId.current) setPlansError(friendlyError(err))
+      })
+      .finally(() => {
+        if (requestId !== optionsRequestId.current) return
+        plansFinished = true
+        setPlansLoading(false)
+        finish()
+      })
+
+    const methodsRequest = listPaymentMethods()
+      .then(availableMethods => {
+        if (requestId !== optionsRequestId.current) return
+        setMethods(availableMethods)
+        const restoredMethod = draft?.paymentMethodId ? availableMethods.find(method => method.id === draft.paymentMethodId) ?? null : null
+        setSelectedMethod(current => {
+          if (current && availableMethods.some(method => method.id === current.id)) return current
+          return restoredMethod ?? availableMethods[0] ?? null
+        })
+      })
+      .catch(err => {
+        if (requestId === optionsRequestId.current) setMethodsError(friendlyError(err))
+      })
+      .finally(() => {
+        if (requestId !== optionsRequestId.current) return
+        methodsFinished = true
+        setMethodsLoading(false)
+        finish()
+      })
+
+    await Promise.allSettled([plansRequest, methodsRequest])
+  }
 
   useEffect(() => {
     if (!business?.id) return
     const businessId = business.id
-    draftHydrated.current = false
-    const draft = readPaymentDraft(businessId)
-    Promise.all([listPlans(), listPaymentMethods()])
-      .then(([availablePlans, availableMethods]) => {
-        setPlans(availablePlans)
-        setMethods(availableMethods)
-        void listPaymentsForBusiness(businessId).then(setHistory).catch(() => {})
-        const restoredPlan = draft?.planId ? availablePlans.find(plan => plan.id === draft.planId) ?? null : null
-        const restoredMethod = draft?.paymentMethodId ? availableMethods.find(method => method.id === draft.paymentMethodId) ?? null : null
-        setSelectedPlan(restoredPlan)
-        setSelectedMethod(restoredMethod ?? availableMethods[0] ?? null)
-        setNote(draft?.note ?? '')
-        if (restoredPlan && draft?.proofPath) {
-          setProofPath(draft.proofPath)
-          setProofFileName(draft.proofFileName ?? 'Uploaded receipt')
-        } else {
-          setProofPath(null)
-          setProofFileName('')
-        }
-        draftHydrated.current = true
-      })
-      .catch(err => {
-        draftHydrated.current = true
-        setError(friendlyError(err))
-      })
+    void loadBillingOptions(businessId, true, true)
+    void listPaymentsForBusiness(businessId).then(setHistory).catch(() => {})
     getOrCreateBusinessTelegramLink(businessId).then(setTelegramLink).catch(() => {})
   }, [business?.id])
 
@@ -110,6 +159,7 @@ export default function Billing() {
   useEffect(() => {
     if (!business?.id || !draftHydrated.current) return
     if (!selectedPlan && !proofPath && !note) {
+      if (plansError) return
       clearPaymentDraft(business.id)
       return
     }
@@ -120,7 +170,7 @@ export default function Billing() {
       proofFileName: (proofFile?.name ?? proofFileName) || null,
       note,
     })
-  }, [business?.id, note, proofFile?.name, proofFileName, proofPath, selectedMethod?.id, selectedPlan?.id])
+  }, [business?.id, note, plansError, proofFile?.name, proofFileName, proofPath, selectedMethod?.id, selectedPlan, selectedPlan?.id])
 
   useEffect(() => {
     const preventLossWhileWorking = (event: BeforeUnloadEvent) => {
@@ -163,11 +213,13 @@ export default function Billing() {
     setRefreshing(true)
     setError('')
     try {
+      const options = loadBillingOptions(business.id, true)
       const [payments] = await Promise.all([
         listPaymentsForBusiness(business.id),
         refreshBusiness(),
       ])
       setHistory(payments)
+      await options
     } catch (err) {
       setError(friendlyError(err))
     } finally {
@@ -295,7 +347,17 @@ export default function Billing() {
 
   return (
     <DashboardLayout>
-      <style>{'@keyframes abrobiz-spin { to { transform: rotate(360deg); } }'}</style>
+      <style>{'@keyframes abrobiz-spin { to { transform: rotate(360deg); } } @keyframes billing-skeleton { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }'}</style>
+      {showOptionsOverlay && (plansLoading || methodsLoading) && (
+        <div role="dialog" aria-modal="true" aria-labelledby="billing-loading-title" style={billingOverlay}>
+          <div style={billingOverlayCard}>
+            <div style={billingSpinner} aria-hidden="true" />
+            <div id="billing-loading-title" style={{ fontSize: 16, fontWeight: 700, color: '#0A0C10', marginBottom: 6 }}>Preparing billing</div>
+            <div style={{ fontSize: 13, lineHeight: 1.5, color: 'rgba(10,12,16,0.58)', marginBottom: 16 }}>Loading plans and payment methods securely.</div>
+            <button type="button" onClick={() => setShowOptionsOverlay(false)} style={overlayCancelBtn}>Cancel</button>
+          </div>
+        </div>
+      )}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap', marginBottom: 22 }}>
         <div>
           <h1 style={{ fontFamily: 'Outfit, sans-serif', fontSize: 24, fontWeight: 600, color: '#0A0C10', margin: '0 0 4px' }}>Billing</h1>
@@ -343,25 +405,47 @@ export default function Billing() {
 
       {!selectedPlan ? (
         <>
-          <div style={{ fontSize: 15, fontWeight: 600, color: '#0A0C10', marginBottom: 12 }}>Choose a plan</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14, marginBottom: 30 }}>
-            {plans.map(plan => (
-              <div key={plan.id} style={{ background: '#fff', borderRadius: 16, border: '1px solid rgba(10,12,16,0.06)', padding: 20 }}>
-                <div style={{ fontSize: 15, fontWeight: 600, color: '#0A0C10' }}>{plan.name}</div>
-                <div style={{ fontSize: 26, fontWeight: 700, color: '#0A0C10', marginTop: 6, fontFamily: 'Outfit, sans-serif' }}>
-                  {plan.priceEtb} <span style={{ fontSize: 13, fontWeight: 400, color: 'rgba(10,12,16,0.45)' }}>ETB/{plan.billingInterval}</span>
-                </div>
-                <ul style={{ listStyle: 'none', padding: 0, margin: '14px 0', display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {plan.features.map(f => (
-                    <li key={f} style={{ display: 'flex', gap: 8, fontSize: 13, color: 'rgba(10,12,16,0.65)' }}>
-                      <Check size={14} color="#D4A853" style={{ flexShrink: 0, marginTop: 2 }} /> {f}
-                    </li>
-                  ))}
-                </ul>
-                <button onClick={() => { clearPaymentDraft(business.id); setSelectedPlan(plan); setSelectedMethod(methods[0] ?? null); setProofPath(null); setProofFile(null); setProofFileName(''); setNote(''); setSubmitted(false); setSubmittedPaymentId(null); setError('') }} style={selectBtn}>Select</button>
-              </div>
-            ))}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
+            <div style={{ fontSize: 15, fontWeight: 600, color: '#0A0C10' }}>Choose a plan</div>
+            {(plansLoading || methodsLoading) && <div style={{ fontSize: 12, color: 'rgba(10,12,16,0.45)' }}>Updating available options…</div>}
           </div>
+          {error && <div role="alert" style={inlineError}>{error}</div>}
+          {plansLoading ? (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14, marginBottom: 30 }}>
+              {[1, 2, 3].map(item => <div key={item} style={planSkeleton} aria-hidden="true" />)}
+            </div>
+          ) : plansError ? (
+            <div role="alert" style={optionStateCard}>
+              <div style={{ fontWeight: 600, color: '#991B1B', marginBottom: 5 }}>Plans could not be loaded</div>
+              <div style={{ color: 'rgba(10,12,16,0.6)', marginBottom: 13 }}>{plansError}</div>
+              <button type="button" onClick={() => void loadBillingOptions(business.id, true)} style={retryBtn}><RefreshCw size={14} /> Try again</button>
+            </div>
+          ) : plans.length === 0 ? (
+            <div style={optionStateCard}>
+              <div style={{ fontWeight: 600, color: '#0A0C10', marginBottom: 5 }}>No plans are currently available</div>
+              <div style={{ color: 'rgba(10,12,16,0.6)', marginBottom: 13 }}>Please refresh in a moment or contact AbroBiz support if this continues.</div>
+              <button type="button" onClick={() => void loadBillingOptions(business.id, true)} style={retryBtn}><RefreshCw size={14} /> Refresh plans</button>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14, marginBottom: 30 }}>
+              {plans.map(plan => (
+                <div key={plan.id} style={{ background: '#fff', borderRadius: 16, border: '1px solid rgba(10,12,16,0.06)', padding: 20 }}>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: '#0A0C10' }}>{plan.name}</div>
+                  <div style={{ fontSize: 26, fontWeight: 700, color: '#0A0C10', marginTop: 6, fontFamily: 'Outfit, sans-serif' }}>
+                    {plan.priceEtb} <span style={{ fontSize: 13, fontWeight: 400, color: 'rgba(10,12,16,0.45)' }}>ETB/{plan.billingInterval}</span>
+                  </div>
+                  <ul style={{ listStyle: 'none', padding: 0, margin: '14px 0', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {plan.features.map(f => (
+                      <li key={f} style={{ display: 'flex', gap: 8, fontSize: 13, color: 'rgba(10,12,16,0.65)' }}>
+                        <Check size={14} color="#D4A853" style={{ flexShrink: 0, marginTop: 2 }} /> {f}
+                      </li>
+                    ))}
+                  </ul>
+                  <button onClick={() => { clearPaymentDraft(business.id); setSelectedPlan(plan); setSelectedMethod(methods[0] ?? null); setProofPath(null); setProofFile(null); setProofFileName(''); setNote(''); setSubmitted(false); setSubmittedPaymentId(null); setError('') }} style={selectBtn}>Select</button>
+                </div>
+              ))}
+            </div>
+          )}
         </>
       ) : (
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} style={{ background: '#fff', borderRadius: 16, border: '1.5px solid #D4A853', padding: 22, marginBottom: 30 }}>
@@ -375,7 +459,14 @@ export default function Billing() {
             <span style={{ fontSize: 13, fontWeight: 650, color: '#0A0C10' }}>Send payment to</span>
             <span style={{ fontSize: 11.5, color: 'rgba(10,12,16,0.4)' }}>Choose a method below</span>
           </div>
-          {methods.length > 0 ? (
+          {methodsLoading ? (
+            <div style={{ color: 'rgba(10,12,16,0.5)', fontSize: 13, marginBottom: 16 }}>Loading payment methods…</div>
+          ) : methodsError ? (
+            <div role="alert" style={{ ...optionStateCard, marginBottom: 16 }}>
+              <div style={{ color: '#991B1B', marginBottom: 10 }}>{methodsError}</div>
+              <button type="button" onClick={() => void loadBillingOptions(business.id, true)} style={retryBtn}><RefreshCw size={14} /> Try again</button>
+            </div>
+          ) : methods.length > 0 ? (
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
               {methods.map(m => (
                 <button type="button" key={m.id} onClick={() => { setSelectedMethod(m); setError('') }} style={{ ...methodChip, background: selectedMethod?.id === m.id ? '#0A0C10' : '#F6F3EE', color: selectedMethod?.id === m.id ? '#fff' : '#0A0C10' }}>
@@ -511,3 +602,11 @@ const refreshBtn: React.CSSProperties = { display: 'inline-flex', alignItems: 'c
 const stepNumber: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 22, height: 22, borderRadius: '50%', background: '#0A0C10', color: '#D4A853', fontSize: 11, fontWeight: 700 }
 const secureBadge: React.CSSProperties = { borderRadius: 999, padding: '5px 9px', background: 'rgba(22,101,52,0.1)', color: '#166534', fontSize: 10.5, fontWeight: 700 }
 const copyBtn: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 5, border: '1px solid rgba(10,12,16,0.12)', borderRadius: 8, padding: '8px 10px', background: '#fff', color: '#0A0C10', fontSize: 12, fontWeight: 650, cursor: 'pointer' }
+const billingOverlay: React.CSSProperties = { position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, background: 'rgba(10,12,16,0.34)', backdropFilter: 'blur(3px)' }
+const billingOverlayCard: React.CSSProperties = { width: 'min(100%, 340px)', background: '#fff', borderRadius: 18, padding: '26px 24px 22px', textAlign: 'center', boxShadow: '0 24px 70px rgba(10,12,16,0.2)' }
+const billingSpinner: React.CSSProperties = { width: 30, height: 30, border: '3px solid rgba(212,168,83,0.25)', borderTopColor: '#D4A853', borderRadius: '50%', animation: 'abrobiz-spin 0.8s linear infinite', margin: '0 auto 14px' }
+const overlayCancelBtn: React.CSSProperties = { border: '1px solid rgba(10,12,16,0.14)', borderRadius: 9, padding: '9px 18px', background: '#fff', color: '#0A0C10', fontSize: 13, fontWeight: 600, cursor: 'pointer' }
+const planSkeleton: React.CSSProperties = { minHeight: 250, borderRadius: 16, background: 'linear-gradient(100deg, rgba(10,12,16,0.06) 30%, rgba(255,255,255,0.8) 50%, rgba(10,12,16,0.06) 70%)', backgroundSize: '200% 100%', animation: 'billing-skeleton 1.2s ease-in-out infinite' }
+const optionStateCard: React.CSSProperties = { background: '#fff', border: '1px solid rgba(10,12,16,0.08)', borderRadius: 14, padding: '18px 20px', marginBottom: 30, fontSize: 13.5 }
+const inlineError: React.CSSProperties = { background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', color: '#991B1B', borderRadius: 10, padding: '10px 12px', marginBottom: 14, fontSize: 13 }
+const retryBtn: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 6, border: '1px solid rgba(10,12,16,0.14)', borderRadius: 8, padding: '8px 11px', background: '#fff', color: '#0A0C10', fontSize: 12.5, fontWeight: 650, cursor: 'pointer' }
