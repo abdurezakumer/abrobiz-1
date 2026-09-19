@@ -47,6 +47,7 @@ async function uploadPaymentBytes(
   bytes: ArrayBuffer,
   contentType: string,
   onProgress?: (progress: number) => void,
+  signal?: AbortSignal,
   uploadId = crypto.randomUUID(),
 ): Promise<string> {
   const projectUrl = (import.meta.env.VITE_SUPABASE_URL ?? '').replace(/\/$/, '')
@@ -63,6 +64,7 @@ async function uploadPaymentBytes(
   // never creates a second unrelated receipt.
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
+      if (signal?.aborted) throw new Error('Upload canceled.')
       // functions.invoke uses fetch, which cannot expose upload progress. XHR
       // keeps the same authenticated Edge Function contract while reporting
       // the real phone-to-storage transfer percentage.
@@ -70,6 +72,7 @@ async function uploadPaymentBytes(
         const { data, error } = await supabase.functions.invoke('storage-upload', {
           body: bytes,
           headers: { 'X-Upload-Bucket': 'payment-proofs', 'X-Business-Id': businessId, 'X-Upload-Id': uploadId, 'Content-Type': contentType },
+          signal,
         })
         if (error) throw await edgeFunctionError(error)
         onProgress?.(100)
@@ -88,10 +91,18 @@ async function uploadPaymentBytes(
         request.setRequestHeader('X-Business-Id', businessId)
         request.setRequestHeader('X-Upload-Id', uploadId)
         request.setRequestHeader('Content-Type', contentType)
+        const abortRequest = () => request.abort()
+        const cleanupAbort = () => signal?.removeEventListener('abort', abortRequest)
+        if (signal?.aborted) {
+          reject(new Error('Upload canceled.'))
+          return
+        }
+        signal?.addEventListener('abort', abortRequest, { once: true })
         request.upload.onprogress = event => {
           if (event.lengthComputable) onProgress?.(Math.round((event.loaded / event.total) * 100))
         }
         request.onload = () => {
+          cleanupAbort()
           const body = request.response ?? (() => {
             try { return JSON.parse(request.responseText || '{}') } catch { return {} }
           })()
@@ -108,15 +119,16 @@ async function uploadPaymentBytes(
           onProgress?.(100)
           resolve(body.path)
         }
-        request.onerror = () => reject(new Error('Upload network connection was interrupted.'))
-        request.ontimeout = () => reject(new Error('Upload timed out while waiting for the server.'))
-        request.onabort = () => reject(new Error('Upload was interrupted before it finished.'))
+        request.onerror = () => { cleanupAbort(); reject(new Error('Upload network connection was interrupted.')) }
+        request.ontimeout = () => { cleanupAbort(); reject(new Error('Upload timed out while waiting for the server.')) }
+        request.onabort = () => { cleanupAbort(); reject(new Error(signal?.aborted ? 'Upload canceled.' : 'Upload was interrupted before it finished.')) }
         request.send(bytes)
       })
     } catch (error) {
       lastError = error
       const status = (error as { status?: number } | null)?.status
       const message = error instanceof Error ? error.message : ''
+      if (signal?.aborted || /upload canceled/i.test(message)) throw error
       const retryable = !status || status === 401 || status === 408 || status === 429 || status >= 500 || /network|timed out|temporarily unavailable|could not save|failed to fetch|gateway/i.test(message)
       if (!retryable || attempt === 2) throw error
       const refreshed = await supabase.auth.refreshSession()
@@ -128,7 +140,7 @@ async function uploadPaymentBytes(
   throw lastError instanceof Error ? lastError : new Error('The receipt upload could not be completed.')
 }
 
-export async function uploadPaymentProof(businessId: string, file: File, onProgress?: (progress: number) => void): Promise<string> {
+export async function uploadPaymentProof(businessId: string, file: File, onProgress?: (progress: number) => void, signal?: AbortSignal): Promise<string> {
   const uploadFile = isPdfFile(file)
     ? (file.type === 'application/pdf' ? file : new File([file], file.name, { type: 'application/pdf' }))
     // Keep payment photos within the same mobile-friendly size used by the
@@ -138,7 +150,7 @@ export async function uploadPaymentProof(businessId: string, file: File, onProgr
     throw new Error('Use a JPEG, PNG, WebP, or PDF file up to 10 MB.')
   }
   const uploadBytes = await uploadFile.arrayBuffer()
-  return uploadPaymentBytes(businessId, uploadBytes, uploadFile.type, onProgress) // private bucket: resolve signed URLs on read
+  return uploadPaymentBytes(businessId, uploadBytes, uploadFile.type, onProgress, signal) // private bucket: resolve signed URLs on read
 }
 
 export async function getPaymentProofUrl(path: string): Promise<string> {

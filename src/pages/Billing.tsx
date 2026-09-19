@@ -76,6 +76,7 @@ export default function Billing() {
   const [error, setError] = useState('')
   const [telegramLink, setTelegramLink] = useState<TelegramLinkStatus | null>(null)
   const paymentIdempotencyKey = useRef<string | null>(null)
+  const proofUploadController = useRef<AbortController | null>(null)
   const draftHydrated = useRef(false)
   const optionsRequestId = useRef(0)
 
@@ -253,6 +254,8 @@ export default function Billing() {
     if (!file) return
     const previousProofPath = proofPath
     const previousProofFileName = proofFile?.name ?? proofFileName
+    const uploadController = new AbortController()
+    proofUploadController.current = uploadController
     setError('')
     setUploadProgress(0)
     paymentIdempotencyKey.current = null
@@ -267,14 +270,16 @@ export default function Billing() {
       // receipt is kept in secure storage; no device cache is used.
       const proofPath = await uploadPaymentProof(business.id, file, progress => {
         setUploadProgress(Math.min(99, 8 + Math.round(progress * 0.92)))
-      })
+      }, uploadController.signal)
       setProofPath(proofPath)
       setUploadProgress(100)
       setProofFile(file)
       setProofFileName(file.name)
     } catch (err) {
       setUploadProgress(null)
-      if (previousProofPath) {
+      if (uploadController.signal.aborted) {
+        setError(previousProofPath ? 'Upload canceled. Your previous receipt is still ready to submit.' : '')
+      } else if (previousProofPath) {
         // A replacement upload must never destroy a receipt that is already
         // ready to submit. Keep the previous path usable and let the owner
         // retry the replacement without starting the payment flow over.
@@ -285,8 +290,13 @@ export default function Billing() {
         setError(friendlyError(err))
       }
     } finally {
+      if (proofUploadController.current === uploadController) proofUploadController.current = null
       setSavingProof(false)
     }
+  }
+
+  function cancelProofUpload() {
+    proofUploadController.current?.abort()
   }
 
   async function handleSubmit() {
@@ -544,6 +554,11 @@ export default function Billing() {
             />
             <span style={{ fontSize: 11.5, color: '#D4A853', marginTop: 4, display: 'block' }}>{savingProof ? 'Uploading…' : proofReady ? 'Click to change' : 'Choose a file'}</span>
           </label>
+          {savingProof && (
+            <button type="button" onClick={cancelProofUpload} style={uploadCancelBtn}>
+              Cancel upload
+            </button>
+          )}
 
           <textarea value={note} onChange={e => setNote(e.target.value)} placeholder="Note for admin (optional)" rows={2} style={{ width: '100%', border: '1px solid rgba(10,12,16,0.1)', borderRadius: 9, padding: '9px 11px', fontSize: 13.5, outline: 'none', fontFamily: 'inherit', resize: 'vertical', marginBottom: 16 }} />
 
@@ -615,3 +630,4 @@ const planSkeleton: React.CSSProperties = { minHeight: 250, borderRadius: 16, ba
 const optionStateCard: React.CSSProperties = { background: '#fff', border: '1px solid rgba(10,12,16,0.08)', borderRadius: 14, padding: '18px 20px', marginBottom: 30, fontSize: 13.5 }
 const inlineError: React.CSSProperties = { background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', color: '#991B1B', borderRadius: 10, padding: '10px 12px', marginBottom: 14, fontSize: 13 }
 const retryBtn: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 6, border: '1px solid rgba(10,12,16,0.14)', borderRadius: 8, padding: '8px 11px', background: '#fff', color: '#0A0C10', fontSize: 12.5, fontWeight: 650, cursor: 'pointer' }
+const uploadCancelBtn: React.CSSProperties = { display: 'block', width: '100%', border: '1px solid rgba(220,38,38,0.22)', borderRadius: 9, padding: '9px 12px', background: 'rgba(220,38,38,0.06)', color: '#991B1B', fontSize: 12.5, fontWeight: 650, cursor: 'pointer', margin: '-4px 0 14px' }
