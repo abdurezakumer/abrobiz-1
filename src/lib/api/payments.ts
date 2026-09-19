@@ -47,6 +47,7 @@ async function uploadPaymentBytes(
   bytes: ArrayBuffer,
   contentType: string,
   onProgress?: (progress: number) => void,
+  uploadId = crypto.randomUUID(),
 ): Promise<string> {
   const projectUrl = (import.meta.env.VITE_SUPABASE_URL ?? '').replace(/\/$/, '')
   const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY ?? ''
@@ -54,53 +55,77 @@ async function uploadPaymentBytes(
   if (sessionError) throw sessionError
   if (!sessionData.session) throw new Error('Not authenticated.')
 
-  // functions.invoke uses fetch, which cannot expose upload progress. XHR
-  // keeps the same authenticated Edge Function contract while reporting the
-  // real phone-to-storage transfer percentage.
-  if (typeof XMLHttpRequest === 'undefined' || !projectUrl || !anonKey) {
-    const { data, error } = await supabase.functions.invoke('storage-upload', {
-      body: bytes,
-      headers: { 'X-Upload-Bucket': 'payment-proofs', 'X-Business-Id': businessId, 'Content-Type': contentType },
-    })
-    if (error) throw await edgeFunctionError(error)
-    onProgress?.(100)
-    if (!data?.path) throw new Error('Upload did not return a file path.')
-    return data.path
-  }
+  let accessToken = sessionData.session.access_token
+  let lastError: unknown
 
-  return new Promise((resolve, reject) => {
-    const request = new XMLHttpRequest()
-    request.open('POST', `${projectUrl}/functions/v1/storage-upload`)
-    request.responseType = 'json'
-    request.timeout = 120000
-    request.setRequestHeader('Authorization', `Bearer ${sessionData.session.access_token}`)
-    request.setRequestHeader('apikey', anonKey)
-    request.setRequestHeader('X-Upload-Bucket', 'payment-proofs')
-    request.setRequestHeader('X-Business-Id', businessId)
-    request.setRequestHeader('Content-Type', contentType)
-    request.upload.onprogress = event => {
-      if (event.lengthComputable) onProgress?.(Math.round((event.loaded / event.total) * 100))
-    }
-    request.onload = () => {
-      const body = request.response ?? (() => {
-        try { return JSON.parse(request.responseText || '{}') } catch { return {} }
-      })()
-      if (request.status < 200 || request.status >= 300) {
-        reject(new Error(body?.error || 'Could not save the file.'))
-        return
+  // A mobile connection can drop after the server receives the bytes. The
+  // same uploadId makes retries idempotent at the storage path, so retrying
+  // never creates a second unrelated receipt.
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      // functions.invoke uses fetch, which cannot expose upload progress. XHR
+      // keeps the same authenticated Edge Function contract while reporting
+      // the real phone-to-storage transfer percentage.
+      if (typeof XMLHttpRequest === 'undefined' || !projectUrl || !anonKey) {
+        const { data, error } = await supabase.functions.invoke('storage-upload', {
+          body: bytes,
+          headers: { 'X-Upload-Bucket': 'payment-proofs', 'X-Business-Id': businessId, 'X-Upload-Id': uploadId, 'Content-Type': contentType },
+        })
+        if (error) throw await edgeFunctionError(error)
+        onProgress?.(100)
+        if (!data?.path) throw new Error('Upload did not return a file path.')
+        return data.path
       }
-      if (!body?.path) {
-        reject(new Error('Upload did not return a file path.'))
-        return
-      }
-      onProgress?.(100)
-      resolve(body.path)
+
+      return await new Promise<string>((resolve, reject) => {
+        const request = new XMLHttpRequest()
+        request.open('POST', `${projectUrl}/functions/v1/storage-upload`)
+        request.responseType = 'json'
+        request.timeout = 120000
+        request.setRequestHeader('Authorization', `Bearer ${accessToken}`)
+        request.setRequestHeader('apikey', anonKey)
+        request.setRequestHeader('X-Upload-Bucket', 'payment-proofs')
+        request.setRequestHeader('X-Business-Id', businessId)
+        request.setRequestHeader('X-Upload-Id', uploadId)
+        request.setRequestHeader('Content-Type', contentType)
+        request.upload.onprogress = event => {
+          if (event.lengthComputable) onProgress?.(Math.round((event.loaded / event.total) * 100))
+        }
+        request.onload = () => {
+          const body = request.response ?? (() => {
+            try { return JSON.parse(request.responseText || '{}') } catch { return {} }
+          })()
+          if (request.status < 200 || request.status >= 300) {
+            const error = new Error(body?.error || `Upload failed with status ${request.status}.`)
+            ;(error as Error & { status?: number }).status = request.status
+            reject(error)
+            return
+          }
+          if (!body?.path) {
+            reject(new Error('Upload did not return a file path.'))
+            return
+          }
+          onProgress?.(100)
+          resolve(body.path)
+        }
+        request.onerror = () => reject(new Error('Upload network connection was interrupted.'))
+        request.ontimeout = () => reject(new Error('Upload timed out while waiting for the server.'))
+        request.onabort = () => reject(new Error('Upload was interrupted before it finished.'))
+        request.send(bytes)
+      })
+    } catch (error) {
+      lastError = error
+      const status = (error as { status?: number } | null)?.status
+      const message = error instanceof Error ? error.message : ''
+      const retryable = !status || status === 401 || status === 408 || status === 429 || status >= 500 || /network|timed out|temporarily unavailable|could not save|failed to fetch|gateway/i.test(message)
+      if (!retryable || attempt === 2) throw error
+      const refreshed = await supabase.auth.refreshSession()
+      if (!refreshed.error && refreshed.data.session) accessToken = refreshed.data.session.access_token
+      onProgress?.(0)
+      await new Promise(resolve => window.setTimeout(resolve, 700 * (attempt + 1)))
     }
-    request.onerror = () => reject(new Error('Could not save the file.'))
-    request.ontimeout = () => reject(new Error('Could not save the file.'))
-    request.onabort = () => reject(new Error('Could not save the file.'))
-    request.send(bytes)
-  })
+  }
+  throw lastError instanceof Error ? lastError : new Error('The receipt upload could not be completed.')
 }
 
 export async function uploadPaymentProof(businessId: string, file: File, onProgress?: (progress: number) => void): Promise<string> {

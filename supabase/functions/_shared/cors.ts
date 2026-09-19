@@ -65,7 +65,7 @@ export function corsHeaders(req?: Request): Record<string, string> {
       : undefined
   return {
     ...(responseOrigin ? { 'Access-Control-Allow-Origin': responseOrigin } : {}),
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, idempotency-key, x-business-id, x-upload-bucket',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, idempotency-key, x-business-id, x-upload-bucket, x-upload-id',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Cache-Control': 'no-store',
     'X-Content-Type-Options': 'nosniff',

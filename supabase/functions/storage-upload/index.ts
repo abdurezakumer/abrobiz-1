@@ -59,9 +59,20 @@ if (import.meta.main) {
         return json({ error: 'Unsupported or malformed file.' }, 415, req)
       }
 
-      const path = safeStoragePath(businessId, extension)
+      const uploadId = req.headers.get('X-Upload-Id') ?? ''
+      const stableUploadId = validUuid(uploadId) ? uploadId : null
+      const path = stableUploadId ? `${businessId}/${stableUploadId}.${extension}` : safeStoragePath(businessId, extension)
       const { error: uploadError } = await db.storage.from(config.bucket).upload(path, body.bytes, { contentType, upsert: false })
       if (uploadError) {
+        // If the client lost the response after Storage committed the object,
+        // a retry with the same upload ID is already complete. Never overwrite
+        // an existing payment proof just to make a retry succeed.
+        if (stableUploadId) {
+          const { data: existing } = await db.storage.from(config.bucket).list(businessId, { search: `${stableUploadId}.` })
+          if (existing?.some(file => file.name === `${stableUploadId}.${extension}`)) {
+            return json({ path, bucket: config.bucket }, 200, req)
+          }
+        }
         logFailure(req, { function_name: 'storage-upload', operation: 'upload_file', error_category: 'DEPENDENCY_ERROR', error_code: uploadError.name ?? 'unknown', provider: 'storage', status: 502 })
         return json({ error: 'Could not save the file.' }, 500, req)
       }
