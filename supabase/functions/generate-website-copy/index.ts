@@ -7,8 +7,11 @@ import { logFailure } from '../_shared/observability.ts'
 import { COPY_LANGUAGES, COPY_SECTIONS, COPY_TONES, sha256, validateGeneratedCopy, type CopyLanguage, type CopySection, type CopyTone, type GeneratedCopy } from '../_shared/aiCopy.ts'
 
 const MAX_BODY_BYTES = 16 * 1024
-const GENERATION_VERSION = '1.0.1'
-const FALLBACK_MODELS = ['gemini-3.6-flash', 'gemini-3.5-flash']
+const GENERATION_VERSION = '1.0.2'
+// Keep the configured model first, then fall back to the lower-cost Lite
+// model when the primary model is quota-limited or temporarily unavailable.
+// These are model IDs supported by the Gemini Generate Content API.
+const FALLBACK_MODELS = ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-3.5-flash', 'gemini-3.6-flash']
 
 function json(body: unknown, status = 200, req?: Request): Response {
   return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders(req), 'Content-Type': 'application/json' } })
@@ -39,6 +42,17 @@ function extractModelText(payload: any): string | null {
 function parseModelJson(text: string): unknown {
   const withoutFence = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim()
   return JSON.parse(withoutFence)
+}
+
+async function shouldTryAlternateModel(response: Response): Promise<boolean> {
+  if ([400, 404, 429, 500, 502, 503, 504].includes(response.status)) return true
+  if (response.status !== 403) return false
+  try {
+    const body = await response.clone().text()
+    return /quota|resource[_ -]?exhausted|rate[ -]?limit/i.test(body)
+  } catch {
+    return false
+  }
 }
 
 function mergeCopy(base: unknown, generated: GeneratedCopy, section: CopySection, sourceIds: Set<string>): GeneratedCopy {
@@ -131,9 +145,15 @@ async function generate(client: ReturnType<typeof createClient>, userId: string,
         body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { temperature: 0.35, responseMimeType: 'application/json', responseSchema: schemaFor(input.section) } }),
       }, 20_000)
       selectedModel = candidate
-      if (response.ok || ![400, 404].includes(response.status)) break
+      // A 429 means the current model's quota is exhausted; 400/404 can mean
+      // the configured model is unavailable; 5xx responses are transient.
+      // Try the next model for all of those cases before showing an error.
+      if (response.ok || !(await shouldTryAlternateModel(response))) break
     } catch {
-      return json({ error: 'The AI writing service is temporarily unavailable. Please try again later.' }, 503, req)
+      // A provider timeout/network failure should not crash the request. Try
+      // the Lite fallback while the request budget still allows it.
+      response = null
+      selectedModel = candidate
     }
   }
   if (!response) return json({ error: 'The AI writing service is temporarily unavailable. Please try again later.' }, 503, req)

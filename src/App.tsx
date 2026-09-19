@@ -3,6 +3,7 @@ import { Routes, Route } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import { AuthProvider } from './lib/authContext'
 import { RequireAuth, RequireSetup, RequireGuest, RequireOwner, RequireAdmin, RequireAdminPermission, RequireSuperAdmin } from './components/Guards'
+import PageLoadingSkeleton from './components/PageLoadingSkeleton'
 
 import Landing from './pages/Landing'
 import Terms from './pages/Terms'
@@ -47,10 +48,16 @@ function HostStorefront({ page }: { page: ReactNode }) {
   return isBusinessSubdomain() ? page : <Landing />
 }
 
+function RouteFallbackSkeleton() {
+  return <PageLoadingSkeleton label="Loading AbroBiz" />
+}
+
 function HostPublicPage({ page }: { page: ReactNode }) {
   return isBusinessSubdomain() ? <StorefrontHome /> : page
 }
 
+// Kept for compatibility with older route-level imports; the active fallback uses the skeleton below.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function RouteFallback() {
   return <div role="status" aria-live="polite" style={{ minHeight: '100vh', background: '#0A0C10', color: '#F0EDE7', display: 'grid', placeItems: 'center', fontFamily: 'Inter, sans-serif' }}>Loading AbroBiz…</div>
 }
@@ -59,7 +66,7 @@ export default function App() {
   return (
     <AuthProvider>
       <Toaster position="top-center" richColors />
-      <Suspense fallback={<RouteFallback />}>
+      <Suspense fallback={<RouteFallbackSkeleton />}>
       <Routes>
         <Route path="/" element={<HostStorefront page={<StorefrontHome />} />} />
         <Route path="/menu" element={<HostStorefront page={<StorefrontHome />} />} />

@@ -5,6 +5,7 @@ import { safeInternalPath } from '../lib/safeUrl'
 import { daysRemaining } from '../lib/api/subscriptions'
 import SubscriptionExpiredGate from './SubscriptionExpiredGate'
 import { hasAdminPermission, type AdminPermission } from '../lib/api/adminControl'
+import PageLoadingSkeleton from './PageLoadingSkeleton'
 
 const MARKETING_POLICY_VERSION = '2026-09'
 
@@ -13,21 +14,7 @@ function needsMarketingPolicy(profile: ReturnType<typeof useAuth>['profile']) {
 }
 
 function FullScreenSpinner() {
-  return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0A0C10' }}>
-      <div
-        style={{
-          width: 32,
-          height: 32,
-          borderRadius: '50%',
-          border: '3px solid rgba(212,168,83,0.2)',
-          borderTopColor: '#D4A853',
-          animation: 'spin 0.8s linear infinite',
-        }}
-      />
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-    </div>
-  )
+  return <PageLoadingSkeleton label="Checking your secure AbroBiz session" />
 }
 
 export function RequireAuth({ children }: { children: ReactNode }) {

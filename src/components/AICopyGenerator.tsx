@@ -51,7 +51,8 @@ export default function AICopyGenerator({ businessId, languages, enabled = true,
 
   const content = generation?.content
   return (
-    <div style={{ border: '1px solid rgba(138,100,23,.2)', borderRadius: 14, padding: 16, background: 'linear-gradient(135deg, #fffdf8, #fff)' }}>
+    <div aria-busy={busy} style={{ border: '1px solid rgba(138,100,23,.2)', borderRadius: 14, padding: 16, background: 'linear-gradient(135deg, #fffdf8, #fff)' }}>
+      <style>{'@keyframes abrobiz-ai-skeleton { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }'}</style>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#8A6417', fontWeight: 700, fontSize: 14 }}><Sparkles size={16} /> Professional copy assistant</div>
@@ -73,6 +74,7 @@ export default function AICopyGenerator({ businessId, languages, enabled = true,
       {message && <div style={{ color: '#166534', fontSize: 12.5, marginTop: 10 }}>{message}</div>}
       {error && <div style={{ color: '#B91C1C', background: '#FEF2F2', borderRadius: 9, padding: '9px 10px', fontSize: 12.5, marginTop: 10 }}>{error}</div>}
 
+      {busy && <CopyLoadingSkeleton />}
       {content && <div style={{ marginTop: 16, borderTop: '1px solid rgba(10,12,16,.09)', paddingTop: 15 }}>
         <div style={{ fontSize: 12, color: 'rgba(10,12,16,.48)', marginBottom: 10 }}>Preview — nothing becomes public until you apply this draft.</div>
         {content.hero && <PreviewBlock title="Homepage hero"><strong style={{ fontSize: 19 }}>{content.hero.headline}</strong><p style={previewText}>{content.hero.subheadline}</p><small>{content.hero.primaryCta || 'Primary action'}{content.hero.secondaryCta ? ` · ${content.hero.secondaryCta}` : ''}</small></PreviewBlock>}
@@ -81,6 +83,21 @@ export default function AICopyGenerator({ businessId, languages, enabled = true,
         {content.seo && <PreviewBlock title="SEO"><strong style={{ fontSize: 13 }}>{content.seo.title}</strong><p style={previewText}>{content.seo.description}</p></PreviewBlock>}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'rgba(10,12,16,.45)', fontSize: 11.5, marginTop: 10 }}><Copy size={12} /> Source facts remain controlled by your business settings.</div>
       </div>}
+    </div>
+  )
+}
+
+function CopyLoadingSkeleton() {
+  return (
+    <div role="status" aria-label="Preparing your AI copy preview" style={{ marginTop: 16, borderTop: '1px solid rgba(10,12,16,.09)', paddingTop: 15 }}>
+      <div style={{ width: 118, height: 10, borderRadius: 999, ...skeletonBlock, marginBottom: 12 }} />
+      <div style={{ width: '72%', height: 21, borderRadius: 6, ...skeletonBlock, marginBottom: 9 }} />
+      <div style={{ width: '94%', height: 11, borderRadius: 999, ...skeletonBlock, marginBottom: 7 }} />
+      <div style={{ width: '82%', height: 11, borderRadius: 999, ...skeletonBlock, marginBottom: 18 }} />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 8 }}>
+        {[1, 2, 3].map(item => <div key={item} style={{ height: 48, borderRadius: 9, ...skeletonBlock }} />)}
+      </div>
+      <span style={{ display: 'block', color: 'rgba(10,12,16,.45)', fontSize: 11.5, marginTop: 10 }}>Preparing a safe draft preview…</span>
     </div>
   )
 }
@@ -94,3 +111,4 @@ const inputStyle: React.CSSProperties = { width: '100%', border: '1px solid rgba
 const primaryButton: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 7, border: 'none', borderRadius: 9, background: '#0A0C10', color: '#fff', padding: '10px 13px', fontSize: 12.5, fontWeight: 650, cursor: 'pointer' }
 const secondaryButton: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 6, border: '1px solid rgba(138,100,23,.35)', borderRadius: 9, background: '#fff', color: '#8A6417', padding: '9px 12px', fontSize: 12.5, fontWeight: 650, cursor: 'pointer' }
 const previewText: React.CSSProperties = { color: 'rgba(10,12,16,.62)', fontSize: 13, lineHeight: 1.6, margin: '5px 0' }
+const skeletonBlock: React.CSSProperties = { background: 'linear-gradient(100deg, rgba(10,12,16,.07) 30%, rgba(255,255,255,.88) 50%, rgba(10,12,16,.07) 70%)', backgroundSize: '220% 100%', animation: 'abrobiz-ai-skeleton 1.25s ease-in-out infinite' }

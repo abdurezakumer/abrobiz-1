@@ -77,6 +77,7 @@ export default function Billing() {
   const [telegramLink, setTelegramLink] = useState<TelegramLinkStatus | null>(null)
   const paymentIdempotencyKey = useRef<string | null>(null)
   const proofUploadController = useRef<AbortController | null>(null)
+  const proofInputRef = useRef<HTMLInputElement | null>(null)
   const draftHydrated = useRef(false)
   const optionsRequestId = useRef(0)
 
@@ -262,8 +263,8 @@ export default function Billing() {
     setSavingProof(true)
     try {
       const detectedType = detectedUploadType(file)
-      if (!detectedType || !detectedType.startsWith('image/')) {
-        throw new Error('Use a JPEG, PNG, WebP, or phone photo up to 10 MB.')
+      if (!detectedType || (!detectedType.startsWith('image/') && detectedType !== 'application/pdf')) {
+        throw new Error('Use a JPEG, PNG, WebP phone photo, or PDF file up to 10 MB.')
       }
       if (!business) throw new Error('Your business account is not ready yet.')
       // Upload directly after selection, just like the logo uploader. The
@@ -511,7 +512,7 @@ export default function Billing() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '18px 0 10px' }}>
             <span style={stepNumber}>2</span>
             <span style={{ fontSize: 13, fontWeight: 650, color: '#0A0C10' }}>Upload your receipt</span>
-            <span style={{ fontSize: 11.5, color: 'rgba(10,12,16,0.4)' }}>Photo up to 5 MB</span>
+            <span style={{ fontSize: 11.5, color: 'rgba(10,12,16,0.4)' }}>Photo or PDF up to 10 MB</span>
           </div>
           <label style={{ ...uploadSurface, opacity: savingProof || submitting ? 0.65 : 1, cursor: savingProof || submitting ? 'not-allowed' : 'pointer' }}>
             <div style={{ border: '1.5px dashed rgba(10,12,16,0.2)', borderRadius: 12, padding: '22px', textAlign: 'center', background: '#F6F3EE' }}>
@@ -540,11 +541,12 @@ export default function Billing() {
                     <Upload size={18} color="rgba(10,12,16,0.35)" />
                   </motion.div>
                   <div style={{ fontSize: 13, color: 'rgba(10,12,16,0.45)' }}>Click to browse your receipt photo</div>
-                  <div style={{ fontSize: 11.5, color: 'rgba(10,12,16,0.35)', marginTop: 5 }}>JPG, PNG, or WebP from your phone</div>
+                  <div style={{ fontSize: 11.5, color: 'rgba(10,12,16,0.35)', marginTop: 5 }}>JPG, PNG, WebP, or PDF</div>
                 </>
               )}
             </div>
             <input
+              ref={proofInputRef}
               type="file"
               accept={PAYMENT_UPLOAD_ACCEPT}
               aria-label="Browse payment proof"
@@ -554,6 +556,9 @@ export default function Billing() {
             />
             <span style={{ fontSize: 11.5, color: '#D4A853', marginTop: 4, display: 'block' }}>{savingProof ? 'Uploading…' : proofReady ? 'Click to change' : 'Choose a file'}</span>
           </label>
+          <button type="button" onClick={() => proofInputRef.current?.click()} disabled={savingProof || submitting} style={{ ...browseFileBtn, opacity: savingProof || submitting ? 0.55 : 1 }}>
+            Browse file
+          </button>
           {savingProof && (
             <button type="button" onClick={cancelProofUpload} style={uploadCancelBtn}>
               Cancel upload
@@ -631,3 +636,4 @@ const optionStateCard: React.CSSProperties = { background: '#fff', border: '1px 
 const inlineError: React.CSSProperties = { background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', color: '#991B1B', borderRadius: 10, padding: '10px 12px', marginBottom: 14, fontSize: 13 }
 const retryBtn: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 6, border: '1px solid rgba(10,12,16,0.14)', borderRadius: 8, padding: '8px 11px', background: '#fff', color: '#0A0C10', fontSize: 12.5, fontWeight: 650, cursor: 'pointer' }
 const uploadCancelBtn: React.CSSProperties = { display: 'block', width: '100%', border: '1px solid rgba(220,38,38,0.22)', borderRadius: 9, padding: '9px 12px', background: 'rgba(220,38,38,0.06)', color: '#991B1B', fontSize: 12.5, fontWeight: 650, cursor: 'pointer', margin: '-4px 0 14px' }
+const browseFileBtn: React.CSSProperties = { display: 'block', width: '100%', border: '1px solid rgba(10,12,16,0.14)', borderRadius: 9, padding: '9px 12px', background: '#fff', color: '#0A0C10', fontSize: 12.5, fontWeight: 650, cursor: 'pointer', margin: '-4px 0 14px' }
