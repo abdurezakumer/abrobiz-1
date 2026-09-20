@@ -132,12 +132,14 @@ async function linkedAdminId(chatId: string, ctx: Ctx): Promise<string | null> {
   // has_admin_permission cannot evaluate the linked administrator. Mirror
   // only the payment-review permission matrix here: super admins, operations,
   // and finance admins may review payments; support/content admins may not.
-  return profile && (
+  if (!profile) return null
+  const canReviewPayments = (
     profile.role === 'super_admin' ||
     profile.admin_role === 'super_admin' ||
     profile.admin_role === 'operations' ||
     profile.admin_role === 'finance'
-  )) ? String(profile.id) : null
+  )
+  return canReviewPayments ? String(profile.id) : null
 }
 
 async function handleAdminLegacy(chatId: string, ctx: Ctx): Promise<void> {
