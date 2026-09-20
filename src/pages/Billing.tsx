@@ -53,6 +53,12 @@ function clearPaymentDraft(businessId: string) {
   try { window.sessionStorage.removeItem(paymentDraftKey(businessId)) } catch { /* Ignore unavailable browser storage. */ }
 }
 
+function paymentUploadErrorMessage(error: unknown): string {
+  const message = friendlyError(error)
+  const requestId = (error as { requestId?: unknown } | null)?.requestId
+  return typeof requestId === 'string' && requestId ? `${message} Reference: ${requestId}` : message
+}
+
 export default function Billing() {
   const { business, subscription, refreshBusiness } = useAuth()
   const [plans, setPlans] = useState<Plan[]>([])
@@ -307,10 +313,10 @@ export default function Billing() {
         setProofPath(previousProofPath)
         setProofFileName(previousProofFileName)
         setProofUploadError(true)
-        setError('The new receipt could not be saved. Your previous receipt is still ready to submit. Please try again or submit the new receipt via Telegram.')
+        setError(`The new receipt could not be saved. Your previous receipt is still ready to submit. ${paymentUploadErrorMessage(err)} Please try again or submit the new receipt via Telegram.`)
       } else {
         setProofUploadError(true)
-        setError(`${friendlyError(err)} Please try again or submit the receipt via Telegram.`)
+        setError(`${paymentUploadErrorMessage(err)} Please try again or submit the receipt via Telegram.`)
       }
     } finally {
       if (proofUploadController.current === uploadController) proofUploadController.current = null

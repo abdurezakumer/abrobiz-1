@@ -1,6 +1,7 @@
 import { supabase } from './supabaseClient'
 
 type UploadResponse = Record<string, unknown>
+type UploadFailure = Error & { status?: number; requestId?: string }
 
 interface BinaryUploadOptions {
   functionName: string
@@ -96,12 +97,19 @@ async function sendWithFetch(options: BinaryUploadOptions & { projectUrl: string
     signal: options.signal,
   })
   const body = await parseFetchResponse(response)
+  const requestId = response.headers.get('X-Request-ID')?.trim() || undefined
   if (!response.ok) {
     const error = new Error(body?.error || body?.message || `Upload failed with status ${response.status}.`)
-    ;(error as Error & { status?: number }).status = response.status
+    const failure = error as UploadFailure
+    failure.status = response.status
+    failure.requestId = requestId
     throw error
   }
-  if (!body || typeof body !== 'object') throw new Error('Upload did not return a file reference.')
+  if (!body || typeof body !== 'object') {
+    const error = new Error('Upload did not return a file reference.') as UploadFailure
+    error.requestId = requestId
+    throw error
+  }
   return body
 }
 
@@ -139,14 +147,19 @@ async function sendWithXhr(options: BinaryUploadOptions & { projectUrl: string; 
     request.onload = () => {
       cleanupAbort()
       const body = parseResponse(request)
+      const requestId = request.getResponseHeader('X-Request-ID')?.trim() || undefined
       if (request.status < 200 || request.status >= 300) {
         const error = new Error(body?.error || body?.message || `Upload failed with status ${request.status}.`)
-        ;(error as Error & { status?: number }).status = request.status
+        const failure = error as UploadFailure
+        failure.status = request.status
+        failure.requestId = requestId
         reject(error)
         return
       }
       if (!body || typeof body !== 'object') {
-        reject(new Error('Upload did not return a file reference.'))
+        const error = new Error('Upload did not return a file reference.') as UploadFailure
+        error.requestId = requestId
+        reject(error)
         return
       }
       resolve(body)
