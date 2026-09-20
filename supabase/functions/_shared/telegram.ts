@@ -33,11 +33,31 @@ export class TelegramClient {
     })
   }
 
+  /** Uploads bytes directly to Telegram. Payment proofs use this path so the
+   * receipt never needs to be copied into Supabase Storage. */
+  async sendPhotoBytes(chatId: string | number, bytes: Uint8Array, filename: string, contentType = 'image/jpeg', opts: { caption?: string; replyMarkup?: unknown } = {}) {
+    const form = new FormData()
+    form.set('chat_id', String(chatId))
+    form.set('photo', new Blob([bytes], { type: contentType }), filename)
+    if (opts.caption) form.set('caption', opts.caption)
+    if (opts.replyMarkup) form.set('reply_markup', JSON.stringify(opts.replyMarkup))
+    return this.callFormData('sendPhoto', form)
+  }
+
   async editMessageText(chatId: string | number, messageId: number, text: string, opts: { replyMarkup?: unknown } = {}) {
     return this.call('editMessageText', {
       chat_id: chatId,
       message_id: messageId,
       text,
+      reply_markup: opts.replyMarkup ?? { inline_keyboard: [] },
+    })
+  }
+
+  async editMessageCaption(chatId: string | number, messageId: number, caption: string, opts: { replyMarkup?: unknown } = {}) {
+    return this.call('editMessageCaption', {
+      chat_id: chatId,
+      message_id: messageId,
+      caption,
       reply_markup: opts.replyMarkup ?? { inline_keyboard: [] },
     })
   }
@@ -72,6 +92,18 @@ export class TelegramClient {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
+    })
+    const data = await readJsonResponse(res, 256 * 1024)
+    if (!data.ok) {
+      throw new Error(`Telegram API error (${method}): ${data.description ?? res.statusText}`)
+    }
+    return data
+  }
+
+  private async callFormData(method: string, body: FormData): Promise<{ ok: boolean; result?: unknown; description?: string }> {
+    const res = await fetchWithTimeout(`${TELEGRAM_API}/bot${this.token}/${method}`, {
+      method: 'POST',
+      body,
     })
     const data = await readJsonResponse(res, 256 * 1024)
     if (!data.ok) {

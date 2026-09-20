@@ -6,7 +6,7 @@ import { enforceRateLimits } from '../_shared/rateLimit.ts'
 import { isBearerAuthorization, readBinaryBody, validUuid } from '../_shared/requestSecurity.ts'
 import { logFailure } from '../_shared/observability.ts'
 
-type UploadBucket = 'logos' | 'covers' | 'item-images' | 'payment-proofs'
+type UploadBucket = 'logos' | 'covers' | 'item-images'
 
 function json(body: unknown, status = 200, req?: Request): Response {
   return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders(req), 'Content-Type': 'application/json' } })
@@ -14,7 +14,6 @@ function json(body: unknown, status = 200, req?: Request): Response {
 
 function bucketConfig(value: string | null): { bucket: UploadBucket; maxBytes: number } | null {
   if (value === 'logos' || value === 'covers' || value === 'item-images') return { bucket: value, maxBytes: 5 * 1024 * 1024 }
-  if (value === 'payment-proofs') return { bucket: value, maxBytes: 10 * 1024 * 1024 }
   return null
 }
 
@@ -46,16 +45,15 @@ if (import.meta.main) {
 
       const db = createAdminClient()
       const { data: ownedBusiness } = await db.from('businesses').select('id').eq('id', businessId).eq('owner_id', userData.user.id).maybeSingle()
-      const permission = config.bucket === 'payment-proofs' ? 'payments.review' : 'businesses.manage'
-      const { data: permitted, error: permissionError } = await caller.rpc('has_admin_permission', { p_permission: permission })
+      const { data: permitted, error: permissionError } = await caller.rpc('has_admin_permission', { p_permission: 'businesses.manage' })
       const canManageRequestedBusiness = Boolean(ownedBusiness || (!permissionError && permitted === true))
       const business = canManageRequestedBusiness ? { id: businessId } : null
       if (!business) return json({ error: 'Not found or not authorized.' }, 403, req)
 
       const body = await readBinaryBody(req, config.maxBytes)
       if (body.error || !body.bytes) return json({ error: body.error }, body.status ?? 400, req)
-      const extension = detectAllowedFile(contentType, body.bytes, config.bucket === 'payment-proofs')
-      if (!extension || (config.bucket !== 'payment-proofs' && extension === 'pdf')) {
+      const extension = detectAllowedFile(contentType, body.bytes)
+      if (!extension) {
         return json({ error: 'Unsupported or malformed file.' }, 415, req)
       }
 

@@ -266,6 +266,7 @@ export interface Payment {
   amountEtb: number
   paymentMethodId: string | null
   proofUrl?: string
+  telegramProofId?: string
   ownerNote: string
   status: PaymentStatus
   reviewedBy?: string

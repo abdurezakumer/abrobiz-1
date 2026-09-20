@@ -52,13 +52,17 @@ if (import.meta.main) {
       const paymentMethodId = body.paymentMethodId
       const billingCycle = body.billingCycle
       const amountEtb = body.amountEtb
+      const telegramProofId = typeof body.proofId === 'string' ? body.proofId : ''
       const proofPath = typeof body.proofPath === 'string' ? body.proofPath : ''
       const ownerNote = typeof body.ownerNote === 'string' ? body.ownerNote.trim() : ''
       const proofMatch = typeof proofPath === 'string' && proofPath.match(/^([0-9a-f-]{36})\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})$/i)
+      const hasTelegramProof = validUuid(telegramProofId)
+      const hasLegacyStorageProof = Boolean(proofMatch)
       if (!/^[A-Za-z0-9_-]{16,128}$/.test(idempotencyKey) || !validUuid(businessId) || !validUuid(planId) || !validUuid(paymentMethodId) ||
           (billingCycle !== 'month' && billingCycle !== 'year') || typeof amountEtb !== 'number' || !Number.isFinite(amountEtb) || amountEtb < 0 ||
-          proofPath.length < 3 || proofPath.length > 500 || !proofMatch || proofMatch[1].toLowerCase() !== businessId.toLowerCase() ||
-          !/\.(jpg|png|webp|pdf)$/i.test(proofMatch[2]) || ownerNote.length > 2000) {
+          (!hasTelegramProof && !hasLegacyStorageProof) ||
+          (hasLegacyStorageProof && (proofPath.length < 3 || proofPath.length > 500 || proofMatch![1].toLowerCase() !== businessId.toLowerCase() || !/\.(jpg|png|webp|pdf)$/i.test(proofMatch![2]))) ||
+          ownerNote.length > 2000) {
         return json({ error: 'Please check the payment details.' }, 400, req)
       }
 
@@ -83,6 +87,34 @@ if (import.meta.main) {
       if (!selectedPlan?.is_active || selectedPlan.is_trial || selectedPlan.billing_interval !== billingCycle || !Number.isFinite(fullPlanAmount)) {
         return json({ error: 'The selected payment plan is no longer available at that price. Please choose the plan again.' }, 400, req)
       }
+      if (hasTelegramProof) {
+        const { data: proof } = await db
+          .from('telegram_payment_proofs')
+          .select('id')
+          .eq('id', telegramProofId)
+          .eq('business_id', businessId)
+          .is('payment_id', null)
+          .maybeSingle()
+        if (!proof) return json({ error: 'Payment proof is no longer available. Please upload the receipt again.' }, 400, req)
+
+        const { data, error } = await db.rpc('submit_telegram_payment_idempotent', {
+          p_idempotency_key: idempotencyKey,
+          p_business_id: businessId,
+          p_plan_id: planId,
+          p_billing_cycle: selectedPlan.billing_interval,
+          p_amount_etb: fullPlanAmount,
+          p_payment_method_id: paymentMethodId,
+          p_telegram_proof_id: telegramProofId,
+          p_owner_note: ownerNote,
+        })
+        if (error || !data) {
+          logFailure(req, { function_name: 'submit-payment', operation: 'create_telegram_payment', error_category: error?.code === '23505' ? 'CONFLICT' : 'DATABASE_ERROR', error_code: error?.code ?? 'unknown', status: error?.code === '23505' ? 409 : 400 })
+          const safeError = safeDatabaseError(error)
+          return json({ error: safeError.message }, safeError.status, req)
+        }
+        return json({ payment: data }, 200, req)
+      }
+
       const proofName = proofMatch?.[2] ?? ''
       let proofExists = false
       for (let attempt = 0; attempt < 3 && !proofExists; attempt += 1) {

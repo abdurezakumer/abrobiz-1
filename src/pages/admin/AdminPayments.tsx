@@ -23,8 +23,8 @@ export default function AdminPayments() {
       setPending(p)
       setHistory(h.filter(x => x.status !== 'pending'))
       for (const payment of p) {
-        if (payment.proofUrl && !proofUrls[payment.id]) {
-          getPaymentProofUrl(payment.proofUrl).then(url => setProofUrls(prev => ({ ...prev, [payment.id]: url }))).catch(() => {})
+        if ((payment.proofUrl || payment.telegramProofId) && !proofUrls[payment.id]) {
+          getPaymentProofUrl(payment.proofUrl, payment.id).then(url => setProofUrls(prev => ({ ...prev, [payment.id]: url }))).catch(() => {})
         }
       }
     } catch (err) {
@@ -119,9 +119,9 @@ export default function AdminPayments() {
           {pending.map(p => (
             <div key={p.id} style={{ background: '#fff', borderRadius: 16, border: '1px solid rgba(10,12,16,0.06)', overflow: 'hidden' }}>
               <div style={{ height: 160, background: '#F6F3EE', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {safeImageUrl(proofUrls[p.id]) ? (
-                  <a href={safeImageUrl(proofUrls[p.id]) ?? undefined} target="_blank" rel="noopener noreferrer" style={{ display: 'block', width: '100%', height: '100%' }}>
-                    <img src={safeImageUrl(proofUrls[p.id]) ?? undefined} alt="Payment proof" loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                {proofPreviewUrl(proofUrls[p.id]) ? (
+                  <a href={proofPreviewUrl(proofUrls[p.id]) ?? undefined} target="_blank" rel="noopener noreferrer" style={{ display: 'block', width: '100%', height: '100%' }}>
+                    <img src={proofPreviewUrl(proofUrls[p.id]) ?? undefined} alt="Payment proof" loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   </a>
                 ) : (
                   <ImageOff size={20} color="rgba(10,12,16,0.25)" />
@@ -173,3 +173,10 @@ const refreshBtn: React.CSSProperties = { display: 'inline-flex', alignItems: 'c
 const toolbar: React.CSSProperties = { display: 'flex', gap: 9, alignItems: 'center', flexWrap: 'wrap', padding: 11, background: '#fff', border: '1px solid rgba(10,12,16,0.06)', borderRadius: 14, marginBottom: 22 }
 const input: React.CSSProperties = { border: '1px solid rgba(10,12,16,0.1)', borderRadius: 9, padding: '8px 11px', fontSize: 12.5, outline: 'none', background: '#fff', fontFamily: 'inherit' }
 const errorBox: React.CSSProperties = { color: '#B42318', background: '#FFF5F3', borderRadius: 10, padding: '10px 12px', fontSize: 13, marginBottom: 14 }
+
+function proofPreviewUrl(value: string | undefined): string | null {
+  if (typeof value !== 'string' || !value) return null
+  // Telegram proof images are returned as browser-local object URLs. Legacy
+  // Storage receipts continue to use the normal HTTPS image allow-list.
+  return value.startsWith('blob:') ? value : safeImageUrl(value)
+}

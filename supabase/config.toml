@@ -73,6 +73,12 @@ verify_jwt = true
 [functions.notify-payment-submitted]
 verify_jwt = true
 
+[functions.telegram-payment-proof]
+verify_jwt = true
+
+[functions.telegram-payment-proof-image]
+verify_jwt = true
+
 [functions.notify-payment-reviewed]
 verify_jwt = true
 

@@ -6,7 +6,7 @@ import { logEvent } from './observability.ts'
 export async function notifyAdminsOfPayment(db: SupabaseClient, tg: TelegramClient | null, paymentId: string): Promise<void> {
   const { data: payment } = await db
     .from('payments')
-    .select('id, amount_etb, owner_note, proof_url, plans(name), businesses(name, slug)')
+    .select('id, amount_etb, owner_note, proof_url, telegram_proof_id, plans(name), businesses(name, slug)')
     .eq('id', paymentId)
     .single()
 
@@ -34,6 +34,15 @@ export async function notifyAdminsOfPayment(db: SupabaseClient, tg: TelegramClie
   const admins = (linkedAdmins ?? []).filter((admin: any) => paymentReviewerIds.has(admin.admin_id))
 
   let photoUrl: string | undefined
+  let telegramFileId: string | undefined
+  if ((payment as any).telegram_proof_id) {
+    const { data: telegramProof } = await db
+      .from('telegram_payment_proofs')
+      .select('telegram_file_id')
+      .eq('id', (payment as any).telegram_proof_id)
+      .maybeSingle()
+    telegramFileId = telegramProof?.telegram_file_id ?? undefined
+  }
   if (payment.proof_url) {
     const { data: signed } = await db.storage.from('payment-proofs').createSignedUrl(payment.proof_url, 600)
     photoUrl = signed?.signedUrl
@@ -84,7 +93,9 @@ export async function notifyAdminsOfPayment(db: SupabaseClient, tg: TelegramClie
     if (!chatId) continue
     if (!tg) continue
     try {
-      if (photoUrl) {
+      if (telegramFileId) {
+        await tg.sendPhoto(chatId, telegramFileId, { caption, replyMarkup: keyboard })
+      } else if (photoUrl) {
         await tg.sendPhoto(chatId, photoUrl, { caption, replyMarkup: keyboard })
       } else {
         await tg.sendMessage(chatId, caption, { replyMarkup: keyboard })

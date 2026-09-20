@@ -26,6 +26,8 @@ const authenticatedFunctions = [
   '../notify-payment-reviewed/index.ts',
   '../storage-upload/index.ts',
   '../storage-signed-url/index.ts',
+  '../telegram-payment-proof/index.ts',
+  '../telegram-payment-proof-image/index.ts',
   '../submit-payment/index.ts',
 ]
 

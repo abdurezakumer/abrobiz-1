@@ -1,7 +1,7 @@
 import { supabase } from '../supabaseClient'
 import { edgeFunctionError } from '../errors'
 import type { Payment } from '../../types'
-import { isPdfFile, prepareImageForUpload } from '../fileUpload'
+import { prepareImageForUpload } from '../fileUpload'
 
 function mapPayment(row: any): Payment {
   return {
@@ -32,6 +32,7 @@ function mapPayment(row: any): Payment {
     amountEtb: Number(row.amount_etb),
     paymentMethodId: row.payment_method_id,
     proofUrl: row.proof_url ?? undefined,
+    telegramProofId: row.telegram_proof_id ?? undefined,
     ownerNote: row.owner_note ?? '',
     status: row.status,
     reviewedBy: row.reviewed_by ?? undefined,
@@ -59,35 +60,34 @@ async function uploadPaymentBytes(
   let accessToken = sessionData.session.access_token
   let lastError: unknown
 
-  // A mobile connection can drop after the server receives the bytes. The
-  // same uploadId makes retries idempotent at the storage path, so retrying
-  // never creates a second unrelated receipt.
+  // A mobile connection can drop after Telegram archives the bytes. The same
+  // uploadId lets the Edge Function return the original proof record without
+  // posting a second receipt to the archive channel.
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
       if (signal?.aborted) throw new Error('Upload canceled.')
       // functions.invoke uses fetch, which cannot expose upload progress. XHR
       // keeps the same authenticated Edge Function contract while reporting
-      // the real phone-to-storage transfer percentage.
+      // the real phone-to-Telegram transfer percentage.
       if (typeof XMLHttpRequest === 'undefined' || !projectUrl || !anonKey) {
-        const { data, error } = await supabase.functions.invoke('storage-upload', {
+        const { data, error } = await supabase.functions.invoke('telegram-payment-proof', {
           body: bytes,
-          headers: { 'X-Upload-Bucket': 'payment-proofs', 'X-Business-Id': businessId, 'X-Upload-Id': uploadId, 'Content-Type': contentType },
+          headers: { 'X-Business-Id': businessId, 'X-Upload-Id': uploadId, 'Content-Type': contentType },
           signal,
         })
         if (error) throw await edgeFunctionError(error)
         onProgress?.(100)
-        if (!data?.path) throw new Error('Upload did not return a file path.')
-        return data.path
+        if (!data?.proofId) throw new Error('Upload did not return a proof reference.')
+        return data.proofId
       }
 
       return await new Promise<string>((resolve, reject) => {
         const request = new XMLHttpRequest()
-        request.open('POST', `${projectUrl}/functions/v1/storage-upload`)
+        request.open('POST', `${projectUrl}/functions/v1/telegram-payment-proof`)
         request.responseType = 'json'
         request.timeout = 120000
         request.setRequestHeader('Authorization', `Bearer ${accessToken}`)
         request.setRequestHeader('apikey', anonKey)
-        request.setRequestHeader('X-Upload-Bucket', 'payment-proofs')
         request.setRequestHeader('X-Business-Id', businessId)
         request.setRequestHeader('X-Upload-Id', uploadId)
         request.setRequestHeader('Content-Type', contentType)
@@ -112,12 +112,12 @@ async function uploadPaymentBytes(
             reject(error)
             return
           }
-          if (!body?.path) {
-            reject(new Error('Upload did not return a file path.'))
+          if (!body?.proofId) {
+            reject(new Error('Upload did not return a proof reference.'))
             return
           }
           onProgress?.(100)
-          resolve(body.path)
+          resolve(body.proofId)
         }
         request.onerror = () => { cleanupAbort(); reject(new Error('Upload network connection was interrupted.')) }
         request.ontimeout = () => { cleanupAbort(); reject(new Error('Upload timed out while waiting for the server.')) }
@@ -141,19 +141,25 @@ async function uploadPaymentBytes(
 }
 
 export async function uploadPaymentProof(businessId: string, file: File, onProgress?: (progress: number) => void, signal?: AbortSignal): Promise<string> {
-  const uploadFile = isPdfFile(file)
-    ? (file.type === 'application/pdf' ? file : new File([file], file.name, { type: 'application/pdf' }))
-    // Keep payment photos within the same mobile-friendly size used by the
-    // logo uploader. Large camera images are resized before the request.
-    : await prepareImageForUpload(file, 5 * 1024 * 1024)
-  if (uploadFile.size > 10 * 1024 * 1024 || !['image/jpeg', 'image/png', 'image/webp', 'application/pdf'].includes(uploadFile.type)) {
-    throw new Error('Use a JPEG, PNG, WebP, or PDF file up to 10 MB.')
+  // Payment receipts are photos archived by Telegram, not Supabase Storage.
+  // Large camera images are resized before the request for reliable phones.
+  const uploadFile = await prepareImageForUpload(file, 5 * 1024 * 1024)
+  if (uploadFile.size > 5 * 1024 * 1024 || !['image/jpeg', 'image/png', 'image/webp'].includes(uploadFile.type)) {
+    throw new Error('Use a JPEG, PNG, or WebP photo up to 5 MB.')
   }
   const uploadBytes = await uploadFile.arrayBuffer()
-  return uploadPaymentBytes(businessId, uploadBytes, uploadFile.type, onProgress, signal) // private bucket: resolve signed URLs on read
+  return uploadPaymentBytes(businessId, uploadBytes, uploadFile.type, onProgress, signal) // returns an opaque Telegram proof record ID
 }
 
-export async function getPaymentProofUrl(path: string): Promise<string> {
+export async function getPaymentProofUrl(path?: string, paymentId?: string): Promise<string> {
+  if (paymentId && !path) {
+    const { data, error, response } = await supabase.functions.invoke('telegram-payment-proof-image', { body: { paymentId } })
+    if (error) throw await edgeFunctionError(error)
+    if (!(data instanceof Blob)) throw new Error('Could not prepare the file.')
+    const contentType = response?.headers.get('X-Proof-Content-Type') ?? 'image/jpeg'
+    return URL.createObjectURL(new Blob([data], { type: contentType }))
+  }
+  if (!path) throw new Error('Could not prepare the file.')
   const { data, error } = await supabase.functions.invoke('storage-signed-url', { body: { path } })
   if (error) throw await edgeFunctionError(error)
   if (!data?.signedUrl) throw new Error('Could not prepare the file.')
@@ -170,9 +176,10 @@ export async function submitPayment(input: {
   ownerNote?: string
   idempotencyKey?: string
 }): Promise<Payment> {
+  const { proofPath, ...paymentInput } = input
   const { data, error } = await supabase.functions.invoke('submit-payment', {
     headers: { 'Idempotency-Key': input.idempotencyKey ?? crypto.randomUUID() },
-    body: input,
+    body: { ...paymentInput, proofId: proofPath },
   })
   if (error) throw await edgeFunctionError(error)
   if (!data?.payment) throw new Error('Could not submit your payment.')
@@ -182,7 +189,7 @@ export async function submitPayment(input: {
 export async function listPaymentsForBusiness(businessId: string): Promise<Payment[]> {
   const { data, error } = await supabase
     .from('payments')
-    .select('id, business_id, plan_id, billing_cycle, amount_etb, payment_method_id, proof_url, owner_note, status, reviewed_by, reviewed_at, rejection_reason, created_at, plans(id, slug, name, price_etb, billing_interval, features, feature_flags, is_trial, trial_days, is_active, sort_order)')
+    .select('id, business_id, plan_id, billing_cycle, amount_etb, payment_method_id, proof_url, telegram_proof_id, owner_note, status, reviewed_by, reviewed_at, rejection_reason, created_at, plans(id, slug, name, price_etb, billing_interval, features, feature_flags, is_trial, trial_days, is_active, sort_order)')
     .eq('business_id', businessId)
     .order('created_at', { ascending: false })
     .limit(200)
@@ -195,7 +202,7 @@ export async function listPaymentsForBusiness(businessId: string): Promise<Payme
 export async function adminListPendingPayments(): Promise<Payment[]> {
   const { data, error } = await supabase
     .from('payments')
-    .select('id, business_id, plan_id, billing_cycle, amount_etb, payment_method_id, proof_url, owner_note, status, reviewed_by, reviewed_at, rejection_reason, created_at, plans(id, slug, name, price_etb, billing_interval, features, feature_flags, is_trial, trial_days, is_active, sort_order), businesses(name, slug)')
+    .select('id, business_id, plan_id, billing_cycle, amount_etb, payment_method_id, proof_url, telegram_proof_id, owner_note, status, reviewed_by, reviewed_at, rejection_reason, created_at, plans(id, slug, name, price_etb, billing_interval, features, feature_flags, is_trial, trial_days, is_active, sort_order), businesses(name, slug)')
     .eq('status', 'pending')
     .order('created_at', { ascending: true })
     .limit(200)
@@ -206,7 +213,7 @@ export async function adminListPendingPayments(): Promise<Payment[]> {
 export async function adminListAllPayments(): Promise<Payment[]> {
   const { data, error } = await supabase
     .from('payments')
-    .select('id, business_id, plan_id, billing_cycle, amount_etb, payment_method_id, proof_url, owner_note, status, reviewed_by, reviewed_at, rejection_reason, created_at, plans(id, slug, name, price_etb, billing_interval, features, feature_flags, is_trial, trial_days, is_active, sort_order), businesses(name, slug)')
+    .select('id, business_id, plan_id, billing_cycle, amount_etb, payment_method_id, proof_url, telegram_proof_id, owner_note, status, reviewed_by, reviewed_at, rejection_reason, created_at, plans(id, slug, name, price_etb, billing_interval, features, feature_flags, is_trial, trial_days, is_active, sort_order), businesses(name, slug)')
     .order('created_at', { ascending: false })
     .limit(200)
   if (error) throw error

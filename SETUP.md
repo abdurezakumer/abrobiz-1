@@ -61,8 +61,15 @@ depends on the last). Copy-paste the contents of each and hit Run:
 
 (If you prefer the CLI: `supabase link` then `supabase db push` runs all four for you.)
 
-After this, check **Storage** in the sidebar — you should see 4 buckets: `logos`,
-`covers`, `item-images`, `payment-proofs`.
+For an existing project, run `supabase db push` again after pulling this version;
+the new `0053_telegram_payment_proofs.sql` migration adds the private Telegram
+proof index, owner/admin read policy, payment FSM state, and audited Telegram
+approval functions.
+
+After this, check **Storage** in the sidebar — the active storefront upload
+ buckets are `logos`, `covers`, and `item-images`. The older `payment-proofs`
+ bucket may remain for legacy receipts, but new payment proofs are archived in
+ the private Telegram channel described below.
 
 ## 4. Install and run
 
@@ -193,6 +200,9 @@ From the `app/` folder, with the [Supabase CLI](https://supabase.com/docs/guides
 ```bash
 supabase functions deploy telegram-webhook
 supabase functions deploy notify-payment-submitted
+supabase functions deploy telegram-payment-proof
+supabase functions deploy telegram-payment-proof-image
+supabase functions deploy submit-payment
 ```
 
 `telegram-webhook` has JWT verification disabled in `supabase/config.toml` because
@@ -205,10 +215,17 @@ frontend, so it keeps normal JWT verification.
 ```bash
 supabase secrets set TELEGRAM_BOT_TOKEN=<YOUR_TELEGRAM_BOT_TOKEN>
 supabase secrets set TELEGRAM_WEBHOOK_SECRET=<YOUR_TELEGRAM_WEBHOOK_SECRET>
+supabase secrets set TELEGRAM_PAYMENT_CHANNEL_ID=-1000000000000
 supabase secrets set SUPPORT_EMAIL=abdurezak4525@gmail.com
 # Optional: set the support Telegram username without the @ symbol.
 supabase secrets set SUPPORT_TELEGRAM_USERNAME=your_support_username
 ```
+
+`TELEGRAM_PAYMENT_CHANNEL_ID` must be the private channel ID (normally starting
+with `-100`). Add the bot to that channel as an administrator with permission
+to post photos. New payment proofs are archived there and the database stores
+the Telegram file/message identifiers for later review and reporting; payment
+proofs are not written to Supabase Storage.
 
 (`SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are already available to every
 function automatically — don't set those yourself.)

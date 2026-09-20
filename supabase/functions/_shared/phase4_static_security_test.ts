@@ -18,13 +18,17 @@ Deno.test('Phase 4 storage upload validates ownership, bytes, path, and rate lim
   assert.doesNotMatch(source, /req\.headers\.get\('X-File-Name'/)
 })
 
-Deno.test('Phase 4 shared file validation rejects active content and Telegram uses it', async () => {
+Deno.test('Phase 4 shared file validation rejects active content and Telegram archives proofs', async () => {
   const fileSecurity = await read('./fileSecurity.ts')
   const telegram = await read('../telegram-webhook/index.ts')
   assert.match(fileSecurity, /image\/jpeg/)
   assert.match(fileSecurity, /application\/pdf/)
   assert.doesNotMatch(fileSecurity, /image\/svg\+xml|text\/html|application\/javascript/)
-  assert.match(telegram, /detectAllowedFile/)
+  assert.match(telegram, /TELEGRAM_PAYMENT_CHANNEL_ID/)
+  assert.match(telegram, /submit_telegram_payment_idempotent/)
+  assert.match(telegram, /telegram_admin_approve_payment/)
+  assert.match(telegram, /telegram_admin_reject_payment/)
+  assert.doesNotMatch(telegram, /storage\.from\('payment-proofs'\)/)
   assert.match(telegram, /telegram-payment-photo/)
 })
 
@@ -54,9 +58,9 @@ Deno.test('Phase 4 application uses the validated upload/download paths', async 
   const submitPayment = await read('../submit-payment/index.ts')
   assert.match(businesses, /functions\.invoke\('storage-upload'/)
   assert.match(items, /functions\.invoke\('storage-upload'/)
-  assert.match(payments, /functions\.invoke\('storage-upload'/)
-  assert.match(payments, /functions\.invoke\('storage-signed-url'/)
+  assert.match(payments, /functions\.invoke\('telegram-payment-proof'/)
+  assert.match(payments, /functions\.invoke\('telegram-payment-proof-image'/)
   assert.doesNotMatch(payments, /storage\.from\('payment-proofs'\)\.createSignedUrl/)
-  assert.match(submitPayment, /proofObjects/)
-  assert.match(submitPayment, /proofMatch/)
+  assert.match(submitPayment, /telegramProofId/)
+  assert.match(submitPayment, /submit_telegram_payment_idempotent/)
 })

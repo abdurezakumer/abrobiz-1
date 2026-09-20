@@ -5,7 +5,6 @@ import { notifyAdminsOfPayment } from '../_shared/notify.ts'
 import { notifyBusinessOwner } from '../_shared/ownerNotifications.ts'
 import type { TelegramUpdate, TelegramMessage, TelegramCallbackQuery, TelegramPhotoSize } from '../_shared/types.ts'
 import { checkSecret } from '../_shared/endpointSecurity.ts'
-import { detectAllowedFile, safeStoragePath } from '../_shared/fileSecurity.ts'
 import { isRecord, readJsonBody } from '../_shared/requestSecurity.ts'
 import { enforceRateLimit } from '../_shared/rateLimit.ts'
 import { logEvent, logFailure } from '../_shared/observability.ts'
@@ -13,6 +12,7 @@ import { logEvent, logFailure } from '../_shared/observability.ts'
 export interface Ctx {
   db: SupabaseClient
   tg: TelegramClient
+  paymentChannelId?: string
 }
 
 export async function claimTelegramUpdate(db: SupabaseClient, updateId: number): Promise<boolean> {
@@ -39,6 +39,16 @@ const infoKeyboard = buildInlineKeyboard([
     { text: 'Contact support', callback_data: 'info:support' },
   ],
 ])
+
+const adminKeyboard = buildInlineKeyboard([
+  [{ text: 'Pending payments', callback_data: 'admin:pending' }],
+  [{ text: 'Platform info', callback_data: 'admin:info' }, { text: 'Support', callback_data: 'admin:support' }],
+])
+
+function configuredPaymentChannel(ctx: Ctx): string | null {
+  const value = ctx.paymentChannelId ?? Deno.env.get('TELEGRAM_PAYMENT_CHANNEL_ID')?.trim() ?? ''
+  return /^-?[0-9]{5,32}$/.test(value) ? value : null
+}
 
 function supportMessage(): string {
   const email = Deno.env.get('SUPPORT_EMAIL')?.trim() || 'abdurezak4525@gmail.com'
@@ -98,26 +108,39 @@ async function handlePlans(chatId: string, ctx: Ctx): Promise<void> {
 }
 
 async function isLinkedAdmin(chatId: string, ctx: Ctx): Promise<boolean> {
+  return Boolean(await linkedAdminId(chatId, ctx))
+}
+
+async function linkedAdminId(chatId: string, ctx: Ctx): Promise<string | null> {
   const { data: link } = await ctx.db
     .from('admin_telegram_links')
     .select('admin_id')
     .eq('telegram_chat_id', chatId)
     .not('linked_at', 'is', null)
     .maybeSingle()
-  if (!link?.admin_id) return false
+  if (!link?.admin_id) return null
 
   // A Telegram link must not preserve admin access after the account is
   // demoted in AbroBiz.
   const { data: profile } = await ctx.db
     .from('profiles')
-    .select('id')
+    .select('id, role, admin_role')
     .eq('id', link.admin_id)
     .in('role', ['admin', 'super_admin'])
     .maybeSingle()
-  return !!profile
+  // The webhook uses a service-role client, so auth.uid()/MFA-based
+  // has_admin_permission cannot evaluate the linked administrator. Mirror
+  // only the payment-review permission matrix here: super admins, operations,
+  // and finance admins may review payments; support/content admins may not.
+  return profile && (
+    profile.role === 'super_admin' ||
+    profile.admin_role === 'super_admin' ||
+    profile.admin_role === 'operations' ||
+    profile.admin_role === 'finance'
+  )) ? String(profile.id) : null
 }
 
-async function handleAdmin(chatId: string, ctx: Ctx): Promise<void> {
+async function handleAdminLegacy(chatId: string, ctx: Ctx): Promise<void> {
   if (!await isLinkedAdmin(chatId, ctx)) {
     await ctx.tg.sendMessage(chatId, 'Admin commands are available only to an authorized AbroBiz administrator.')
     return
@@ -125,7 +148,15 @@ async function handleAdmin(chatId: string, ctx: Ctx): Promise<void> {
   await ctx.tg.sendMessage(chatId, '🛡️ AbroBiz admin console\n\n/pending — view payments awaiting review\n/info — view platform information\n/support — contact AbroBiz support')
 }
 
-async function handlePending(chatId: string, ctx: Ctx): Promise<void> {
+async function handleAdmin(chatId: string, ctx: Ctx): Promise<void> {
+  if (!await isLinkedAdmin(chatId, ctx)) {
+    await ctx.tg.sendMessage(chatId, 'Admin commands are available only to an authorized AbroBiz administrator.')
+    return
+  }
+  await ctx.tg.sendMessage(chatId, 'AbroBiz admin console\n\nReview payment proofs, approve valid payments, or reject with a reason.', { replyMarkup: adminKeyboard })
+}
+
+async function handlePendingLegacy(chatId: string, ctx: Ctx): Promise<void> {
   if (!await isLinkedAdmin(chatId, ctx)) {
     await ctx.tg.sendMessage(chatId, 'Admin commands are available only to an authorized AbroBiz administrator.')
     return
@@ -156,6 +187,40 @@ async function handlePending(chatId: string, ctx: Ctx): Promise<void> {
   }
 }
 
+async function handlePending(chatId: string, ctx: Ctx): Promise<void> {
+  if (!await isLinkedAdmin(chatId, ctx)) {
+    await ctx.tg.sendMessage(chatId, 'Admin commands are available only to an authorized AbroBiz administrator.')
+    return
+  }
+  const { data: payments } = await ctx.db
+    .from('payments')
+    .select('id, amount_etb, created_at, telegram_proof_id, plans(name), businesses(name)')
+    .eq('status', 'pending')
+    .order('created_at', { ascending: true })
+    .limit(10)
+  if (!payments || payments.length === 0) {
+    await ctx.tg.sendMessage(chatId, '✅ There are no payments waiting for review.')
+    return
+  }
+  await ctx.tg.sendMessage(chatId, `💳 ${payments.length} payment${payments.length === 1 ? '' : 's'} waiting for review:`)
+  for (const payment of payments) {
+    const businessName = (payment as any).businesses?.name ?? 'Business'
+    const planName = (payment as any).plans?.name ?? 'Plan'
+    const caption = `${businessName}\nPlan: ${planName}\nAmount: ${payment.amount_etb} ETB`
+    const keyboard = buildInlineKeyboard([[
+      { text: '✅ Approve', callback_data: `approve:${payment.id}` },
+      { text: '❌ Reject', callback_data: `reject:${payment.id}` },
+    ]])
+    let fileId: string | undefined
+    if ((payment as any).telegram_proof_id) {
+      const { data: proof } = await ctx.db.from('telegram_payment_proofs').select('telegram_file_id').eq('id', (payment as any).telegram_proof_id).maybeSingle()
+      fileId = proof?.telegram_file_id ?? undefined
+    }
+    if (fileId) await ctx.tg.sendPhoto(chatId, fileId, { caption, replyMarkup: keyboard })
+    else await ctx.tg.sendMessage(chatId, `${caption}\n\nOpen the AbroBiz admin dashboard to view the legacy proof.`, { replyMarkup: keyboard })
+  }
+}
+
 async function handleMessage(msg: TelegramMessage, ctx: Ctx): Promise<void> {
   const chatId = String(msg.chat.id)
 
@@ -165,6 +230,19 @@ async function handleMessage(msg: TelegramMessage, ctx: Ctx): Promise<void> {
 
   const text = msg.text?.trim()
   if (!text) return
+
+  const { data: adminPending } = await ctx.db.from('telegram_admin_pending_actions').select('*').eq('telegram_chat_id', chatId).maybeSingle()
+  if (adminPending?.state === 'awaiting_custom_reason' && !text.startsWith('/')) {
+    await ctx.db.from('telegram_admin_pending_actions').delete().eq('telegram_chat_id', chatId)
+    const syntheticCallback: TelegramCallbackQuery = {
+      id: `text-${msg.message_id}`,
+      from: msg.from ?? { id: Number(chatId) },
+      message: { message_id: msg.message_id, chat: msg.chat, from: msg.from },
+      data: `reject:${adminPending.payment_id}`,
+    }
+    await handleApproval(chatId, syntheticCallback, adminPending.payment_id, 'reject', ctx, text)
+    return
+  }
 
   const [rawCommand, ...args] = text.split(/\s+/)
   const command = rawCommand.toLowerCase().split('@')[0]
@@ -194,6 +272,7 @@ async function handleMessage(msg: TelegramMessage, ctx: Ctx): Promise<void> {
   }
   if (command === '/cancel') {
     await ctx.db.from('telegram_pending_actions').delete().eq('telegram_chat_id', chatId)
+    await ctx.db.from('telegram_admin_pending_actions').delete().eq('telegram_chat_id', chatId)
     await ctx.tg.sendMessage(chatId, 'Cancelled.')
     return
   }
@@ -281,7 +360,7 @@ async function handlePayCommand(chatId: string, ctx: Ctx): Promise<void> {
     return
   }
 
-  await ctx.db.from('telegram_pending_actions').upsert({ telegram_chat_id: chatId, business_id: link.business_id, plan_id: null, payment_method_id: null })
+  await ctx.db.from('telegram_pending_actions').upsert({ telegram_chat_id: chatId, business_id: link.business_id, plan_id: null, payment_method_id: null, state: 'awaiting_plan', updated_at: new Date().toISOString() })
 
   const keyboard = buildInlineKeyboard(
     plans.map(p => [{ text: `${p.name} \u2014 ${p.price_etb} ETB/${p.billing_interval}`, callback_data: `pay_plan:${p.id}` }])
@@ -289,71 +368,150 @@ async function handlePayCommand(chatId: string, ctx: Ctx): Promise<void> {
   await ctx.tg.sendMessage(chatId, 'Choose a plan:', { replyMarkup: keyboard })
 }
 
+// ── Callback (inline button) queries ────────────────────────────────────
+
 async function handlePhoto(chatId: string, photos: TelegramPhotoSize[], ctx: Ctx): Promise<void> {
   const { data: pending } = await ctx.db.from('telegram_pending_actions').select('*').eq('telegram_chat_id', chatId).maybeSingle()
-
-  if (!pending || !pending.business_id || !pending.plan_id || !pending.payment_method_id) {
-    await ctx.tg.sendMessage(chatId, 'Send /pay first to choose a plan and payment method \u2014 then send your proof photo.')
+  if (!pending || pending.state !== 'awaiting_proof' || !pending.business_id || !pending.plan_id || !pending.payment_method_id) {
+    await ctx.tg.sendMessage(chatId, 'Send /pay first to choose a plan and payment method, then send your proof photo.')
     return
   }
 
-  const { data: plan } = await ctx.db.from('plans').select('id, price_etb, billing_interval').eq('id', pending.plan_id).single()
+  const paymentChannel = configuredPaymentChannel(ctx)
+  if (!paymentChannel) {
+    await ctx.tg.sendMessage(chatId, 'Payment proof submission is temporarily unavailable. Please contact /support.')
+    return
+  }
+  const { data: plan } = await ctx.db.from('plans').select('id, price_etb, billing_interval').eq('id', pending.plan_id).eq('is_active', true).eq('is_trial', false).single()
   if (!plan) {
-    await ctx.tg.sendMessage(chatId, "That plan isn't available anymore \u2014 send /pay to start over.")
+    await ctx.tg.sendMessage(chatId, "That plan isn't available anymore — send /pay to start over.")
+    return
+  }
+  const { data: existingPending } = await ctx.db.from('payments').select('id').eq('business_id', pending.business_id).eq('status', 'pending').maybeSingle()
+  if (existingPending?.id) {
+    await ctx.db.from('telegram_pending_actions').delete().eq('telegram_chat_id', chatId)
+    await ctx.tg.sendMessage(chatId, 'A payment is already waiting for admin review. Please wait for the confirmation message.')
     return
   }
 
   const largest = photos[photos.length - 1]
-  const file = await ctx.tg.getFile(largest.file_id)
-  const bytes = await ctx.tg.downloadFile(file.file_path)
-  const extension = detectAllowedFile('image/jpeg', bytes)
-  if (extension !== 'jpg') {
-    await ctx.tg.sendMessage(chatId, 'That photo could not be validated. Please send a normal JPEG image.')
-    return
-  }
-  const path = safeStoragePath(pending.business_id, extension)
-
-  const { error: uploadError } = await ctx.db.storage.from('payment-proofs').upload(path, bytes, { contentType: 'image/jpeg' })
-  if (uploadError) {
-    logEvent('error', { service: 'abrobiz-edge', function_name: 'telegram-webhook', operation: 'upload_payment_proof', error_category: 'DEPENDENCY_ERROR', error_code: uploadError.name ?? 'unknown', provider: 'storage', outcome: 'failed' })
-    await ctx.tg.sendMessage(chatId, "Something went wrong saving your photo \u2014 please try again.")
+  const archiveReference = crypto.randomUUID()
+  const archived = await ctx.tg.sendPhoto(paymentChannel, largest.file_id, {
+    caption: ['AbroBiz payment proof', `Business ID: ${pending.business_id}`, `Reference: ${archiveReference}`].join('\\n'),
+  })
+  const archivedMessage = archived.result as { message_id?: number; photo?: Array<{ file_id?: string }> } | undefined
+  const telegramMessageId = archivedMessage?.message_id
+  const telegramFileId = archivedMessage?.photo?.at(-1)?.file_id ?? largest.file_id
+  if (!Number.isSafeInteger(telegramMessageId) || !telegramFileId) {
+    await ctx.tg.sendMessage(chatId, 'Telegram did not confirm the archived receipt. Please send the photo again or contact /support.')
     return
   }
 
-  const { data: payment, error: insertError } = await ctx.db
-    .from('payments')
+  const { data: owner } = await ctx.db.from('businesses').select('owner_id').eq('id', pending.business_id).single()
+  const { data: proof, error: proofError } = await ctx.db
+    .from('telegram_payment_proofs')
     .insert({
       business_id: pending.business_id,
-      plan_id: pending.plan_id,
-      billing_cycle: plan.billing_interval,
-      amount_etb: plan.price_etb,
-      payment_method_id: pending.payment_method_id,
-      proof_url: path,
-      status: 'pending',
+      client_upload_id: archiveReference,
+      telegram_channel_id: paymentChannel,
+      telegram_message_id: telegramMessageId,
+      telegram_file_id: telegramFileId,
+      content_type: 'image/jpeg',
+      uploaded_by: owner?.owner_id,
     })
     .select('id')
     .single()
-
-  await ctx.db.from('telegram_pending_actions').delete().eq('telegram_chat_id', chatId)
-
-  if (insertError || !payment) {
-    logEvent('error', { service: 'abrobiz-edge', function_name: 'telegram-webhook', operation: 'insert_payment', error_category: 'DATABASE_ERROR', error_code: insertError?.code ?? 'unknown', outcome: 'failed' })
-    await ctx.tg.sendMessage(chatId, "Something went wrong submitting your payment \u2014 please try again or use the dashboard.")
+  if (proofError || !proof?.id) {
+    logEvent('error', { service: 'abrobiz-edge', function_name: 'telegram-webhook', operation: 'record_payment_proof', error_category: 'DATABASE_ERROR', error_code: proofError?.code ?? 'unknown', outcome: 'failed' })
+    await ctx.tg.sendMessage(chatId, `The receipt was archived, but the payment record could not be created. Please contact /support with reference ${archiveReference}.`)
     return
   }
 
-  await ctx.tg.sendMessage(chatId, '\u2705 Submitted! We\u2019ll review it and let you know here.')
+  const { data: payment, error: insertError } = await ctx.db.rpc('submit_telegram_payment_idempotent', {
+    p_idempotency_key: `tg_${archiveReference}`,
+    p_business_id: pending.business_id,
+    p_plan_id: pending.plan_id,
+    p_billing_cycle: plan.billing_interval,
+    p_amount_etb: plan.price_etb,
+    p_payment_method_id: pending.payment_method_id,
+    p_telegram_proof_id: proof.id,
+    p_owner_note: '',
+  })
+  if (insertError || !payment?.id) {
+    logEvent('error', { service: 'abrobiz-edge', function_name: 'telegram-webhook', operation: 'insert_payment', error_category: 'DATABASE_ERROR', error_code: insertError?.code ?? 'unknown', outcome: 'failed' })
+    await ctx.tg.sendMessage(chatId, `The receipt was archived, but the payment could not be submitted. Please contact /support with reference ${archiveReference}.`)
+    return
+  }
+
+  await ctx.db.from('telegram_pending_actions').delete().eq('telegram_chat_id', chatId)
+  await ctx.tg.sendMessage(chatId, '✅ Submitted! Your receipt is archived securely. We will review it and let you know here.')
   await notifyAdminsOfPayment(ctx.db, ctx.tg, payment.id)
 }
 
-// ── Callback (inline button) queries ────────────────────────────────────
+async function handlePlanSelected(chatId: string, planId: string, ctx: Ctx): Promise<void> {
+  const { data: pending } = await ctx.db.from('telegram_pending_actions').select('*').eq('telegram_chat_id', chatId).maybeSingle()
+  if (!pending?.business_id || pending.state !== 'awaiting_plan') {
+    await ctx.tg.sendMessage(chatId, 'This payment session has expired. Send /pay to start again.')
+    return
+  }
+  const { data: plan } = await ctx.db.from('plans').select('id, name, price_etb, billing_interval').eq('id', planId).eq('is_active', true).eq('is_trial', false).maybeSingle()
+  if (!plan) {
+    await ctx.tg.sendMessage(chatId, 'That plan is no longer available. Send /pay to choose another plan.')
+    return
+  }
+  await ctx.db.from('telegram_pending_actions').update({ plan_id: plan.id, payment_method_id: null, state: 'awaiting_method', updated_at: new Date().toISOString() }).eq('telegram_chat_id', chatId)
+  const { data: methods } = await ctx.db.from('payment_methods').select('id, name').eq('is_active', true).order('sort_order', { ascending: true })
+  if (!methods || methods.length === 0) {
+    await ctx.tg.sendMessage(chatId, 'No payment methods are configured yet — please contact /support.')
+    return
+  }
+  await ctx.tg.sendMessage(chatId, `Plan selected: ${plan.name} — ${plan.price_etb} ETB/${plan.billing_interval}. How are you paying?`, {
+    replyMarkup: buildInlineKeyboard(methods.map(method => [{ text: method.name, callback_data: `pay_method:${method.id}` }])),
+  })
+}
+
+async function handleMethodSelected(chatId: string, methodId: string, ctx: Ctx): Promise<void> {
+  const { data: pending } = await ctx.db.from('telegram_pending_actions').select('*').eq('telegram_chat_id', chatId).maybeSingle()
+  if (!pending?.business_id || pending.state !== 'awaiting_method' || !pending.plan_id) {
+    await ctx.tg.sendMessage(chatId, 'This payment session has expired. Send /pay to start again.')
+    return
+  }
+  const { data: method } = await ctx.db.from('payment_methods').select('id, name, account_name, account_number, instructions').eq('id', methodId).eq('is_active', true).maybeSingle()
+  const { data: plan } = await ctx.db.from('plans').select('name, price_etb, billing_interval').eq('id', pending.plan_id).eq('is_active', true).eq('is_trial', false).maybeSingle()
+  if (!method || !plan) {
+    await ctx.tg.sendMessage(chatId, 'That payment option is no longer available. Send /pay to start again.')
+    return
+  }
+  await ctx.db.from('telegram_pending_actions').update({ payment_method_id: method.id, state: 'awaiting_proof', updated_at: new Date().toISOString() }).eq('telegram_chat_id', chatId)
+  const text = [
+    `Send payment via ${method.name}:`,
+    `${method.account_name} — ${method.account_number}`,
+    `Full payment required: ${plan.price_etb} ETB/${plan.billing_interval}`,
+    method.instructions,
+    '',
+    'Then send one clear photo of your receipt here. Use /cancel to stop.',
+  ].filter(Boolean).join('\n')
+  await ctx.tg.sendMessage(chatId, text, { replyMarkup: buildInlineKeyboard([[{ text: 'Cancel', callback_data: 'pay:cancel' }]]) })
+}
 
 async function handleCallback(cb: TelegramCallbackQuery, ctx: Ctx): Promise<void> {
   const chatId = String(cb.message?.chat.id ?? cb.from.id)
   const data = cb.data ?? ''
 
   try {
-    if (data === 'info:plans') {
+    if (data === 'pay:cancel') {
+      await ctx.db.from('telegram_pending_actions').delete().eq('telegram_chat_id', chatId)
+      await ctx.db.from('telegram_admin_pending_actions').delete().eq('telegram_chat_id', chatId)
+      await ctx.tg.sendMessage(chatId, 'Payment session cancelled.')
+    } else if (data === 'admin:pending') {
+      await handlePending(chatId, ctx)
+    } else if (data === 'admin:info') {
+      if (await isLinkedAdmin(chatId, ctx)) await handleInfoForChat(chatId, ctx)
+      else await ctx.tg.sendMessage(chatId, 'This admin menu is no longer authorized.')
+    } else if (data === 'admin:support') {
+      if (await isLinkedAdmin(chatId, ctx)) await ctx.tg.sendMessage(chatId, supportMessage())
+      else await ctx.tg.sendMessage(chatId, 'This admin menu is no longer authorized.')
+    } else if (data === 'info:plans') {
       await handlePlans(chatId, ctx)
     } else if (data === 'info:support') {
       await ctx.tg.sendMessage(chatId, supportMessage())
@@ -364,41 +522,64 @@ async function handleCallback(cb: TelegramCallbackQuery, ctx: Ctx): Promise<void
     } else if (data.startsWith('approve:')) {
       await handleApproval(chatId, cb, data.slice('approve:'.length), 'approve', ctx)
     } else if (data.startsWith('reject:')) {
-      await handleApproval(chatId, cb, data.slice('reject:'.length), 'reject', ctx)
+      await handleRejectStart(chatId, cb, data.slice('reject:'.length), ctx)
+    } else if (data.startsWith('reject_reason:')) {
+      const [, paymentId, reasonCode] = data.split(':')
+      await handleRejectReason(chatId, cb, paymentId ?? '', reasonCode ?? '', ctx)
     }
   } finally {
     await ctx.tg.answerCallbackQuery(cb.id).catch(() => {})
   }
 }
 
-async function handlePlanSelected(chatId: string, planId: string, ctx: Ctx): Promise<void> {
-  await ctx.db.from('telegram_pending_actions').update({ plan_id: planId, updated_at: new Date().toISOString() }).eq('telegram_chat_id', chatId)
-
-  const { data: methods } = await ctx.db.from('payment_methods').select('id, name').eq('is_active', true).order('sort_order', { ascending: true })
-  if (!methods || methods.length === 0) {
-    await ctx.tg.sendMessage(chatId, 'No payment methods are configured yet \u2014 please contact support.')
+async function handleRejectStart(chatId: string, cb: TelegramCallbackQuery, paymentId: string, ctx: Ctx): Promise<void> {
+  if (!await isLinkedAdmin(chatId, ctx)) {
+    await ctx.tg.sendMessage(chatId, "You're not connected as an admin, so this button doesn't work here.")
     return
   }
-  const keyboard = buildInlineKeyboard(methods.map(m => [{ text: m.name, callback_data: `pay_method:${m.id}` }]))
-  await ctx.tg.sendMessage(chatId, 'How are you paying?', { replyMarkup: keyboard })
+  if (cb.message?.chat.type !== 'private' || String(cb.from.id) !== chatId) {
+    await ctx.tg.sendMessage(chatId, 'This approval request is not authorized.')
+    return
+  }
+  const { data: payment } = await ctx.db.from('payments').select('id').eq('id', paymentId).eq('status', 'pending').maybeSingle()
+  if (!payment) {
+    await ctx.tg.sendMessage(chatId, 'This payment has already been handled.')
+    return
+  }
+  await ctx.db.from('telegram_admin_pending_actions').upsert({ telegram_chat_id: chatId, payment_id: paymentId, state: 'awaiting_rejection_reason', updated_at: new Date().toISOString() })
+  await ctx.tg.sendMessage(chatId, 'Choose a rejection reason:', {
+    replyMarkup: buildInlineKeyboard([
+      [{ text: 'Receipt unclear', callback_data: `reject_reason:${paymentId}:unclear` }],
+      [{ text: 'Wrong amount', callback_data: `reject_reason:${paymentId}:amount` }],
+      [{ text: 'Invalid receipt', callback_data: `reject_reason:${paymentId}:invalid` }],
+      [{ text: 'Other reason', callback_data: `reject_reason:${paymentId}:other` }],
+      [{ text: 'Cancel', callback_data: 'pay:cancel' }],
+    ]),
+  })
 }
 
-async function handleMethodSelected(chatId: string, methodId: string, ctx: Ctx): Promise<void> {
-  await ctx.db.from('telegram_pending_actions').update({ payment_method_id: methodId, updated_at: new Date().toISOString() }).eq('telegram_chat_id', chatId)
-
-  const { data: method } = await ctx.db.from('payment_methods').select('name, account_name, account_number, instructions').eq('id', methodId).single()
-  if (!method) return
-  const { data: plan } = await ctx.db.from('plans').select('name, price_etb, billing_interval').eq('id', pending.plan_id).eq('is_active', true).eq('is_trial', false).single()
-
-  const text = [
-    `Send payment via ${method.name}:`,
-    `${method.account_name} \u2014 ${method.account_number}`,
-    plan ? `Full payment required: ${plan.price_etb} ETB/${plan.billing_interval}` : 'Send the complete amount shown in your Billing page.',
-    method.instructions,
-    '',
-    'Then send a photo of your receipt/screenshot right here.',
-  ].filter(Boolean).join('\n')
-  await ctx.tg.sendMessage(chatId, text)
+async function handleRejectReason(chatId: string, cb: TelegramCallbackQuery, paymentId: string, reasonCode: string, ctx: Ctx): Promise<void> {
+  if (!await isLinkedAdmin(chatId, ctx) || cb.message?.chat.type !== 'private' || String(cb.from.id) !== chatId) {
+    await ctx.tg.sendMessage(chatId, 'This approval request is not authorized.')
+    return
+  }
+  const { data: pending } = await ctx.db.from('telegram_admin_pending_actions').select('*').eq('telegram_chat_id', chatId).maybeSingle()
+  if (!pending || pending.payment_id !== paymentId || pending.state !== 'awaiting_rejection_reason') {
+    await ctx.tg.sendMessage(chatId, 'This rejection session has expired. Use /pending to load the payment again.')
+    return
+  }
+  if (reasonCode === 'other') {
+    await ctx.db.from('telegram_admin_pending_actions').update({ state: 'awaiting_custom_reason', updated_at: new Date().toISOString() }).eq('telegram_chat_id', chatId)
+    await ctx.tg.sendMessage(chatId, 'Send a short rejection reason, or use /cancel to stop.')
+    return
+  }
+  const reasons: Record<string, string> = {
+    unclear: 'The receipt is unclear or unreadable.',
+    amount: 'The receipt amount does not match the selected plan.',
+    invalid: 'The receipt could not be verified.',
+  }
+  await ctx.db.from('telegram_admin_pending_actions').delete().eq('telegram_chat_id', chatId)
+  await handleApproval(chatId, cb, paymentId, 'reject', ctx, reasons[reasonCode] ?? 'Rejected via Telegram')
 }
 
 async function handleApproval(
@@ -406,9 +587,11 @@ async function handleApproval(
   cb: TelegramCallbackQuery,
   paymentId: string,
   action: 'approve' | 'reject',
-  ctx: Ctx
+  ctx: Ctx,
+  rejectionReason = 'Rejected via Telegram',
 ): Promise<void> {
-  if (!await isLinkedAdmin(adminChatId, ctx)) {
+  const adminId = await linkedAdminId(adminChatId, ctx)
+  if (!adminId) {
     await ctx.tg.sendMessage(adminChatId, "You're not connected as an admin, so this button doesn't work here.")
     return
   }
@@ -418,8 +601,10 @@ async function handleApproval(
     return
   }
 
-  const rpcName = action === 'approve' ? 'admin_approve_payment' : 'admin_reject_payment'
-  const rpcArgs = action === 'approve' ? { p_payment_id: paymentId } : { p_payment_id: paymentId, p_reason: 'Rejected via Telegram' }
+  const rpcName = action === 'approve' ? 'telegram_admin_approve_payment' : 'telegram_admin_reject_payment'
+  const rpcArgs = action === 'approve'
+    ? { p_payment_id: paymentId, p_admin_id: adminId }
+    : { p_payment_id: paymentId, p_admin_id: adminId, p_reason: rejectionReason.slice(0, 1000) }
 
   const { error } = await ctx.db.rpc(rpcName, rpcArgs)
   const messageId = cb.message?.message_id
@@ -428,12 +613,18 @@ async function handleApproval(
   if (error) {
     const alreadyReviewed = /already reviewed/i.test(error.message)
     const text = alreadyReviewed ? '\u26A0\uFE0F Already handled by another admin.' : 'Something went wrong. Please use the admin dashboard.'
-    if (messageId) await ctx.tg.editMessageText(adminChatId, messageId, text).catch(() => {})
+    if (messageId) {
+      const edit = cb.message?.photo?.length ? ctx.tg.editMessageCaption(adminChatId, messageId, text) : ctx.tg.editMessageText(adminChatId, messageId, text)
+      await edit.catch(() => {})
+    }
     return
   }
 
   const resultText = action === 'approve' ? `\u2705 Approved by ${by}` : `\u274C Rejected by ${by}`
-  if (messageId) await ctx.tg.editMessageText(adminChatId, messageId, resultText).catch(() => {})
+  if (messageId) {
+    const edit = cb.message?.photo?.length ? ctx.tg.editMessageCaption(adminChatId, messageId, resultText) : ctx.tg.editMessageText(adminChatId, messageId, resultText)
+    await edit.catch(() => {})
+  }
 
   // Best-effort owner delivery. The same helper sends both email and linked
   // Telegram updates, while the RPC remains the source of truth.
