@@ -99,7 +99,7 @@ export default function TemplateSelector({
                 </div>
               </div>
               <div style={{ display: 'flex', justifyContent: 'center', padding: 18, background: dark ? '#0E1014' : '#ECE9E2', overflow: 'auto' }}>
-                <div style={{ width: previewMode === 'mobile' ? 390 : '100%', maxWidth: previewMode === 'mobile' ? 390 : 980, minWidth: previewMode === 'mobile' ? 320 : undefined, borderRadius: previewMode === 'mobile' ? 22 : 10, overflow: 'hidden', boxShadow: '0 12px 30px rgba(0,0,0,0.2)' }}>
+                <div style={{ width: previewMode === 'mobile' ? 'min(390px, 100%)' : '100%', maxWidth: previewMode === 'mobile' ? '390px' : 980, minWidth: undefined, borderRadius: previewMode === 'mobile' ? 22 : 10, overflow: 'hidden', boxShadow: '0 12px 30px rgba(0,0,0,0.2)' }}>
                   <TemplatePreviewSurface template={preview} business={previewBusiness} />
                 </div>
               </div>

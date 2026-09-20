@@ -187,13 +187,13 @@ export default function BusinessSettings() {
 
   return (
     <DashboardLayout>
-      <style>{`\n        .settings-category-nav { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin-bottom: 16px; }\n        @media (max-width: 760px) {\n          .settings-header { top: 58px !important; }\n          .settings-category-nav { display: flex; overflow-x: auto; padding: 2px 1px 6px; scrollbar-width: none; }\n          .settings-category-nav::-webkit-scrollbar { display: none; }\n        }\n      `}</style>
+      <style>{`\n        .settings-category-nav { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin-bottom: 16px; }\n        .settings-section { min-width: 0; }\n        .settings-category-button { min-width: 0; }\n        .settings-save-button { white-space: nowrap; }\n        @media (max-width: 760px) {\n          .settings-header { top: 58px !important; }\n          .settings-header > div:first-child { min-width: 0; }\n          .settings-header h1 { font-size: 21px !important; }\n          .settings-header p { max-width: 220px; line-height: 1.35; }\n          .settings-save-button { width: 100%; justify-content: center; }\n          .settings-category-nav { display: flex; overflow-x: auto; padding: 2px 1px 6px; scrollbar-width: none; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }\n          .settings-category-nav::-webkit-scrollbar { display: none; }\n          .settings-category-button { flex: 0 0 184px; }\n          .settings-section { padding: 15px 14px !important; border-radius: 14px !important; overflow: hidden; }\n          .settings-section input, .settings-section select, .settings-section textarea { max-width: 100%; }\n        }\n        @media (max-width: 380px) {\n          .settings-category-button { flex-basis: 168px; }\n        }\n      `}</style>
       <div className="settings-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 10, position: 'sticky', top: 0, zIndex: 12, background: '#F6F3EE', padding: '8px 0 14px' }}>
         <div>
           <h1 style={{ fontFamily: 'Outfit, sans-serif', fontSize: 24, fontWeight: 600, color: '#0A0C10' }}>Settings</h1>
           <p style={{ color: 'rgba(10,12,16,0.5)', fontSize: 14, marginTop: 2 }}>Customize how your site looks and works.</p>
         </div>
-        <button onClick={handleSave} disabled={saving} style={saveBtn}>
+        <button className="settings-save-button" onClick={handleSave} disabled={saving} style={saveBtn}>
           {saved ? <><Check size={15} /> Saved</> : saving ? 'Saving…' : 'Save changes'}
         </button>
       </div>
@@ -205,6 +205,7 @@ export default function BusinessSettings() {
           return (
             <button
               key={category.id}
+              className="settings-category-button"
               type="button"
               role="tab"
               aria-selected={active}
@@ -435,7 +436,7 @@ export default function BusinessSettings() {
 function Section({ title, children, category, activeCategory }: { title: string; children: React.ReactNode; category: SettingsCategory; activeCategory: SettingsCategory }) {
   const hidden = category !== activeCategory
   return (
-    <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: hidden ? 0 : 1, y: hidden ? 0 : 6 }} style={{ display: hidden ? 'none' : 'block', background: '#fff', borderRadius: 16, border: '1px solid rgba(10,12,16,0.06)', padding: '18px 20px', marginBottom: 16 }}>
+    <motion.div className="settings-section" initial={{ opacity: 0, y: 6 }} animate={{ opacity: hidden ? 0 : 1, y: hidden ? 0 : 6 }} style={{ display: hidden ? 'none' : 'block', background: '#fff', borderRadius: 16, border: '1px solid rgba(10,12,16,0.06)', padding: '18px 20px', marginBottom: 16 }}>
       <div style={{ fontSize: 14, fontWeight: 600, color: '#0A0C10', marginBottom: 14 }}>{title}</div>
       {children}
     </motion.div>
