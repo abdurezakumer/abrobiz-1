@@ -45,6 +45,11 @@ const adminKeyboard = buildInlineKeyboard([
   [{ text: 'Platform info', callback_data: 'admin:info' }, { text: 'Support', callback_data: 'admin:support' }],
 ])
 
+const accountKeyboard = buildInlineKeyboard([
+  [{ text: 'Disconnect Telegram', callback_data: 'account:disconnect' }],
+  [{ text: 'View plans', callback_data: 'info:plans' }, { text: 'Contact support', callback_data: 'info:support' }],
+])
+
 function configuredPaymentChannel(ctx: Ctx): string | null {
   const value = ctx.paymentChannelId ?? Deno.env.get('TELEGRAM_PAYMENT_CHANNEL_ID')?.trim() ?? ''
   return /^-?[0-9]{5,32}$/.test(value) ? value : null
@@ -64,6 +69,36 @@ function supportMessage(): string {
   return lines.join('\n')
 }
 
+async function disconnectChat(chatId: string, ctx: Ctx): Promise<boolean> {
+  const rotatedToken = () => ({
+    telegram_chat_id: null,
+    telegram_username: null,
+    linked_at: null,
+    link_token: encodeRandomToken(),
+  })
+  const business = await ctx.db
+    .from('business_telegram_links')
+    .update(rotatedToken())
+    .eq('telegram_chat_id', chatId)
+    .not('linked_at', 'is', null)
+    .select('id')
+  const admin = await ctx.db
+    .from('admin_telegram_links')
+    .update(rotatedToken())
+    .eq('telegram_chat_id', chatId)
+    .not('linked_at', 'is', null)
+    .select('id')
+  await ctx.db.from('telegram_pending_actions').delete().eq('telegram_chat_id', chatId)
+  await ctx.db.from('telegram_admin_pending_actions').delete().eq('telegram_chat_id', chatId)
+  return (business.data?.length ?? 0) > 0 || (admin.data?.length ?? 0) > 0
+}
+
+function encodeRandomToken(): string {
+  const bytes = new Uint8Array(24)
+  crypto.getRandomValues(bytes)
+  return Array.from(bytes, value => value.toString(16).padStart(2, '0')).join('')
+}
+
 async function handleInfoForChat(chatId: string, ctx: Ctx): Promise<void> {
   await ctx.tg.sendMessage(
     chatId,
@@ -74,6 +109,8 @@ async function handleInfoForChat(chatId: string, ctx: Ctx): Promise<void> {
       '',
       'Commands:',
       '/plans — view current plans and prices',
+      '/connect <token> — connect using the secure dashboard token',
+      '/disconnect — disconnect this Telegram account',
       '/pay — submit a payment after connecting your account',
       '/support — contact AbroBiz support',
       '/admin — admin tools for authorized administrators',
@@ -223,6 +260,25 @@ async function handlePending(chatId: string, ctx: Ctx): Promise<void> {
   }
 }
 
+async function handleConnectCommand(chatId: string, username: string | undefined, token: string | undefined, ctx: Ctx): Promise<void> {
+  if (!token) {
+    await ctx.tg.sendMessage(chatId, 'Open AbroBiz Dashboard → Billing → Connect Telegram, then open the secure link. You can also send /connect followed by the token from that link.')
+    return
+  }
+  if (!/^(?:pay_)?[A-Fa-f0-9]{32}$/.test(token)) {
+    await ctx.tg.sendMessage(chatId, 'That connection token is invalid or expired. Generate a fresh Connect Telegram link from your AbroBiz dashboard.')
+    return
+  }
+  await handleStart(chatId, username, token, ctx)
+}
+
+async function handleDisconnectCommand(chatId: string, ctx: Ctx): Promise<void> {
+  const disconnected = await disconnectChat(chatId, ctx)
+  await ctx.tg.sendMessage(chatId, disconnected
+    ? '✅ Telegram has been disconnected from AbroBiz. Your old connection link was invalidated.'
+    : 'This Telegram account is not currently connected to AbroBiz.', { replyMarkup: infoKeyboard })
+}
+
 async function handleMessage(msg: TelegramMessage, ctx: Ctx): Promise<void> {
   const chatId = String(msg.chat.id)
 
@@ -251,7 +307,18 @@ async function handleMessage(msg: TelegramMessage, ctx: Ctx): Promise<void> {
 
   if (command === '/start') {
     const token = args[0]?.trim()
+    if (token && msg.chat.type !== 'private') {
+      await ctx.tg.sendMessage(chatId, 'For account security, open this bot in a private chat before connecting AbroBiz.')
+      return
+    }
     return handleStart(chatId, msg.from?.username, token, ctx)
+  }
+  if (command === '/connect') {
+    if (msg.chat.type !== 'private') {
+      await ctx.tg.sendMessage(chatId, 'For account security, connect AbroBiz from a private chat with this bot.')
+      return
+    }
+    return handleConnectCommand(chatId, msg.from?.username, args[0]?.trim(), ctx)
   }
   if (command === '/help' || command === '/info' || command === '/about') {
     return handleInfoForChat(chatId, ctx)
@@ -272,6 +339,13 @@ async function handleMessage(msg: TelegramMessage, ctx: Ctx): Promise<void> {
   if (command === '/pay') {
     return handlePayCommand(chatId, ctx)
   }
+  if (command === '/disconnect') {
+    if (msg.chat.type !== 'private') {
+      await ctx.tg.sendMessage(chatId, 'For account security, disconnect AbroBiz from a private chat with this bot.')
+      return
+    }
+    return handleDisconnectCommand(chatId, ctx)
+  }
   if (command === '/cancel') {
     await ctx.db.from('telegram_pending_actions').delete().eq('telegram_chat_id', chatId)
     await ctx.db.from('telegram_admin_pending_actions').delete().eq('telegram_chat_id', chatId)
@@ -287,7 +361,7 @@ async function handleStart(chatId: string, username: string | undefined, token: 
     const { data: business } = await ctx.db.from('business_telegram_links').select('id').eq('telegram_chat_id', chatId).maybeSingle()
     const { data: admin } = await ctx.db.from('admin_telegram_links').select('id').eq('telegram_chat_id', chatId).maybeSingle()
     if (business || admin) {
-      await ctx.tg.sendMessage(chatId, "You're already connected. Send /pay to submit a payment or /info to see all commands.", { replyMarkup: infoKeyboard })
+      await ctx.tg.sendMessage(chatId, "You're already connected. Send /pay to submit a payment or /info to see all commands.", { replyMarkup: accountKeyboard })
     } else {
       await ctx.tg.sendMessage(chatId, "Welcome to AbroBiz! Open your dashboard and tap \u201cConnect Telegram\u201d to link your account.\n\nUse /info for platform information, /plans for pricing, or /support for help.", { replyMarkup: infoKeyboard })
     }
@@ -304,10 +378,14 @@ async function handleStart(chatId: string, username: string | undefined, token: 
       await ctx.tg.sendMessage(chatId, 'This Telegram account is already connected to another AbroBiz account. Disconnect it there first, then try again.')
       return
     }
-    await ctx.db
+    const { error: businessLinkError } = await ctx.db
       .from('business_telegram_links')
       .update({ telegram_chat_id: chatId, telegram_username: username ?? null, linked_at: new Date().toISOString() })
       .eq('id', businessLink.id)
+    if (businessLinkError) {
+      await ctx.tg.sendMessage(chatId, 'This Telegram account is already connected elsewhere. Disconnect that connection first, then try again.')
+      return
+    }
     await ctx.tg.sendMessage(chatId, startsPayment
       ? '\u2705 Connected! Let\u2019s prepare your payment submission.'
       : '\u2705 Connected! You\u2019ll get updates here when your payments are reviewed. Send /pay anytime to submit a new payment.')
@@ -326,10 +404,14 @@ async function handleStart(chatId: string, username: string | undefined, token: 
       await ctx.tg.sendMessage(chatId, 'This Telegram account is already connected to another AbroBiz account. Disconnect it there first, then try again.')
       return
     }
-    await ctx.db
+    const { error: adminLinkError } = await ctx.db
       .from('admin_telegram_links')
       .update({ telegram_chat_id: chatId, telegram_username: username ?? null, linked_at: new Date().toISOString() })
       .eq('id', adminLink.id)
+    if (adminLinkError) {
+      await ctx.tg.sendMessage(chatId, 'This Telegram account is already connected elsewhere. Disconnect that connection first, then try again.')
+      return
+    }
     await ctx.tg.sendMessage(chatId, '\u2705 You\u2019re connected as an admin. Payment approval requests will show up here with Approve/Reject buttons. Use /admin for admin tools.', { replyMarkup: infoKeyboard })
     return
   }
@@ -513,6 +595,12 @@ async function handleCallback(cb: TelegramCallbackQuery, ctx: Ctx): Promise<void
     } else if (data === 'admin:support') {
       if (await isLinkedAdmin(chatId, ctx)) await ctx.tg.sendMessage(chatId, supportMessage())
       else await ctx.tg.sendMessage(chatId, 'This admin menu is no longer authorized.')
+    } else if (data === 'account:disconnect') {
+      if (cb.message?.chat.type !== 'private' || String(cb.from.id) !== chatId) {
+        await ctx.tg.sendMessage(chatId, 'This account control is only available from your private AbroBiz chat.')
+      } else {
+        await handleDisconnectCommand(chatId, ctx)
+      }
     } else if (data === 'info:plans') {
       await handlePlans(chatId, ctx)
     } else if (data === 'info:support') {

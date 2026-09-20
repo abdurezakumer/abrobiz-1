@@ -31,10 +31,18 @@ if (import.meta.main) {
       const turnstileFailure = await requireTurnstile(req, body.turnstileToken, 'login')
       if (turnstileFailure) return turnstileFailure
 
-      const url = Deno.env.get('SUPABASE_URL')
-      const anonKey = Deno.env.get('SUPABASE_ANON_KEY')
-      if (!url || !anonKey) return json({ error: 'AbroBiz sign-in is temporarily unavailable.' }, 503, req)
-      const client = createClient(url, anonKey, { auth: { persistSession: false } })
+      const url = Deno.env.get('SUPABASE_URL')?.trim()
+      // Supabase currently exposes the legacy anon key automatically, while
+      // newer projects may expose the publishable key name instead.
+      const anonKey = Deno.env.get('SUPABASE_ANON_KEY')?.trim() || Deno.env.get('SUPABASE_PUBLISHABLE_KEY')?.trim()
+      if (!url || !anonKey) {
+        logFailure(req, { function_name: 'login', operation: 'configuration_check', error_category: 'CONFIGURATION_ERROR', error_code: 'missing_auth_runtime_config', status: 503 })
+        return json({ error: 'AbroBiz sign-in is temporarily unavailable.' }, 503, req)
+      }
+      const client = createClient(url, anonKey, {
+        auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+        global: { headers: { 'X-Client-Info': 'abrobiz-login' } },
+      })
       const { data, error } = await client.auth.signInWithPassword({ email, password })
       if (error || !data.session) {
         logFailure(req, { function_name: 'login', operation: 'password_login', error_category: 'AUTHENTICATION_ERROR', error_code: error?.name ?? 'invalid_credentials', status: 401 })
@@ -42,7 +50,7 @@ if (import.meta.main) {
       }
       return json({ session: data.session, user: data.user ? { id: data.user.id, email: data.user.email } : null }, 200, req)
     } catch (error) {
-      logFailure(req, { function_name: 'login', operation: 'otp_flow', error_category: 'INTERNAL_ERROR', error_code: error instanceof Error ? error.name : 'UnknownError', status: 503 })
+      logFailure(req, { function_name: 'login', operation: 'password_login', error_category: 'INTERNAL_ERROR', error_code: error instanceof Error ? error.name : 'UnknownError', status: 503 })
       return json({ error: 'AbroBiz sign-in is temporarily unavailable.' }, 503, req)
     }
   })
