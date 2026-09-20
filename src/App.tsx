@@ -112,6 +112,7 @@ export default function App() {
         <Route path="/admin/marketing" element={<RequireAdminPermission permission="marketing.read"><AdminMarketing /></RequireAdminPermission>} />
         <Route path="/admin/businesses" element={<RequireAdminPermission permission="businesses.read"><AdminBusinesses /></RequireAdminPermission>} />
         <Route path="/admin/payments" element={<RequireAdminPermission permission="payments.read"><AdminPayments /></RequireAdminPermission>} />
+        <Route path="/admin/pricing" element={<RequireAdminPermission permission="plans.manage"><AdminSettings initialTab="plans" pricingOnly /></RequireAdminPermission>} />
         <Route path="/admin/settings" element={<RequireAdminPermission permission="templates.manage"><AdminSettings /></RequireAdminPermission>} />
         <Route path="/admin/announcements" element={<RequireAdminPermission permission="announcements.send"><AdminAnnouncements /></RequireAdminPermission>} />
         <Route path="/admin/support" element={<RequireAdminPermission permission="support.manage"><AdminSupport /></RequireAdminPermission>} />

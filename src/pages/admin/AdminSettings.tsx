@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Plus, Check, X, Github, ExternalLink } from 'lucide-react'
+import { Plus, Check, X, Github, ExternalLink, Pencil, Save, Sparkles } from 'lucide-react'
 import AdminLayout from '../../components/AdminLayout'
+import { useAuth } from '../../lib/authContext'
+import { hasAdminPermission } from '../../lib/api/adminControl'
 import { adminListAllPlans, createPlan, updatePlan } from '../../lib/api/plans'
 import { listPaymentMethods, createPaymentMethod, updatePaymentMethod } from '../../lib/api/paymentMethods'
 import { listBusinessCategories, createBusinessCategory, updateBusinessCategory } from '../../lib/api/businessCategories'
@@ -9,19 +11,23 @@ import { adminListTemplates, importTemplate, setTemplateActive } from '../../lib
 import type { Plan, PaymentMethod, BusinessCategory, Template } from '../../types'
 import { safeHttpsUrl, safeImageUrl } from '../../lib/safeUrl'
 import { friendlyError } from '../../lib/errors'
+import { formatEtb } from '../../lib/planPricing'
 
 type Tab = 'plans' | 'methods' | 'categories' | 'templates'
 
-export default function AdminSettings() {
-  const [tab, setTab] = useState<Tab>('plans')
+export default function AdminSettings({ initialTab = 'plans', pricingOnly = false }: { initialTab?: Tab; pricingOnly?: boolean }) {
+  const { profile } = useAuth()
+  const canManagePlans = hasAdminPermission(profile, 'plans.manage')
+  const availableTabs: Tab[] = pricingOnly ? ['plans'] : [ ...(canManagePlans ? ['plans' as const] : []), 'methods', 'categories', 'templates' ]
+  const [tab, setTab] = useState<Tab>(availableTabs.includes(initialTab) ? initialTab : availableTabs[0] ?? 'templates')
 
   return (
     <AdminLayout>
       <h1 style={{ fontFamily: 'Outfit, sans-serif', fontSize: 24, fontWeight: 600, color: '#0A0C10', marginBottom: 4 }}>Settings</h1>
-      <p style={{ color: 'rgba(10,12,16,0.5)', fontSize: 14, marginBottom: 20 }}>Configure pricing, payment methods, business verticals, and storefront templates.</p>
+      <p style={{ color: 'rgba(10,12,16,0.5)', fontSize: 14, marginBottom: 20 }}>{pricingOnly ? 'Manage live monthly, annual, and promotional pricing from one secure control surface.' : 'Configure pricing, payment methods, business verticals, and storefront templates.'}</p>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
-        {(['plans', 'methods', 'categories', 'templates'] as Tab[]).map(t => (
+        {availableTabs.map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -36,7 +42,7 @@ export default function AdminSettings() {
         ))}
       </div>
 
-      {tab === 'plans' && <PlansTab />}
+      {tab === 'plans' && canManagePlans && <PlansTabV2 />}
       {tab === 'methods' && <MethodsTab />}
       {tab === 'categories' && <CategoriesTab />}
       {tab === 'templates' && <TemplatesTab />}
@@ -109,6 +115,9 @@ function TemplatesTab() {
   )
 }
 
+// Retained for backwards compatibility with older local admin bundles.
+// The live settings route uses PlansTabV2 below.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function PlansTab() {
   const [plans, setPlans] = useState<Plan[]>([])
   const [form, setForm] = useState({ name: '', slug: '', priceEtb: 0, features: '', bookings: false, ordering: false, reviews: false, aiCopy: false })
@@ -179,6 +188,90 @@ function PlansTab() {
       )}
     </div>
   )
+}
+
+type PricingForm = {
+  name: string; slug: string; monthlyPriceEtb: number; annualPriceEtb: number; features: string
+  bookings: boolean; ordering: boolean; reviews: boolean; aiCopy: boolean
+  discountType: 'none' | 'percent' | 'fixed'; discountValue: number; discountLabel: string; discountStartsAt: string; discountEndsAt: string
+}
+
+function blankPricingForm(): PricingForm {
+  return { name: '', slug: '', monthlyPriceEtb: 0, annualPriceEtb: 0, features: '', bookings: false, ordering: false, reviews: false, aiCopy: false, discountType: 'none', discountValue: 0, discountLabel: '', discountStartsAt: '', discountEndsAt: '' }
+}
+
+function pricingFormFrom(plan: Plan): PricingForm {
+  const monthly = plan.monthlyPriceEtb ?? plan.priceEtb
+  return { name: plan.name, slug: plan.slug, monthlyPriceEtb: monthly, annualPriceEtb: plan.annualPriceEtb ?? monthly * 12, features: plan.features.join(', '), bookings: !!plan.featureFlags.bookings, ordering: !!plan.featureFlags.ordering, reviews: !!plan.featureFlags.reviews, aiCopy: !!plan.featureFlags.aiCopy, discountType: plan.discountType ?? 'none', discountValue: plan.discountValue ?? 0, discountLabel: plan.discountLabel ?? '', discountStartsAt: plan.discountStartsAt?.slice(0, 16) ?? '', discountEndsAt: plan.discountEndsAt?.slice(0, 16) ?? '' }
+}
+
+function pricingPayload(form: PricingForm) {
+  return { name: form.name.trim(), slug: form.slug.trim(), priceEtb: form.monthlyPriceEtb, billingInterval: 'month' as const, monthlyPriceEtb: form.monthlyPriceEtb, annualPriceEtb: form.annualPriceEtb, features: form.features.split(',').map(item => item.trim()).filter(Boolean), featureFlags: { bookings: form.bookings, ordering: form.ordering, reviews: form.reviews, aiCopy: form.aiCopy }, discountType: form.discountType, discountValue: form.discountValue, discountLabel: form.discountLabel.trim(), discountStartsAt: form.discountStartsAt ? new Date(form.discountStartsAt).toISOString() : null, discountEndsAt: form.discountEndsAt ? new Date(form.discountEndsAt).toISOString() : null }
+}
+
+function PlansTabV2() {
+  const [plans, setPlans] = useState<Plan[]>([])
+  const [form, setForm] = useState<PricingForm>(blankPricingForm())
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [adding, setAdding] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  async function load() {
+    setLoading(true)
+    try { setPlans(await adminListAllPlans()) } catch (err) { setError(friendlyError(err)) } finally { setLoading(false) }
+  }
+  useEffect(() => { void load() }, [])
+
+  async function savePlan(plan?: Plan) {
+    if (!form.name.trim() || form.monthlyPriceEtb < 0 || form.annualPriceEtb < 0) { setError('Enter a name and valid monthly and annual prices.'); return }
+    setSaving(true); setError('')
+    try {
+      if (plan) await updatePlan(plan.id, pricingPayload(form))
+      else await createPlan(pricingPayload(form))
+      setEditingId(null); setAdding(false); setForm(blankPricingForm()); await load()
+    } catch (err) { setError(friendlyError(err)) } finally { setSaving(false) }
+  }
+
+  function editor(plan?: Plan) {
+    const current = form
+    const set = (patch: Partial<PricingForm>) => setForm(previous => ({ ...previous, ...patch }))
+    return <div style={pricingEditor}>
+      <div style={pricingGrid}>
+        <label style={fieldLabel}>Plan name<input value={current.name} onChange={event => set({ name: event.target.value, ...(plan ? {} : { slug: event.target.value.toLowerCase().replace(/\s+/g, '-') }) })} style={formInput} /></label>
+        <label style={fieldLabel}>Slug<input value={current.slug} disabled={!!plan} onChange={event => set({ slug: event.target.value })} style={formInput} /></label>
+        <label style={fieldLabel}>Monthly price (ETB)<input type="number" min="0" step="0.01" value={current.monthlyPriceEtb || ''} onChange={event => set({ monthlyPriceEtb: Number(event.target.value) || 0 })} style={formInput} /></label>
+        <label style={fieldLabel}>Annual price (ETB)<input type="number" min="0" step="0.01" value={current.annualPriceEtb || ''} onChange={event => set({ annualPriceEtb: Number(event.target.value) || 0 })} style={formInput} /></label>
+      </div>
+      <div style={pricingGrid}>
+        <label style={fieldLabel}>Event discount<select value={current.discountType} onChange={event => set({ discountType: event.target.value as PricingForm['discountType'] })} style={formInput}><option value="none">No event discount</option><option value="percent">Percentage discount</option><option value="fixed">Fixed ETB discount</option></select></label>
+        <label style={fieldLabel}>Discount value<input type="number" min="0" step="0.01" value={current.discountValue || ''} onChange={event => set({ discountValue: Number(event.target.value) || 0 })} style={formInput} /></label>
+        <label style={fieldLabel}>Offer label<input value={current.discountLabel} placeholder="e.g. New season" onChange={event => set({ discountLabel: event.target.value })} style={formInput} /></label>
+        <label style={fieldLabel}>Starts<input type="datetime-local" value={current.discountStartsAt} onChange={event => set({ discountStartsAt: event.target.value })} style={formInput} /></label>
+        <label style={fieldLabel}>Ends<input type="datetime-local" value={current.discountEndsAt} onChange={event => set({ discountEndsAt: event.target.value })} style={formInput} /></label>
+      </div>
+      <label style={fieldLabel}>Features<input value={current.features} placeholder="Features, comma separated" onChange={event => set({ features: event.target.value })} style={{ ...formInput, width: '100%' }} /></label>
+      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginTop: 10 }}>{(['bookings', 'ordering', 'reviews', 'aiCopy'] as const).map(flag => <label key={flag} style={checkLabel}><input type="checkbox" checked={current[flag]} onChange={event => set({ [flag]: event.target.checked })} />{flag === 'aiCopy' ? 'AI copy' : flag}</label>)}</div>
+      <div style={{ display: 'flex', gap: 8, marginTop: 14 }}><button type="button" disabled={saving} onClick={() => void savePlan(plan)} style={saveBtn}><Save size={14} /> {saving ? 'Saving…' : plan ? 'Save pricing' : 'Add plan'}</button><button type="button" onClick={() => { setAdding(false); setEditingId(null) }} style={cancelBtn}>Cancel</button></div>
+    </div>
+  }
+
+  return <div style={pricingPanel}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 14, marginBottom: 8 }}><div><div style={{ fontSize: 17, fontWeight: 750 }}>Pricing studio</div><div style={{ color: 'rgba(10,12,16,0.52)', fontSize: 12.5, marginTop: 4 }}>Monthly, annual, and event pricing are live database values used by checkout.</div></div><Sparkles size={20} color="#D4A853" /></div>
+    {error && <div style={adminError}>{error}</div>}
+    {loading ? <div style={{ padding: '24px 0', color: 'rgba(10,12,16,0.5)' }}>Loading pricing…</div> : plans.filter(plan => !plan.isTrial).map(plan => {
+      const monthly = plan.monthlyPriceEtb ?? plan.priceEtb
+      const annual = plan.annualPriceEtb ?? monthly * 12
+      const annualSaving = Math.max(0, monthly * 12 - annual)
+      return <div key={plan.id} style={pricingCard}>{editingId === plan.id ? editor(plan) : <>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}><div><div style={{ fontSize: 15, fontWeight: 750 }}>{plan.name} <span style={{ color: 'rgba(10,12,16,0.4)', fontWeight: 450 }}>/{plan.slug}</span></div><div style={{ color: 'rgba(10,12,16,0.5)', fontSize: 12, marginTop: 5 }}>{plan.features.join(' · ') || 'No feature list yet'}</div></div><div style={{ display: 'flex', gap: 8, alignItems: 'center' }}><ToggleActive active={plan.isActive} onToggle={async () => { await updatePlan(plan.id, { isActive: !plan.isActive }); void load() }} /><button type="button" onClick={() => { setForm(pricingFormFrom(plan)); setEditingId(plan.id); setAdding(false) }} style={iconButton} aria-label={`Edit ${plan.name}`}><Pencil size={14} /></button></div></div>
+        <div style={{ display: 'flex', gap: 22, flexWrap: 'wrap', marginTop: 15 }}><div><div style={metricLabel}>Monthly</div><strong>{formatEtb(monthly)} ETB</strong></div><div><div style={metricLabel}>Annual</div><strong>{formatEtb(annual)} ETB</strong>{annualSaving > 0 && <span style={savingPill}>Save {formatEtb(annualSaving)}</span>}</div><div><div style={metricLabel}>Event offer</div><strong>{plan.discountType && plan.discountType !== 'none' ? plan.discountLabel || `${plan.discountValue}${plan.discountType === 'percent' ? '%' : ' ETB'} off` : 'None'}</strong></div></div>
+        <div style={{ display: 'flex', gap: 13, flexWrap: 'wrap', marginTop: 12 }}>{(['bookings', 'ordering', 'reviews', 'aiCopy'] as const).map(flag => <label key={flag} style={checkLabel}><input type="checkbox" checked={!!plan.featureFlags[flag]} onChange={async () => { await updatePlan(plan.id, { featureFlags: { ...plan.featureFlags, [flag]: !plan.featureFlags[flag] } }); void load() }} />{flag === 'aiCopy' ? 'AI copy' : flag}</label>)}</div>
+      </>}</div>
+    })}
+    {adding ? editor() : <button type="button" onClick={() => { setForm(blankPricingForm()); setAdding(true); setEditingId(null) }} style={addRowBtn}><Plus size={14} /> Add plan</button>}
+  </div>
 }
 
 function MethodsTab() {
@@ -308,3 +401,13 @@ const formInput: React.CSSProperties = { border: '1px solid rgba(10,12,16,0.1)',
 const saveBtn: React.CSSProperties = { background: '#D4A853', color: '#0A0C10', border: 'none', borderRadius: 9, padding: '9px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }
 const cancelBtn: React.CSSProperties = { background: 'none', border: 'none', color: 'rgba(10,12,16,0.5)', fontSize: 13, cursor: 'pointer' }
 const addRowBtn: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: '1px dashed rgba(10,12,16,0.2)', borderRadius: 10, padding: '10px 16px', fontSize: 13, color: 'rgba(10,12,16,0.6)', cursor: 'pointer', marginTop: 12, width: '100%', justifyContent: 'center' }
+const pricingPanel: React.CSSProperties = { background: '#fff', borderRadius: 18, border: '1px solid rgba(10,12,16,0.06)', padding: 20 }
+const pricingCard: React.CSSProperties = { border: '1px solid rgba(10,12,16,0.08)', borderRadius: 15, padding: 16, marginTop: 12, background: '#fff' }
+const pricingEditor: React.CSSProperties = { marginTop: 4, padding: 15, background: '#F6F3EE', borderRadius: 13 }
+const pricingGrid: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginBottom: 10 }
+const fieldLabel: React.CSSProperties = { display: 'flex', flexDirection: 'column', gap: 5, fontSize: 11.5, fontWeight: 700, color: 'rgba(10,12,16,0.62)' }
+const checkLabel: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'rgba(10,12,16,0.62)', textTransform: 'capitalize' }
+const metricLabel: React.CSSProperties = { color: 'rgba(10,12,16,0.43)', fontSize: 10.5, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 3 }
+const savingPill: React.CSSProperties = { display: 'inline-flex', marginLeft: 7, borderRadius: 999, padding: '3px 6px', background: 'rgba(22,101,52,0.1)', color: '#166534', fontSize: 10, fontWeight: 700 }
+const iconButton: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, border: '1px solid rgba(10,12,16,0.12)', borderRadius: 8, background: '#fff', color: '#0A0C10', cursor: 'pointer' }
+const adminError: React.CSSProperties = { color: '#991B1B', background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 10, padding: '9px 11px', fontSize: 12.5, margin: '12px 0' }

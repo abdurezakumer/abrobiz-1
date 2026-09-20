@@ -11,7 +11,8 @@ import CategoryMarquee from '../components/CategoryMarquee'
 import MagneticButton from '../components/MagneticButton'
 import FaqAccordion from '../components/FaqAccordion'
 import AbroBizLogo from '../components/AbroBizLogo'
-import type { Plan } from '../types'
+import type { BillingInterval, Plan } from '../types'
+import { formatEtb, getPlanPrice } from '../lib/planPricing'
 
 const ROTATING_WORDS = ['restaurants', 'cafés', 'salons', 'shops']
 
@@ -42,6 +43,7 @@ const FAQS = [
 
 export default function Landing() {
   const [plans, setPlans] = useState<Plan[]>([])
+  const [billingCycle, setBillingCycle] = useState<BillingInterval>('month')
   const [showcase, setShowcase] = useState<PublicShowcaseBusiness[]>([])
   const [showcaseQuery, setShowcaseQuery] = useState('')
   const [showcaseCategory, setShowcaseCategory] = useState('All')
@@ -232,9 +234,17 @@ export default function Landing() {
       {/* Pricing */}
       {plans.length > 0 && (
         <div id="pricing" style={{ maxWidth: 900, margin: '0 auto', padding: '20px 20px 80px' }}>
-          <h2 style={{ textAlign: 'center', fontFamily: 'Outfit, sans-serif', fontSize: 26, fontWeight: 600, marginBottom: 36 }}>Simple, transparent pricing</h2>
+          <h2 style={{ textAlign: 'center', fontFamily: 'Outfit, sans-serif', fontSize: 26, fontWeight: 600, marginBottom: 14 }}>Simple, transparent pricing</h2>
+          <p style={{ textAlign: 'center', color: 'rgba(240,237,231,0.52)', fontSize: 13.5, margin: '0 0 18px' }}>Choose monthly flexibility or save with an annual plan.</p>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 34 }}>
+            <div style={landingBillingToggle} role="group" aria-label="Pricing billing cycle">
+              {(['month', 'year'] as const).map(cycle => <button key={cycle} type="button" onClick={() => setBillingCycle(cycle)} style={{ ...landingBillingButton, ...(billingCycle === cycle ? landingBillingButtonActive : {}) }}>{cycle === 'month' ? 'Monthly' : 'Annual'}</button>)}
+            </div>
+          </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 20 }}>
-            {plans.map((plan, i) => (
+            {plans.map((plan, i) => {
+              const pricing = getPlanPrice(plan, billingCycle)
+              return (
               <motion.div
                 key={plan.id}
                 initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.4, delay: i * 0.08 }}
@@ -245,10 +255,15 @@ export default function Landing() {
                   borderRadius: 18, padding: 26,
                 }}
               >
-                <div style={{ fontSize: 15, fontWeight: 600 }}>{plan.name}</div>
-                <div style={{ fontFamily: 'Outfit, sans-serif', fontSize: 32, fontWeight: 700, marginTop: 10 }}>
-                  {plan.priceEtb} <span style={{ fontSize: 14, fontWeight: 400, color: 'rgba(240,237,231,0.45)' }}>ETB/{plan.billingInterval}</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'flex-start' }}>
+                  <div style={{ fontSize: 15, fontWeight: 650 }}>{plan.name}</div>
+                  {pricing.hasDiscount && <span style={landingOfferBadge}>{pricing.discountLabel}</span>}
                 </div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap', fontFamily: 'Outfit, sans-serif', fontSize: 32, fontWeight: 700, marginTop: 10 }}>
+                  {formatEtb(pricing.priceEtb)} <span style={{ fontSize: 14, fontWeight: 400, color: 'rgba(240,237,231,0.45)' }}>ETB/{billingCycle}</span>
+                  {pricing.hasDiscount && <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, fontWeight: 400, color: 'rgba(240,237,231,0.42)', textDecoration: 'line-through' }}>{formatEtb(pricing.originalPriceEtb)} ETB</span>}
+                </div>
+                {billingCycle === 'year' && pricing.annualSavingsEtb > 0 && <div style={{ color: '#9BD5A7', fontSize: 12, fontWeight: 650, marginTop: 5 }}>Save {formatEtb(pricing.annualSavingsEtb)} ETB vs monthly</div>}
                 <ul style={{ listStyle: 'none', padding: 0, margin: '18px 0 22px', display: 'flex', flexDirection: 'column', gap: 9 }}>
                   {plan.features.map(f => (
                     <li key={f} style={{ display: 'flex', gap: 8, fontSize: 13.5, color: 'rgba(240,237,231,0.65)' }}>
@@ -260,7 +275,8 @@ export default function Landing() {
                   Get started
                 </Link>
               </motion.div>
-            ))}
+              )
+            })}
           </div>
         </div>
       )}
@@ -334,6 +350,10 @@ export default function Landing() {
 }
 
 const navLinkStyle: React.CSSProperties = { color: 'rgba(240,237,231,0.55)', textDecoration: 'none', fontSize: 13.5, fontWeight: 500 }
+const landingBillingToggle: React.CSSProperties = { display: 'inline-flex', padding: 4, gap: 3, borderRadius: 11, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }
+const landingBillingButton: React.CSSProperties = { border: 'none', borderRadius: 8, padding: '8px 18px', background: 'transparent', color: 'rgba(240,237,231,0.56)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }
+const landingBillingButtonActive: React.CSSProperties = { background: '#D4A853', color: '#0A0C10' }
+const landingOfferBadge: React.CSSProperties = { display: 'inline-flex', borderRadius: 999, padding: '5px 8px', background: 'rgba(212,168,83,0.16)', color: '#F0C978', fontSize: 10.5, fontWeight: 800, whiteSpace: 'nowrap' }
 const footerHeading: React.CSSProperties = { fontSize: 12.5, fontWeight: 700, color: 'rgba(240,237,231,0.4)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 12 }
 const footerLink: React.CSSProperties = { display: 'block', fontSize: 13, color: 'rgba(240,237,231,0.55)', textDecoration: 'none', marginBottom: 9 }
 const showcaseEyebrow: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 6, color: '#D4A853', fontSize: 10.5, letterSpacing: 1.5, fontWeight: 700 }

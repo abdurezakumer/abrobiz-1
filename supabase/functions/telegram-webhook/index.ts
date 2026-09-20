@@ -122,7 +122,7 @@ async function handleInfoForChat(chatId: string, ctx: Ctx): Promise<void> {
 async function handlePlans(chatId: string, ctx: Ctx): Promise<void> {
   const { data: plans } = await ctx.db
     .from('plans')
-    .select('name, price_etb, billing_interval, features')
+    .select('id, name, features')
     .eq('is_active', true)
     .eq('is_trial', false)
     .order('sort_order', { ascending: true })
@@ -136,7 +136,12 @@ async function handlePlans(chatId: string, ctx: Ctx): Promise<void> {
   const lines = ['💎 AbroBiz plans', '']
   for (const plan of plans) {
     const features = Array.isArray(plan.features) ? plan.features.slice(0, 6).join(' · ') : ''
-    lines.push(`${plan.name} — ${plan.price_etb} ETB/${plan.billing_interval}`)
+    lines.pop()
+    const [monthly, annual] = await Promise.all([
+      ctx.db.rpc('plan_price_for_cycle', { p_plan_id: plan.id, p_billing_cycle: 'month' }),
+      ctx.db.rpc('plan_price_for_cycle', { p_plan_id: plan.id, p_billing_cycle: 'year' }),
+    ])
+    lines.push(`${plan.name} — ${Number(monthly.data ?? 0)} ETB/month · ${Number(annual.data ?? 0)} ETB/year`)
     if (features) lines.push(`  ${features}`)
     lines.push('')
   }
@@ -456,7 +461,7 @@ async function handlePayCommand(chatId: string, ctx: Ctx): Promise<void> {
 
 async function handlePhoto(chatId: string, photos: TelegramPhotoSize[], ctx: Ctx): Promise<void> {
   const { data: pending } = await ctx.db.from('telegram_pending_actions').select('*').eq('telegram_chat_id', chatId).maybeSingle()
-  if (!pending || pending.state !== 'awaiting_proof' || !pending.business_id || !pending.plan_id || !pending.payment_method_id) {
+  if (!pending || pending.state !== 'awaiting_proof' || !pending.business_id || !pending.plan_id || !pending.payment_method_id || !pending.billing_cycle) {
     await ctx.tg.sendMessage(chatId, 'Send /pay first to choose a plan and payment method, then send your proof photo.')
     return
   }
@@ -466,8 +471,10 @@ async function handlePhoto(chatId: string, photos: TelegramPhotoSize[], ctx: Ctx
     await ctx.tg.sendMessage(chatId, 'Payment proof submission is temporarily unavailable. Please contact /support.')
     return
   }
-  const { data: plan } = await ctx.db.from('plans').select('id, price_etb, billing_interval').eq('id', pending.plan_id).eq('is_active', true).eq('is_trial', false).single()
-  if (!plan) {
+  const { data: plan } = await ctx.db.from('plans').select('id').eq('id', pending.plan_id).eq('is_active', true).eq('is_trial', false).single()
+  const { data: calculatedAmount } = plan ? await ctx.db.rpc('plan_price_for_cycle', { p_plan_id: pending.plan_id, p_billing_cycle: pending.billing_cycle }) : { data: null }
+  const amountEtb = Number(calculatedAmount)
+  if (!plan || !Number.isFinite(amountEtb)) {
     await ctx.tg.sendMessage(chatId, "That plan isn't available anymore — send /pay to start over.")
     return
   }
@@ -515,8 +522,8 @@ async function handlePhoto(chatId: string, photos: TelegramPhotoSize[], ctx: Ctx
     p_idempotency_key: `tg_${archiveReference}`,
     p_business_id: pending.business_id,
     p_plan_id: pending.plan_id,
-    p_billing_cycle: plan.billing_interval,
-    p_amount_etb: plan.price_etb,
+    p_billing_cycle: pending.billing_cycle,
+    p_amount_etb: amountEtb,
     p_payment_method_id: pending.payment_method_id,
     p_telegram_proof_id: proof.id,
     p_owner_note: '',
@@ -543,7 +550,15 @@ async function handlePlanSelected(chatId: string, planId: string, ctx: Ctx): Pro
     await ctx.tg.sendMessage(chatId, 'That plan is no longer available. Send /pay to choose another plan.')
     return
   }
-  await ctx.db.from('telegram_pending_actions').update({ plan_id: plan.id, payment_method_id: null, state: 'awaiting_method', updated_at: new Date().toISOString() }).eq('telegram_chat_id', chatId)
+  await ctx.db.from('telegram_pending_actions').update({ plan_id: plan.id, billing_cycle: null, payment_method_id: null, state: 'awaiting_cycle', updated_at: new Date().toISOString() }).eq('telegram_chat_id', chatId)
+  await ctx.tg.sendMessage(chatId, `Plan selected: ${plan.name}. Choose a billing cycle:`, {
+    replyMarkup: buildInlineKeyboard([
+      [{ text: 'Monthly', callback_data: `pay_cycle:${plan.id}:month` }],
+      [{ text: 'Annual', callback_data: `pay_cycle:${plan.id}:year` }],
+      [{ text: 'Cancel', callback_data: 'pay:cancel' }],
+    ]),
+  })
+  return
   const { data: methods } = await ctx.db.from('payment_methods').select('id, name').eq('is_active', true).order('sort_order', { ascending: true })
   if (!methods || methods.length === 0) {
     await ctx.tg.sendMessage(chatId, 'No payment methods are configured yet — please contact /support.')
@@ -554,18 +569,57 @@ async function handlePlanSelected(chatId: string, planId: string, ctx: Ctx): Pro
   })
 }
 
+async function handleCycleSelected(chatId: string, planId: string, cycle: string, ctx: Ctx): Promise<void> {
+  if (cycle !== 'month' && cycle !== 'year') {
+    await ctx.tg.sendMessage(chatId, 'Please choose a valid billing cycle or send /pay to start again.')
+    return
+  }
+  const { data: pending } = await ctx.db.from('telegram_pending_actions').select('*').eq('telegram_chat_id', chatId).maybeSingle()
+  if (!pending?.business_id || pending.state !== 'awaiting_cycle' || pending.plan_id !== planId) {
+    await ctx.tg.sendMessage(chatId, 'This payment session has expired. Send /pay to start again.')
+    return
+  }
+  const { data: plan } = await ctx.db.from('plans').select('id, name').eq('id', planId).eq('is_active', true).eq('is_trial', false).maybeSingle()
+  const { data: calculatedAmount } = plan ? await ctx.db.rpc('plan_price_for_cycle', { p_plan_id: planId, p_billing_cycle: cycle }) : { data: null }
+  if (!plan || !Number.isFinite(Number(calculatedAmount))) {
+    await ctx.tg.sendMessage(chatId, 'That plan is no longer available. Send /pay to choose another plan.')
+    return
+  }
+  await ctx.db.from('telegram_pending_actions').update({ billing_cycle: cycle, state: 'awaiting_method', updated_at: new Date().toISOString() }).eq('telegram_chat_id', chatId)
+  const { data: methods } = await ctx.db.from('payment_methods').select('id, name').eq('is_active', true).order('sort_order', { ascending: true })
+  if (!methods || methods.length === 0) {
+    await ctx.tg.sendMessage(chatId, 'No payment methods are configured yet — please contact /support.')
+    return
+  }
+  await ctx.tg.sendMessage(chatId, `Plan selected: ${plan.name} — ${Number(calculatedAmount)} ETB/${cycle}. How are you paying?`, {
+    replyMarkup: buildInlineKeyboard(methods.map(method => [{ text: method.name, callback_data: `pay_method:${method.id}` }])),
+  })
+}
+
 async function handleMethodSelected(chatId: string, methodId: string, ctx: Ctx): Promise<void> {
   const { data: pending } = await ctx.db.from('telegram_pending_actions').select('*').eq('telegram_chat_id', chatId).maybeSingle()
-  if (!pending?.business_id || pending.state !== 'awaiting_method' || !pending.plan_id) {
+  if (!pending?.business_id || pending.state !== 'awaiting_method' || !pending.plan_id || !pending.billing_cycle) {
     await ctx.tg.sendMessage(chatId, 'This payment session has expired. Send /pay to start again.')
     return
   }
   const { data: method } = await ctx.db.from('payment_methods').select('id, name, account_name, account_number, instructions').eq('id', methodId).eq('is_active', true).maybeSingle()
   const { data: plan } = await ctx.db.from('plans').select('name, price_etb, billing_interval').eq('id', pending.plan_id).eq('is_active', true).eq('is_trial', false).maybeSingle()
-  if (!method || !plan) {
+  const { data: calculatedAmount } = plan ? await ctx.db.rpc('plan_price_for_cycle', { p_plan_id: pending.plan_id, p_billing_cycle: pending.billing_cycle }) : { data: null }
+  if (!method || !plan || !Number.isFinite(Number(calculatedAmount))) {
     await ctx.tg.sendMessage(chatId, 'That payment option is no longer available. Send /pay to start again.')
     return
   }
+  await ctx.db.from('telegram_pending_actions').update({ payment_method_id: method.id, state: 'awaiting_proof', updated_at: new Date().toISOString() }).eq('telegram_chat_id', chatId)
+  const paymentText = [
+    `Send payment via ${method.name}:`,
+    `${method.account_name} — ${method.account_number}`,
+    `Full payment required: ${Number(calculatedAmount)} ETB/${pending.billing_cycle}`,
+    method.instructions,
+    '',
+    'Then send one clear photo of your receipt here. Use /cancel to stop.',
+  ].filter(Boolean).join('\n')
+  await ctx.tg.sendMessage(chatId, paymentText, { replyMarkup: buildInlineKeyboard([[{ text: 'Cancel', callback_data: 'pay:cancel' }]]) })
+  return
   await ctx.db.from('telegram_pending_actions').update({ payment_method_id: method.id, state: 'awaiting_proof', updated_at: new Date().toISOString() }).eq('telegram_chat_id', chatId)
   const text = [
     `Send payment via ${method.name}:`,
@@ -607,6 +661,9 @@ async function handleCallback(cb: TelegramCallbackQuery, ctx: Ctx): Promise<void
       await ctx.tg.sendMessage(chatId, supportMessage())
     } else if (data.startsWith('pay_plan:')) {
       await handlePlanSelected(chatId, data.slice('pay_plan:'.length), ctx)
+    } else if (data.startsWith('pay_cycle:')) {
+      const [, planId, cycle] = data.split(':')
+      await handleCycleSelected(chatId, planId ?? '', cycle ?? '', ctx)
     } else if (data.startsWith('pay_method:')) {
       await handleMethodSelected(chatId, data.slice('pay_method:'.length), ctx)
     } else if (data.startsWith('approve:')) {

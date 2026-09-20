@@ -83,8 +83,12 @@ if (import.meta.main) {
         .select('id, price_etb, billing_interval, is_active, is_trial')
         .eq('id', planId)
         .maybeSingle()
-      const fullPlanAmount = Number(selectedPlan?.price_etb)
-      if (!selectedPlan?.is_active || selectedPlan.is_trial || selectedPlan.billing_interval !== billingCycle || !Number.isFinite(fullPlanAmount)) {
+      const { data: calculatedAmount, error: pricingError } = await db.rpc('plan_price_for_cycle', {
+        p_plan_id: planId,
+        p_billing_cycle: billingCycle,
+      })
+      const fullPlanAmount = Number(calculatedAmount)
+      if (pricingError || !selectedPlan?.is_active || selectedPlan.is_trial || !Number.isFinite(fullPlanAmount)) {
         return json({ error: 'The selected payment plan is no longer available at that price. Please choose the plan again.' }, 400, req)
       }
       if (hasTelegramProof) {
@@ -101,7 +105,7 @@ if (import.meta.main) {
           p_idempotency_key: idempotencyKey,
           p_business_id: businessId,
           p_plan_id: planId,
-          p_billing_cycle: selectedPlan.billing_interval,
+          p_billing_cycle: billingCycle,
           p_amount_etb: fullPlanAmount,
           p_payment_method_id: paymentMethodId,
           p_telegram_proof_id: telegramProofId,
@@ -142,7 +146,7 @@ if (import.meta.main) {
         p_idempotency_key: idempotencyKey,
         p_business_id: businessId,
         p_plan_id: planId,
-        p_billing_cycle: selectedPlan.billing_interval,
+        p_billing_cycle: billingCycle,
         p_amount_etb: fullPlanAmount,
         p_payment_method_id: paymentMethodId,
         p_proof_url: proofPath,

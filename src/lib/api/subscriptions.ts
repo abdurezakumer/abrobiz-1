@@ -24,6 +24,13 @@ function mapSubscription(row: any): Subscription {
           trialDays: row.plans.trial_days ?? undefined,
           isActive: row.plans.is_active,
           sortOrder: row.plans.sort_order,
+          monthlyPriceEtb: row.plans.monthly_price_etb == null ? undefined : Number(row.plans.monthly_price_etb),
+          annualPriceEtb: row.plans.annual_price_etb == null ? undefined : Number(row.plans.annual_price_etb),
+          discountType: row.plans.discount_type ?? 'none',
+          discountValue: Number(row.plans.discount_value ?? 0),
+          discountLabel: row.plans.discount_label ?? '',
+          discountStartsAt: row.plans.discount_starts_at ?? null,
+          discountEndsAt: row.plans.discount_ends_at ?? null,
         }
       : undefined,
     status: row.status,
@@ -36,7 +43,7 @@ function mapSubscription(row: any): Subscription {
 export async function getSubscription(businessId: string): Promise<Subscription | null> {
   const { data, error } = await supabase
     .from('subscriptions')
-    .select('id, business_id, plan_id, status, start_date, end_date, auto_renew, created_at, updated_at, plans(id, slug, name, price_etb, billing_interval, features, feature_flags, is_trial, trial_days, is_active, sort_order)')
+    .select('id, business_id, plan_id, status, start_date, end_date, auto_renew, created_at, updated_at, plans(id, slug, name, price_etb, billing_interval, monthly_price_etb, annual_price_etb, discount_type, discount_value, discount_label, discount_starts_at, discount_ends_at, features, feature_flags, is_trial, trial_days, is_active, sort_order)')
     .eq('business_id', businessId)
     .maybeSingle()
   if (error) throw error

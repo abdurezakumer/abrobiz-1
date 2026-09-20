@@ -169,6 +169,13 @@ export interface Plan {
   trialDays?: number
   isActive: boolean
   sortOrder: number
+  monthlyPriceEtb?: number
+  annualPriceEtb?: number
+  discountType?: 'none' | 'percent' | 'fixed'
+  discountValue?: number
+  discountLabel?: string
+  discountStartsAt?: string | null
+  discountEndsAt?: string | null
 }
 
 export interface PaymentMethod {
@@ -179,6 +186,13 @@ export interface PaymentMethod {
   instructions: string
   isActive: boolean
   sortOrder: number
+  monthlyPriceEtb?: number
+  annualPriceEtb?: number
+  discountType?: 'none' | 'percent' | 'fixed'
+  discountValue?: number
+  discountLabel?: string
+  discountStartsAt?: string | null
+  discountEndsAt?: string | null
 }
 
 export type SubscriptionStatus = 'trial' | 'active' | 'expired' | 'cancelled'

@@ -10,12 +10,14 @@ import { uploadPaymentProof, submitPayment, listPaymentsForBusiness } from '../l
 import { daysRemaining } from '../lib/api/subscriptions'
 import { getOrCreateBusinessTelegramLink, disconnectTelegram, telegramPaymentDeepLink, notifyAdminsOfPayment, type TelegramLinkStatus } from '../lib/api/telegram'
 import { friendlyError } from '../lib/errors'
-import type { Plan, PaymentMethod, Payment } from '../types'
+import type { BillingInterval, Plan, PaymentMethod, Payment } from '../types'
+import { formatEtb, getPlanPrice } from '../lib/planPricing'
 import { fileInputStyle, PAYMENT_UPLOAD_ACCEPT, createClientUuid, detectedUploadType, takeSelectedFile } from '../lib/fileUpload'
 
 interface PaymentDraft {
   planId: string | null
   paymentMethodId: string | null
+  billingCycle: BillingInterval
   note: string
   proofFlowOpen: boolean
 }
@@ -33,6 +35,7 @@ function readPaymentDraft(businessId: string): PaymentDraft | null {
     const draft: PaymentDraft = {
       planId: typeof parsed.planId === 'string' ? parsed.planId : null,
       paymentMethodId: typeof parsed.paymentMethodId === 'string' ? parsed.paymentMethodId : null,
+      billingCycle: parsed.billingCycle === 'year' ? 'year' : 'month',
       note: typeof parsed.note === 'string' ? parsed.note : '',
       proofFlowOpen: parsed.proofFlowOpen === true,
     }
@@ -70,6 +73,7 @@ export default function Billing() {
   const [showOptionsOverlay, setShowOptionsOverlay] = useState(true)
   const [history, setHistory] = useState<Payment[]>([])
   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null)
+  const [billingCycle, setBillingCycle] = useState<BillingInterval>('month')
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod | null>(null)
   const [proofFile, setProofFile] = useState<File | null>(null)
   const [proofFileName, setProofFileName] = useState('')
@@ -120,6 +124,7 @@ export default function Billing() {
           if (current && availablePlans.some(plan => plan.id === current.id)) return current
           return restoredPlan
         })
+        if (draft?.billingCycle) setBillingCycle(draft.billingCycle)
         if (draft?.note) setNote(current => current || draft.note)
       })
       .catch(err => {
@@ -175,10 +180,11 @@ export default function Billing() {
     writePaymentDraft(business.id, {
       planId: selectedPlan?.id ?? null,
       paymentMethodId: selectedMethod?.id ?? null,
+      billingCycle,
       note,
       proofFlowOpen,
     })
-  }, [business?.id, note, plansError, proofFlowOpen, selectedMethod?.id, selectedPlan, selectedPlan?.id])
+  }, [business?.id, billingCycle, note, plansError, proofFlowOpen, selectedMethod?.id, selectedPlan, selectedPlan?.id])
 
   useEffect(() => {
     if (!proofFlowOpen) return
@@ -360,8 +366,8 @@ export default function Billing() {
       const payment = await submitPayment({
         businessId: business.id,
         planId: selectedPlan.id,
-        billingCycle: selectedPlan.billingInterval,
-        amountEtb: selectedPlan.priceEtb,
+        billingCycle,
+        amountEtb: getPlanPrice(selectedPlan, billingCycle).priceEtb,
         paymentMethodId: selectedMethod.id,
         proofPath,
         ownerNote: note,
@@ -460,6 +466,13 @@ export default function Billing() {
         <>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
             <div style={{ fontSize: 15, fontWeight: 600, color: '#0A0C10' }}>Choose a plan</div>
+            <div style={billingCycleToggle} role="group" aria-label="Billing cycle">
+              {(['month', 'year'] as const).map(cycle => (
+                <button key={cycle} type="button" onClick={() => setBillingCycle(cycle)} style={{ ...billingCycleButton, ...(billingCycle === cycle ? billingCycleButtonActive : {}) }}>
+                  {cycle === 'month' ? 'Monthly' : 'Annual'}
+                </button>
+              ))}
+            </div>
             {(plansLoading || methodsLoading) && <div style={{ fontSize: 12, color: 'rgba(10,12,16,0.45)' }}>Updating available options…</div>}
           </div>
           {error && <div role="alert" style={inlineError}>{error}</div>}
@@ -481,12 +494,19 @@ export default function Billing() {
             </div>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14, marginBottom: 30 }}>
-              {plans.map(plan => (
-                <div key={plan.id} style={{ background: '#fff', borderRadius: 16, border: '1px solid rgba(10,12,16,0.06)', padding: 20 }}>
-                  <div style={{ fontSize: 15, fontWeight: 600, color: '#0A0C10' }}>{plan.name}</div>
-                  <div style={{ fontSize: 26, fontWeight: 700, color: '#0A0C10', marginTop: 6, fontFamily: 'Outfit, sans-serif' }}>
-                    {plan.priceEtb} <span style={{ fontSize: 13, fontWeight: 400, color: 'rgba(10,12,16,0.45)' }}>ETB/{plan.billingInterval}</span>
+              {plans.map(plan => {
+                const pricing = getPlanPrice(plan, billingCycle)
+                return <div key={plan.id} style={{ background: '#fff', borderRadius: 18, border: pricing.hasDiscount ? '1.5px solid rgba(212,168,83,0.7)' : '1px solid rgba(10,12,16,0.06)', padding: 20, boxShadow: pricing.hasDiscount ? '0 12px 30px rgba(212,168,83,0.12)' : 'none' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: '#0A0C10' }}>{plan.name}</div>
+                    {pricing.hasDiscount && <span style={offerBadge}>{pricing.discountLabel}</span>}
                   </div>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+                    <span style={{ fontSize: 28, fontWeight: 750, color: '#0A0C10', fontFamily: 'Outfit, sans-serif' }}>{formatEtb(pricing.priceEtb)}</span>
+                    <span style={{ fontSize: 13, color: 'rgba(10,12,16,0.45)' }}>ETB/{billingCycle}</span>
+                    {pricing.hasDiscount && <span style={{ fontSize: 13, color: 'rgba(10,12,16,0.42)', textDecoration: 'line-through' }}>{formatEtb(pricing.originalPriceEtb)} ETB</span>}
+                  </div>
+                  {billingCycle === 'year' && pricing.annualSavingsEtb > 0 && <div style={savingText}>Save {formatEtb(pricing.annualSavingsEtb)} ETB vs monthly</div>}
                   <ul style={{ listStyle: 'none', padding: 0, margin: '14px 0', display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {plan.features.map(f => (
                       <li key={f} style={{ display: 'flex', gap: 8, fontSize: 13, color: 'rgba(10,12,16,0.65)' }}>
@@ -494,16 +514,22 @@ export default function Billing() {
                       </li>
                     ))}
                   </ul>
-                  <button onClick={() => { clearPaymentDraft(business.id); setProofFlowOpen(false); setSelectedPlan(plan); setSelectedMethod(methods[0] ?? null); setProofPath(null); setProofFile(null); setProofFileName(''); setNote(''); setSubmitted(false); setSubmittedPaymentId(null); setError('') }} style={selectBtn}>Select</button>
+                  <button onClick={() => { clearPaymentDraft(business.id); setProofFlowOpen(false); setSelectedPlan(plan); setSelectedMethod(methods[0] ?? null); setProofPath(null); setProofFile(null); setProofFileName(''); setNote(''); setSubmitted(false); setSubmittedPaymentId(null); setError('') }} style={selectBtn}>Select {plan.name}</button>
                 </div>
-              ))}
+              })}
             </div>
           )}
         </>
       ) : (
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} style={{ background: '#fff', borderRadius: 16, border: '1.5px solid #D4A853', padding: 22, marginBottom: 30 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <div style={{ fontSize: 15, fontWeight: 600 }}>Full payment for {selectedPlan.name} — {selectedPlan.priceEtb} ETB</div>
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 700 }}>Full payment for {selectedPlan.name}</div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
+                <span style={{ fontSize: 22, fontWeight: 750, fontFamily: 'Outfit, sans-serif' }}>{formatEtb(getPlanPrice(selectedPlan, billingCycle).priceEtb)} ETB/{billingCycle}</span>
+                {getPlanPrice(selectedPlan, billingCycle).hasDiscount && <span style={{ color: 'rgba(10,12,16,0.45)', textDecoration: 'line-through', fontSize: 12.5 }}>{formatEtb(getPlanPrice(selectedPlan, billingCycle).originalPriceEtb)} ETB</span>}
+              </div>
+            </div>
             <button onClick={() => { clearPaymentDraft(business.id); setProofFlowOpen(false); setSelectedPlan(null); setSelectedMethod(methods[0] ?? null); setProofPath(null); setProofFile(null); setProofFileName(''); setNote('') }} style={{ background: 'none', border: 'none', fontSize: 13, color: 'rgba(10,12,16,0.5)', cursor: 'pointer' }}>Cancel</button>
           </div>
 
@@ -737,6 +763,11 @@ function StatusBadge({ status, reason }: { status: Payment['status']; reason?: s
 }
 
 const selectBtn: React.CSSProperties = { background: '#D4A853', color: '#0A0C10', border: 'none', borderRadius: 10, padding: '10px 18px', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', width: '100%' }
+const billingCycleToggle: React.CSSProperties = { display: 'inline-flex', padding: 3, gap: 2, borderRadius: 10, background: '#F0EDE7', border: '1px solid rgba(10,12,16,0.08)' }
+const billingCycleButton: React.CSSProperties = { border: 'none', borderRadius: 7, padding: '7px 11px', background: 'transparent', color: 'rgba(10,12,16,0.55)', fontSize: 12, fontWeight: 700, cursor: 'pointer' }
+const billingCycleButtonActive: React.CSSProperties = { background: '#0A0C10', color: '#F0EDE7', boxShadow: '0 2px 5px rgba(10,12,16,0.14)' }
+const offerBadge: React.CSSProperties = { display: 'inline-flex', borderRadius: 999, padding: '5px 8px', background: 'rgba(212,168,83,0.16)', color: '#8A6417', fontSize: 10.5, fontWeight: 800, whiteSpace: 'nowrap' }
+const savingText: React.CSSProperties = { color: '#166534', fontSize: 11.5, fontWeight: 700, marginTop: 5 }
 const methodChip: React.CSSProperties = { border: 'none', borderRadius: 8, padding: '8px 14px', fontSize: 13, cursor: 'pointer', fontWeight: 500 }
 const uploadSurface: React.CSSProperties = { display: 'block', width: '100%', padding: 0, marginBottom: 14, background: 'transparent', cursor: 'pointer', textAlign: 'left' }
 const telegramPayBtn: React.CSSProperties = { display: 'block', width: '100%', textAlign: 'center', background: '#26A5E4', color: '#fff', borderRadius: 10, padding: '10px 18px', fontSize: 13.5, fontWeight: 600, textDecoration: 'none', marginTop: 10 }

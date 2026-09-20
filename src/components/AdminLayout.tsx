@@ -12,6 +12,7 @@ const navItems = [
   { to: '/admin/marketing', label: 'Marketing', icon: TrendingUp, permission: 'marketing.read' as const },
   { to: '/admin/businesses', label: 'Businesses', icon: Building2, permission: 'businesses.read' as const },
   { to: '/admin/payments', label: 'Payments', icon: CreditCard, permission: 'payments.read' as const },
+  { to: '/admin/pricing', label: 'Plan pricing', icon: CreditCard, permission: 'plans.manage' as const },
   { to: '/admin/announcements', label: 'Announcements', icon: Megaphone, permission: 'announcements.send' as const },
   { to: '/admin/support', label: 'Support requests', icon: LifeBuoy, permission: 'support.manage' as const },
   { to: '/admin/settings', label: 'Settings', icon: SlidersHorizontal, permission: 'templates.manage' as const },

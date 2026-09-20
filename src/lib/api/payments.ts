@@ -27,6 +27,13 @@ function mapPayment(row: any): Payment {
           trialDays: row.plans.trial_days ?? undefined,
           isActive: row.plans.is_active,
           sortOrder: row.plans.sort_order,
+          monthlyPriceEtb: row.plans.monthly_price_etb == null ? undefined : Number(row.plans.monthly_price_etb),
+          annualPriceEtb: row.plans.annual_price_etb == null ? undefined : Number(row.plans.annual_price_etb),
+          discountType: row.plans.discount_type ?? 'none',
+          discountValue: Number(row.plans.discount_value ?? 0),
+          discountLabel: row.plans.discount_label ?? '',
+          discountStartsAt: row.plans.discount_starts_at ?? null,
+          discountEndsAt: row.plans.discount_ends_at ?? null,
         }
       : undefined,
     billingCycle: row.billing_cycle,
@@ -121,7 +128,7 @@ export async function submitPayment(input: {
 export async function listPaymentsForBusiness(businessId: string): Promise<Payment[]> {
   const { data, error } = await supabase
     .from('payments')
-    .select('id, business_id, plan_id, billing_cycle, amount_etb, payment_method_id, proof_url, telegram_proof_id, owner_note, status, reviewed_by, reviewed_at, rejection_reason, created_at, plans(id, slug, name, price_etb, billing_interval, features, feature_flags, is_trial, trial_days, is_active, sort_order)')
+    .select('id, business_id, plan_id, billing_cycle, amount_etb, payment_method_id, proof_url, telegram_proof_id, owner_note, status, reviewed_by, reviewed_at, rejection_reason, created_at, plans(id, slug, name, price_etb, billing_interval, monthly_price_etb, annual_price_etb, discount_type, discount_value, discount_label, discount_starts_at, discount_ends_at, features, feature_flags, is_trial, trial_days, is_active, sort_order)')
     .eq('business_id', businessId)
     .order('created_at', { ascending: false })
     .limit(200)
@@ -134,7 +141,7 @@ export async function listPaymentsForBusiness(businessId: string): Promise<Payme
 export async function adminListPendingPayments(): Promise<Payment[]> {
   const { data, error } = await supabase
     .from('payments')
-    .select('id, business_id, plan_id, billing_cycle, amount_etb, payment_method_id, proof_url, telegram_proof_id, owner_note, status, reviewed_by, reviewed_at, rejection_reason, created_at, plans(id, slug, name, price_etb, billing_interval, features, feature_flags, is_trial, trial_days, is_active, sort_order), businesses(name, slug)')
+    .select('id, business_id, plan_id, billing_cycle, amount_etb, payment_method_id, proof_url, telegram_proof_id, owner_note, status, reviewed_by, reviewed_at, rejection_reason, created_at, plans(id, slug, name, price_etb, billing_interval, monthly_price_etb, annual_price_etb, discount_type, discount_value, discount_label, discount_starts_at, discount_ends_at, features, feature_flags, is_trial, trial_days, is_active, sort_order), businesses(name, slug)')
     .eq('status', 'pending')
     .order('created_at', { ascending: true })
     .limit(200)
@@ -145,7 +152,7 @@ export async function adminListPendingPayments(): Promise<Payment[]> {
 export async function adminListAllPayments(): Promise<Payment[]> {
   const { data, error } = await supabase
     .from('payments')
-    .select('id, business_id, plan_id, billing_cycle, amount_etb, payment_method_id, proof_url, telegram_proof_id, owner_note, status, reviewed_by, reviewed_at, rejection_reason, created_at, plans(id, slug, name, price_etb, billing_interval, features, feature_flags, is_trial, trial_days, is_active, sort_order), businesses(name, slug)')
+    .select('id, business_id, plan_id, billing_cycle, amount_etb, payment_method_id, proof_url, telegram_proof_id, owner_note, status, reviewed_by, reviewed_at, rejection_reason, created_at, plans(id, slug, name, price_etb, billing_interval, monthly_price_etb, annual_price_etb, discount_type, discount_value, discount_label, discount_starts_at, discount_ends_at, features, feature_flags, is_trial, trial_days, is_active, sort_order), businesses(name, slug)')
     .order('created_at', { ascending: false })
     .limit(200)
   if (error) throw error
