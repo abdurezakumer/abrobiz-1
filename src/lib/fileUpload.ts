@@ -54,6 +54,22 @@ export function takeSelectedFile(input: HTMLInputElement): File | null {
   return file
 }
 
+/** File.arrayBuffer() is missing in some older mobile WebViews. */
+export async function readFileAsArrayBuffer(file: Blob): Promise<ArrayBuffer> {
+  if (typeof file.arrayBuffer === 'function') return file.arrayBuffer()
+  if (typeof FileReader === 'undefined') throw new Error('This browser cannot read the selected photo. Please update your browser and try again.')
+  return new Promise<ArrayBuffer>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      if (reader.result instanceof ArrayBuffer) resolve(reader.result)
+      else reject(new Error('This browser could not read the selected photo. Please try another photo.'))
+    }
+    reader.onerror = () => reject(new Error('This browser could not read the selected photo. Please try another photo.'))
+    reader.onabort = () => reject(new Error('Reading the selected photo was interrupted.'))
+    reader.readAsArrayBuffer(file)
+  })
+}
+
 /**
  * Camera photos can be much larger than the storage limit. Compress only
  * oversized supported images in the browser before sending them, keeping the
@@ -131,12 +147,30 @@ async function decodeImage(file: File): Promise<DecodedImage> {
 
 async function imageBlob(canvas: HTMLCanvasElement, maxBytes: number): Promise<Blob | null> {
   for (const quality of [0.82, 0.68, 0.54, 0.4]) {
-    const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/webp', quality))
+    const blob = await canvasBlob(canvas, 'image/webp', quality)
     if (blob && blob.size <= maxBytes) return blob
   }
   for (const quality of [0.82, 0.68, 0.54, 0.4, 0.3, 0.2]) {
-    const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', quality))
+    const blob = await canvasBlob(canvas, 'image/jpeg', quality)
     if (blob && blob.size <= maxBytes) return blob
   }
   return null
+}
+
+async function canvasBlob(canvas: HTMLCanvasElement, type: string, quality: number): Promise<Blob | null> {
+  if (typeof canvas.toBlob === 'function') {
+    return new Promise<Blob | null>(resolve => canvas.toBlob(resolve, type, quality))
+  }
+  // Older iOS WebViews have canvas.toDataURL but no canvas.toBlob.
+  try {
+    const dataUrl = canvas.toDataURL(type, quality)
+    const comma = dataUrl.indexOf(',')
+    if (comma < 0) return null
+    const binary = atob(dataUrl.slice(comma + 1))
+    const bytes = new Uint8Array(binary.length)
+    for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index)
+    return new Blob([bytes], { type: dataUrl.slice(5, comma).split(';', 1)[0] || type })
+  } catch {
+    return null
+  }
 }

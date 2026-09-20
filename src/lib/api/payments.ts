@@ -1,7 +1,7 @@
 import { supabase } from '../supabaseClient'
 import { edgeFunctionError } from '../errors'
 import type { Payment } from '../../types'
-import { createClientUuid, prepareImageForUpload } from '../fileUpload'
+import { createClientUuid, prepareImageForUpload, readFileAsArrayBuffer } from '../fileUpload'
 
 function mapPayment(row: any): Payment {
   return {
@@ -85,7 +85,9 @@ async function uploadPaymentBytes(
       return await new Promise<string>((resolve, reject) => {
         const request = new XMLHttpRequest()
         request.open('POST', `${projectUrl}/functions/v1/telegram-payment-proof`)
-        request.responseType = 'json'
+        // Older mobile WebViews throw when responseType=json is assigned.
+        // Leave the default response mode in that case and parse responseText.
+        try { request.responseType = 'json' } catch { /* Use responseText below. */ }
         request.timeout = 120000
         request.setRequestHeader('Authorization', `Bearer ${accessToken}`)
         request.setRequestHeader('apikey', anonKey)
@@ -99,14 +101,12 @@ async function uploadPaymentBytes(
           return
         }
         signal?.addEventListener('abort', abortRequest, { once: true })
-        request.upload.onprogress = event => {
+        if (request.upload) request.upload.onprogress = event => {
           if (event.lengthComputable) onProgress?.(Math.round((event.loaded / event.total) * 100))
         }
         request.onload = () => {
           cleanupAbort()
-          const body = request.response ?? (() => {
-            try { return JSON.parse(request.responseText || '{}') } catch { return {} }
-          })()
+          const body = parseUploadResponse(request)
           if (request.status < 200 || request.status >= 300) {
             const error = new Error(body?.error || `Upload failed with status ${request.status}.`)
             ;(error as Error & { status?: number }).status = request.status
@@ -141,6 +141,22 @@ async function uploadPaymentBytes(
   throw lastError instanceof Error ? lastError : new Error('The receipt upload could not be completed.')
 }
 
+function parseUploadResponse(request: XMLHttpRequest): { proofId?: string; error?: string } {
+  const response = request.response
+  if (response && typeof response === 'object') return response as { proofId?: string; error?: string }
+
+  let text = ''
+  try { text = request.responseText || '' } catch { /* responseType=json can block responseText access. */ }
+  if (!text && typeof response === 'string') text = response
+  if (!text) return {}
+  try {
+    const parsed: unknown = JSON.parse(text)
+    return parsed && typeof parsed === 'object' ? parsed as { proofId?: string; error?: string } : { error: text }
+  } catch {
+    return { error: text }
+  }
+}
+
 export async function uploadPaymentProof(businessId: string, file: File, onProgress?: (progress: number) => void, signal?: AbortSignal): Promise<string> {
   // Payment receipts are photos archived by Telegram, not Supabase Storage.
   // Large camera images are resized before the request for reliable phones.
@@ -148,7 +164,7 @@ export async function uploadPaymentProof(businessId: string, file: File, onProgr
   if (uploadFile.size > 5 * 1024 * 1024 || !['image/jpeg', 'image/png', 'image/webp'].includes(uploadFile.type)) {
     throw new Error('Use a JPEG, PNG, or WebP photo up to 5 MB.')
   }
-  const uploadBytes = await uploadFile.arrayBuffer()
+  const uploadBytes = await readFileAsArrayBuffer(uploadFile)
   return uploadPaymentBytes(businessId, uploadBytes, uploadFile.type, onProgress, signal) // returns an opaque Telegram proof record ID
 }
 
