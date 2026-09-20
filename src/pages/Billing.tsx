@@ -11,7 +11,7 @@ import { daysRemaining } from '../lib/api/subscriptions'
 import { getOrCreateBusinessTelegramLink, disconnectTelegram, telegramPaymentDeepLink, notifyAdminsOfPayment, type TelegramLinkStatus } from '../lib/api/telegram'
 import { friendlyError } from '../lib/errors'
 import type { Plan, PaymentMethod, Payment } from '../types'
-import { PAYMENT_UPLOAD_ACCEPT, createClientUuid, detectedUploadType, takeSelectedFile } from '../lib/fileUpload'
+import { fileInputStyle, PAYMENT_UPLOAD_ACCEPT, createClientUuid, detectedUploadType, takeSelectedFile } from '../lib/fileUpload'
 
 interface PaymentDraft {
   planId: string | null
@@ -551,7 +551,7 @@ export default function Billing() {
               accept={PAYMENT_UPLOAD_ACCEPT}
               aria-label="Browse payment proof"
               disabled={savingProof || submitting}
-              hidden
+              style={fileInputStyle}
               onChange={e => void handleProofSelection(takeSelectedFile(e.currentTarget))}
             />
             <span style={{ fontSize: 11.5, color: '#D4A853', marginTop: 4, display: 'block' }}>{savingProof ? 'Uploading…' : proofReady ? 'Click to change' : 'Choose a file'}</span>

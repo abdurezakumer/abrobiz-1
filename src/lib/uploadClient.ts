@@ -32,15 +32,7 @@ export async function uploadBinaryToFunction(options: BinaryUploadOptions): Prom
     try {
       if (options.signal?.aborted) throw new Error('Upload canceled.')
       if (typeof XMLHttpRequest === 'undefined' || !projectUrl || !anonKey) {
-        const { data, error } = await supabase.functions.invoke(options.functionName, {
-          body: options.bytes,
-          headers: { ...options.headers, 'Content-Type': options.contentType },
-          signal: options.signal,
-        })
-        if (error) throw await edgeFunctionError(error)
-        options.onProgress?.(100)
-        if (!data || typeof data !== 'object') throw new Error('Upload did not return a file reference.')
-        return data as UploadResponse
+        return await invokeWithFetch(options)
       }
 
       const response = await sendWithXhr({ ...options, projectUrl, anonKey, accessToken })
@@ -53,11 +45,16 @@ export async function uploadBinaryToFunction(options: BinaryUploadOptions): Prom
       if (options.signal?.aborted || /upload canceled/i.test(message)) throw error
 
       const retryable = !status || status === 401 || status === 408 || status >= 500 || /network|timed out|temporarily unavailable|could not save|failed to fetch|gateway/i.test(message)
-      if (!retryable || attempt === 2) throw error
+      if (!retryable) throw error
 
       if (status === 401) {
         const refreshed = await supabase.auth.refreshSession()
         if (!refreshed.error && refreshed.data.session) accessToken = refreshed.data.session.access_token
+      }
+      if (attempt === 2) {
+        // Some mobile WebViews expose XHR but fail binary CORS uploads. The
+        // same stable upload ID makes this fetch fallback safe after retries.
+        return await invokeWithFetch(options)
       }
       options.onProgress?.(0)
       await new Promise(resolve => setTimeout(resolve, 700 * (attempt + 1)))
@@ -65,6 +62,18 @@ export async function uploadBinaryToFunction(options: BinaryUploadOptions): Prom
   }
 
   throw lastError instanceof Error ? lastError : new Error('The upload could not be completed.')
+}
+
+async function invokeWithFetch(options: BinaryUploadOptions): Promise<UploadResponse> {
+  const { data, error } = await supabase.functions.invoke(options.functionName, {
+    body: options.bytes,
+    headers: { ...options.headers, 'Content-Type': options.contentType },
+    signal: options.signal,
+  })
+  if (error) throw await edgeFunctionError(error)
+  options.onProgress?.(100)
+  if (!data || typeof data !== 'object') throw new Error('Upload did not return a file reference.')
+  return data as UploadResponse
 }
 
 async function sendWithXhr(options: BinaryUploadOptions & { projectUrl: string; anonKey: string; accessToken: string }): Promise<UploadResponse> {

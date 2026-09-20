@@ -9,7 +9,7 @@ import { listItems, createItem, updateItem, deleteItem, uploadItemImage } from '
 import type { Category, Item, ItemTranslations, Language } from '../types'
 import { safeImageUrl } from '../lib/safeUrl'
 import { friendlyError } from '../lib/errors'
-import { IMAGE_UPLOAD_ACCEPT, takeSelectedFile } from '../lib/fileUpload'
+import { fileInputStyle, IMAGE_UPLOAD_ACCEPT, takeSelectedFile } from '../lib/fileUpload'
 
 export default function CatalogEditor() {
   const { business } = useAuth()
@@ -331,7 +331,7 @@ function ItemForm({
               {!uploading && <motion.span animate={{ y: [0, -3, 0] }} transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }} style={{ display: 'inline-flex' }}><ArrowUp size={13} /></motion.span>}
               {uploading ? `Uploading… ${uploadProgress ?? 0}%` : imageUrl ? 'Change photo' : 'Add photo'}
             </span>
-            <input type="file" accept={IMAGE_UPLOAD_ACCEPT} hidden disabled={uploading} onChange={e => { const file = takeSelectedFile(e.currentTarget); if (file) void handleImage(file) }} />
+            <input type="file" accept={IMAGE_UPLOAD_ACCEPT} style={fileInputStyle} disabled={uploading} onChange={e => { const file = takeSelectedFile(e.currentTarget); if (file) void handleImage(file) }} />
           </label>
         </div>
         {uploading && <div role="progressbar" aria-label="Menu image upload progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={uploadProgress ?? 0} style={{ height: 5, borderRadius: 99, background: 'rgba(10,12,16,0.1)', overflow: 'hidden' }}><div style={{ width: `${uploadProgress ?? 0}%`, height: '100%', background: '#D4A853', transition: 'width 180ms ease' }} /></div>}

@@ -4,6 +4,22 @@ export const IMAGE_UPLOAD_ACCEPT = 'image/*'
 // Payment receipts use the same photo picker behavior as logos and covers.
 export const PAYMENT_UPLOAD_ACCEPT = IMAGE_UPLOAD_ACCEPT
 
+// Keep the native file input in the accessibility tree. Some mobile Safari
+// and Android WebView versions do not open a picker when the input uses the
+// `hidden` attribute/display:none, even when it is wrapped by a label.
+export const fileInputStyle = {
+  position: 'absolute' as const,
+  width: 1,
+  height: 1,
+  padding: 0,
+  margin: -1,
+  overflow: 'hidden' as const,
+  clip: 'rect(0 0 0 0)',
+  whiteSpace: 'nowrap' as const,
+  border: 0,
+  opacity: 0.01,
+}
+
 const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif', 'image/avif'])
 
 /**

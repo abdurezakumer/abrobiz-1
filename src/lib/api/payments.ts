@@ -2,6 +2,7 @@ import { supabase } from '../supabaseClient'
 import { edgeFunctionError } from '../errors'
 import type { Payment } from '../../types'
 import { createClientUuid, prepareImageForUpload, readFileAsArrayBuffer } from '../fileUpload'
+import { uploadBinaryToFunction } from '../uploadClient'
 
 function mapPayment(row: any): Payment {
   return {
@@ -52,109 +53,20 @@ async function uploadPaymentBytes(
   uploadId?: string,
 ): Promise<string> {
   const clientUploadId = uploadId ?? createClientUuid()
-  const projectUrl = (import.meta.env.VITE_SUPABASE_URL ?? '').replace(/\/$/, '')
-  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY ?? ''
-  const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
-  if (sessionError) throw sessionError
-  if (!sessionData.session) throw new Error('Not authenticated.')
-
-  let accessToken = sessionData.session.access_token
-  let lastError: unknown
-
   // A mobile connection can drop after Telegram archives the bytes. The same
   // uploadId lets the Edge Function return the original proof record without
   // posting a second receipt to the archive channel.
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    try {
-      if (signal?.aborted) throw new Error('Upload canceled.')
-      // functions.invoke uses fetch, which cannot expose upload progress. XHR
-      // keeps the same authenticated Edge Function contract while reporting
-      // the real phone-to-Telegram transfer percentage.
-      if (typeof XMLHttpRequest === 'undefined' || !projectUrl || !anonKey) {
-        const { data, error } = await supabase.functions.invoke('telegram-payment-proof', {
-          body: bytes,
-          headers: { 'X-Business-Id': businessId, 'X-Upload-Id': clientUploadId, 'Content-Type': contentType },
-          signal,
-        })
-        if (error) throw await edgeFunctionError(error)
-        onProgress?.(100)
-        if (!data?.proofId) throw new Error('Upload did not return a proof reference.')
-        return data.proofId
-      }
-
-      return await new Promise<string>((resolve, reject) => {
-        const request = new XMLHttpRequest()
-        request.open('POST', `${projectUrl}/functions/v1/telegram-payment-proof`)
-        // Older mobile WebViews throw when responseType=json is assigned.
-        // Leave the default response mode in that case and parse responseText.
-        try { request.responseType = 'json' } catch { /* Use responseText below. */ }
-        request.timeout = 120000
-        request.setRequestHeader('Authorization', `Bearer ${accessToken}`)
-        request.setRequestHeader('apikey', anonKey)
-        request.setRequestHeader('X-Business-Id', businessId)
-        request.setRequestHeader('X-Upload-Id', clientUploadId)
-        request.setRequestHeader('Content-Type', contentType)
-        const abortRequest = () => request.abort()
-        const cleanupAbort = () => signal?.removeEventListener('abort', abortRequest)
-        if (signal?.aborted) {
-          reject(new Error('Upload canceled.'))
-          return
-        }
-        signal?.addEventListener('abort', abortRequest, { once: true })
-        if (request.upload) request.upload.onprogress = event => {
-          if (event.lengthComputable) onProgress?.(Math.round((event.loaded / event.total) * 100))
-        }
-        request.onload = () => {
-          cleanupAbort()
-          const body = parseUploadResponse(request)
-          if (request.status < 200 || request.status >= 300) {
-            const error = new Error(body?.error || `Upload failed with status ${request.status}.`)
-            ;(error as Error & { status?: number }).status = request.status
-            reject(error)
-            return
-          }
-          if (!body?.proofId) {
-            reject(new Error('Upload did not return a proof reference.'))
-            return
-          }
-          onProgress?.(100)
-          resolve(body.proofId)
-        }
-        request.onerror = () => { cleanupAbort(); reject(new Error('Upload network connection was interrupted.')) }
-        request.ontimeout = () => { cleanupAbort(); reject(new Error('Upload timed out while waiting for the server.')) }
-        request.onabort = () => { cleanupAbort(); reject(new Error(signal?.aborted ? 'Upload canceled.' : 'Upload was interrupted before it finished.')) }
-        request.send(bytes)
-      })
-    } catch (error) {
-      lastError = error
-      const status = (error as { status?: number } | null)?.status
-      const message = error instanceof Error ? error.message : ''
-      if (signal?.aborted || /upload canceled/i.test(message)) throw error
-      const retryable = !status || status === 401 || status === 408 || status === 429 || status >= 500 || /network|timed out|temporarily unavailable|could not save|failed to fetch|gateway/i.test(message)
-      if (!retryable || attempt === 2) throw error
-      const refreshed = await supabase.auth.refreshSession()
-      if (!refreshed.error && refreshed.data.session) accessToken = refreshed.data.session.access_token
-      onProgress?.(0)
-      await new Promise(resolve => window.setTimeout(resolve, 700 * (attempt + 1)))
-    }
-  }
-  throw lastError instanceof Error ? lastError : new Error('The receipt upload could not be completed.')
-}
-
-function parseUploadResponse(request: XMLHttpRequest): { proofId?: string; error?: string } {
-  const response = request.response
-  if (response && typeof response === 'object') return response as { proofId?: string; error?: string }
-
-  let text = ''
-  try { text = request.responseText || '' } catch { /* responseType=json can block responseText access. */ }
-  if (!text && typeof response === 'string') text = response
-  if (!text) return {}
-  try {
-    const parsed: unknown = JSON.parse(text)
-    return parsed && typeof parsed === 'object' ? parsed as { proofId?: string; error?: string } : { error: text }
-  } catch {
-    return { error: text }
-  }
+  const data = await uploadBinaryToFunction({
+    functionName: 'telegram-payment-proof',
+    bytes,
+    contentType,
+    headers: { 'X-Business-Id': businessId, 'X-Upload-Id': clientUploadId },
+    onProgress,
+    signal,
+  })
+  const proofId = typeof data.proofId === 'string' ? data.proofId : ''
+  if (!proofId) throw new Error('Upload did not return a proof reference.')
+  return proofId
 }
 
 export async function uploadPaymentProof(businessId: string, file: File, onProgress?: (progress: number) => void, signal?: AbortSignal): Promise<string> {

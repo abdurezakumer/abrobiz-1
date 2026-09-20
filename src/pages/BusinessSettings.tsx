@@ -11,7 +11,7 @@ import { listActiveTemplates, mergeTemplateOptions } from '../lib/api/templates'
 import { publicStorefrontUrl } from '../lib/storefrontUrl'
 import { safeImageUrl } from '../lib/safeUrl'
 import type { Business, BusinessCategory, Language, Template, WeeklyHours } from '../types'
-import { IMAGE_UPLOAD_ACCEPT, takeSelectedFile } from '../lib/fileUpload'
+import { fileInputStyle, IMAGE_UPLOAD_ACCEPT, takeSelectedFile } from '../lib/fileUpload'
 import TemplateSelector from '../components/TemplateSelector'
 import { BUILTIN_TEMPLATES } from '../lib/templateRegistry'
 import AICopyGenerator from '../components/AICopyGenerator'
@@ -344,7 +344,7 @@ export default function BusinessSettings() {
                     <Upload size={16} color="rgba(10,12,16,0.3)" />
                   </motion.div>
                 )}
-                <input type="file" accept={IMAGE_UPLOAD_ACCEPT} hidden onChange={e => { const file = takeSelectedFile(e.currentTarget); if (file) void handleGalleryUpload(file) }} />
+                <input type="file" accept={IMAGE_UPLOAD_ACCEPT} style={fileInputStyle} onChange={e => { const file = takeSelectedFile(e.currentTarget); if (file) void handleGalleryUpload(file) }} />
               </label>
             )}
           </div>
@@ -483,7 +483,7 @@ function ImageUploader({ label, imageUrl, uploading, progress, onUpload, shape }
             </motion.div>
           )}
         </div>
-        <input type="file" accept={IMAGE_UPLOAD_ACCEPT} hidden disabled={uploading} onChange={e => { const file = takeSelectedFile(e.currentTarget); if (file) void onUpload(file) }} />
+        <input type="file" accept={IMAGE_UPLOAD_ACCEPT} style={fileInputStyle} disabled={uploading} onChange={e => { const file = takeSelectedFile(e.currentTarget); if (file) void onUpload(file) }} />
         {uploading && <div role="progressbar" aria-label={`${label} upload progress`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress ?? 0} style={{ height: 5, width: shape === 'round' ? 84 : 220, maxWidth: '100%', marginTop: 7, borderRadius: 99, background: 'rgba(10,12,16,0.1)', overflow: 'hidden' }}><div style={{ width: `${progress ?? 0}%`, height: '100%', background: '#D4A853', transition: 'width 180ms ease' }} /></div>}
         <span style={{ fontSize: 11.5, color: '#D4A853', marginTop: 4, display: 'block' }}>{uploading ? `Uploading… ${progress ?? 0}%` : 'Click to change'}</span>
       </label>
