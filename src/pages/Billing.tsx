@@ -16,8 +16,6 @@ import { PAYMENT_UPLOAD_ACCEPT, createClientUuid, detectedUploadType, takeSelect
 interface PaymentDraft {
   planId: string | null
   paymentMethodId: string | null
-  proofPath: string | null
-  proofFileName: string | null
   note: string
 }
 
@@ -27,16 +25,19 @@ function paymentDraftKey(businessId: string) {
 
 function readPaymentDraft(businessId: string): PaymentDraft | null {
   try {
-    const raw = window.sessionStorage.getItem(paymentDraftKey(businessId))
+    const key = paymentDraftKey(businessId)
+    const raw = window.sessionStorage.getItem(key)
     if (!raw) return null
-    const parsed = JSON.parse(raw) as Partial<PaymentDraft>
-    return {
+    const parsed = JSON.parse(raw) as Partial<PaymentDraft> & { proofPath?: unknown; proofFileName?: unknown }
+    const draft = {
       planId: typeof parsed.planId === 'string' ? parsed.planId : null,
       paymentMethodId: typeof parsed.paymentMethodId === 'string' ? parsed.paymentMethodId : null,
-      proofPath: typeof parsed.proofPath === 'string' ? parsed.proofPath : null,
-      proofFileName: typeof parsed.proofFileName === 'string' ? parsed.proofFileName : null,
       note: typeof parsed.note === 'string' ? parsed.note : '',
     }
+    // Remove proof references written by older versions. A Telegram proof is
+    // intentionally memory-only and must never be restored from browser cache.
+    if ('proofPath' in parsed || 'proofFileName' in parsed) window.sessionStorage.setItem(key, JSON.stringify(draft))
+    return draft
   } catch {
     return null
   }
@@ -67,6 +68,7 @@ export default function Billing() {
   const [proofPath, setProofPath] = useState<string | null>(null)
   const [savingProof, setSavingProof] = useState(false)
   const [uploadProgress, setUploadProgress] = useState<number | null>(null)
+  const [proofUploadError, setProofUploadError] = useState(false)
   const [note, setNote] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
@@ -107,10 +109,6 @@ export default function Billing() {
           if (current && availablePlans.some(plan => plan.id === current.id)) return current
           return restoredPlan
         })
-        if (restoredPlan && draft?.proofPath) {
-          setProofPath(current => current ?? draft.proofPath)
-          setProofFileName(current => current || draft.proofFileName || 'Uploaded receipt')
-        }
         if (draft?.note) setNote(current => current || draft.note)
       })
       .catch(err => {
@@ -154,12 +152,11 @@ export default function Billing() {
     getOrCreateBusinessTelegramLink(businessId).then(setTelegramLink).catch(() => {})
   }, [business?.id])
 
-  // sessionStorage survives a browser refresh and a trip to a banking app in
-  // the same tab. The receipt is already archived in Telegram; only its
-  // opaque proof reference and the draft fields are persisted here.
+  // Keep only non-sensitive payment form choices in sessionStorage. The
+  // Telegram proof reference is deliberately memory-only and is never cached.
   useEffect(() => {
     if (!business?.id || !draftHydrated.current) return
-    if (!selectedPlan && !proofPath && !note) {
+    if (!selectedPlan && !note) {
       if (plansError) return
       clearPaymentDraft(business.id)
       return
@@ -167,11 +164,9 @@ export default function Billing() {
     writePaymentDraft(business.id, {
       planId: selectedPlan?.id ?? null,
       paymentMethodId: selectedMethod?.id ?? null,
-      proofPath,
-      proofFileName: (proofFile?.name ?? proofFileName) || null,
       note,
     })
-  }, [business?.id, note, plansError, proofFile?.name, proofFileName, proofPath, selectedMethod?.id, selectedPlan, selectedPlan?.id])
+  }, [business?.id, note, plansError, selectedMethod?.id, selectedPlan, selectedPlan?.id])
 
   useEffect(() => {
     const preventLossWhileWorking = (event: BeforeUnloadEvent) => {
@@ -257,6 +252,7 @@ export default function Billing() {
     const uploadController = new AbortController()
     proofUploadController.current = uploadController
     setError('')
+    setProofUploadError(false)
     setUploadProgress(0)
     paymentIdempotencyKey.current = null
     setSavingProof(true)
@@ -276,6 +272,7 @@ export default function Billing() {
       setUploadProgress(100)
       setProofFile(file)
       setProofFileName(file.name)
+      setProofUploadError(false)
     } catch (err) {
       setUploadProgress(null)
       if (uploadController.signal.aborted) {
@@ -286,9 +283,11 @@ export default function Billing() {
         // retry the replacement without starting the payment flow over.
         setProofPath(previousProofPath)
         setProofFileName(previousProofFileName)
-        setError('The new receipt could not be saved. Your previous receipt is still ready to submit; please try replacing it again.')
+        setProofUploadError(true)
+        setError('The new receipt could not be saved. Your previous receipt is still ready to submit. Please try again or submit the new receipt via Telegram.')
       } else {
-        setError(friendlyError(err))
+        setProofUploadError(true)
+        setError(`${friendlyError(err)} Please try again or submit the receipt via Telegram.`)
       }
     } finally {
       if (proofUploadController.current === uploadController) proofUploadController.current = null
@@ -319,6 +318,7 @@ export default function Billing() {
     }
     setSubmitting(true)
     setError('')
+    setProofUploadError(false)
     try {
       paymentIdempotencyKey.current ??= createClientUuid()
       const idempotencyKey = paymentIdempotencyKey.current
@@ -360,6 +360,7 @@ export default function Billing() {
   const submittedPayment = submittedPaymentId ? history.find(payment => payment.id === submittedPaymentId) : undefined
   const proofReady = Boolean(proofPath)
   const displayedProofName = proofFile?.name ?? proofFileName
+  const telegramPaymentUrl = telegramLink ? telegramPaymentDeepLink(telegramLink.linkToken) : null
 
   return (
     <DashboardLayout>
@@ -563,7 +564,16 @@ export default function Billing() {
 
           <textarea value={note} onChange={e => setNote(e.target.value)} placeholder="Note for admin (optional)" rows={2} style={{ width: '100%', border: '1px solid rgba(10,12,16,0.1)', borderRadius: 9, padding: '9px 11px', fontSize: 13.5, outline: 'none', fontFamily: 'inherit', resize: 'vertical', marginBottom: 16 }} />
 
-          {error && <div style={{ color: '#F87171', fontSize: 13, marginBottom: 12 }}>{error}</div>}
+          {error && (
+            <div style={{ color: '#F87171', fontSize: 13, marginBottom: 12 }}>
+              <div>{error}</div>
+              {proofUploadError && telegramPaymentUrl && (
+                <a href={telegramPaymentUrl} target="_blank" rel="noopener noreferrer" style={telegramErrorLink}>
+                  Open Telegram payment upload
+                </a>
+              )}
+            </div>
+          )}
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '4px 0 10px' }}>
             <span style={stepNumber}>3</span>
@@ -572,8 +582,8 @@ export default function Billing() {
           <button type="button" onClick={handleSubmit} disabled={!selectedMethod || !proofReady || savingProof || submitting} style={{ ...selectBtn, width: '100%', opacity: !selectedMethod || !proofReady || savingProof || submitting ? 0.5 : 1 }}>
             {submitting ? 'Submitting…' : 'Submit for approval'}
           </button>
-          {telegramLink && telegramPaymentDeepLink(telegramLink.linkToken) && (
-            <a href={telegramPaymentDeepLink(telegramLink.linkToken) ?? undefined} target="_blank" rel="noopener noreferrer" style={telegramPayBtn}>
+          {telegramPaymentUrl && (
+            <a href={telegramPaymentUrl} target="_blank" rel="noopener noreferrer" style={telegramPayBtn}>
               Submit through Telegram instead
             </a>
           )}
@@ -618,6 +628,7 @@ const selectBtn: React.CSSProperties = { background: '#D4A853', color: '#0A0C10'
 const methodChip: React.CSSProperties = { border: 'none', borderRadius: 8, padding: '8px 14px', fontSize: 13, cursor: 'pointer', fontWeight: 500 }
 const uploadSurface: React.CSSProperties = { display: 'block', width: '100%', padding: 0, marginBottom: 14, background: 'transparent', cursor: 'pointer', textAlign: 'left' }
 const telegramPayBtn: React.CSSProperties = { display: 'block', width: '100%', textAlign: 'center', background: '#26A5E4', color: '#fff', borderRadius: 10, padding: '10px 18px', fontSize: 13.5, fontWeight: 600, textDecoration: 'none', marginTop: 10 }
+const telegramErrorLink: React.CSSProperties = { display: 'inline-block', marginTop: 7, color: '#0B76B7', fontWeight: 700, textDecoration: 'underline' }
 const planBadge: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', borderRadius: 999, padding: '4px 9px', background: 'rgba(212,168,83,0.16)', border: '1px solid rgba(212,168,83,0.35)', color: '#8A6417', fontSize: 11, fontWeight: 700, letterSpacing: 0.3, textTransform: 'uppercase' }
 const refreshBtn: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 7, border: '1px solid rgba(10,12,16,0.12)', borderRadius: 9, padding: '8px 12px', background: '#fff', color: '#0A0C10', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }
 const stepNumber: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 22, height: 22, borderRadius: '50%', background: '#0A0C10', color: '#D4A853', fontSize: 11, fontWeight: 700 }

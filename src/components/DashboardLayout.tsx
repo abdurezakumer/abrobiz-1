@@ -209,6 +209,13 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     </div>
   )
 
+  const mobileNavItems = [
+    { to: '/dashboard', label: 'Home', icon: LayoutDashboard },
+    { to: '/dashboard/catalog', label: categoryLabel, icon: CategoryIcon },
+    { to: '/dashboard/billing', label: 'Billing', icon: CreditCard },
+    { to: '/dashboard/messages', label: 'Messages', icon: Mail },
+  ]
+
   return (
     <div style={{ minHeight: '100vh', background: '#F6F3EE' }}>
       {/* Desktop sidebar */}
@@ -260,6 +267,43 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           </>
         )}
       </AnimatePresence>
+
+      <nav className="dashboard-mobile-bottom-nav" aria-label="Mobile dashboard navigation">
+        {mobileNavItems.map(item => {
+          const active = location.pathname === item.to || (item.to !== '/dashboard' && location.pathname.startsWith(`${item.to}/`))
+          const Icon = item.icon
+          return (
+            <Link
+              key={item.to}
+              to={item.to}
+              onClick={() => setMobileOpen(false)}
+              aria-current={active ? 'page' : undefined}
+              style={{
+                display: 'flex', flex: 1, minWidth: 0, flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4,
+                minHeight: 54, padding: '5px 2px', borderRadius: 10, color: active ? '#0A0C10' : 'rgba(10,12,16,0.52)',
+                background: active ? 'rgba(212,168,83,0.18)' : 'transparent', fontSize: 10.5, fontWeight: active ? 700 : 600,
+                textDecoration: 'none', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+              }}
+            >
+              <Icon size={18} />
+              <span style={{ maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label}</span>
+            </Link>
+          )
+        })}
+        <button
+          type="button"
+          onClick={() => setMobileOpen(true)}
+          aria-label="Open dashboard menu"
+          style={{
+            display: 'flex', flex: 1, minWidth: 0, flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4,
+            minHeight: 54, padding: '5px 2px', border: 0, borderRadius: 10, color: 'rgba(10,12,16,0.52)',
+            background: 'transparent', fontSize: 10.5, fontWeight: 600, cursor: 'pointer',
+          }}
+        >
+          <MenuIcon size={18} />
+          <span>More</span>
+        </button>
+      </nav>
 
       <div style={{ marginLeft: window.innerWidth >= 900 ? 240 : 0 }} className="dashboard-content-area">
         <div
@@ -383,6 +427,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         </div>
 
         <motion.main
+          className="dashboard-main"
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.25 }}
@@ -442,6 +487,23 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           .dashboard-sidebar-desktop { display: none !important; }
           .dashboard-topbar-mobile { display: flex !important; }
           .dashboard-content-area { margin-left: 0 !important; }
+          .dashboard-main { padding-bottom: 104px !important; }
+          .dashboard-mobile-bottom-nav { display: flex !important; }
+        }
+        .dashboard-mobile-bottom-nav {
+          display: none;
+          position: fixed;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          z-index: 35;
+          align-items: center;
+          gap: 4px;
+          padding: 7px 8px calc(7px + env(safe-area-inset-bottom));
+          background: rgba(255,255,255,0.97);
+          border-top: 1px solid rgba(10,12,16,0.1);
+          box-shadow: 0 -8px 24px rgba(10,12,16,0.08);
+          backdrop-filter: blur(14px);
         }
       `}</style>
     </div>
