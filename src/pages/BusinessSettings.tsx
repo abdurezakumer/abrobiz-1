@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
-import { ArrowUp, Check, Upload } from 'lucide-react'
+import { ArrowUp, Building2, Check, FileText, LayoutTemplate, Palette, Share2, Upload } from 'lucide-react'
 import DashboardLayout from '../components/DashboardLayout'
 import { useAuth } from '../lib/authContext'
 import { updateBusiness, uploadBusinessImage } from '../lib/api/businesses'
@@ -25,6 +25,15 @@ const ALL_LANGUAGES: { code: Language; label: string }[] = [
 ]
 
 const DAYS: (keyof WeeklyHours)[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
+type SettingsCategory = 'business' | 'branding' | 'social' | 'template' | 'content'
+
+const SETTINGS_CATEGORIES: { id: SettingsCategory; label: string; description: string; icon: typeof Building2 }[] = [
+  { id: 'business', label: 'Business info', description: 'Details, address, hours, and visibility', icon: Building2 },
+  { id: 'branding', label: 'Branding', description: 'Logo, cover photo, and colors', icon: Palette },
+  { id: 'social', label: 'Social links', description: 'Profiles shown on your website', icon: Share2 },
+  { id: 'template', label: 'Website template', description: 'Choose your website design', icon: LayoutTemplate },
+  { id: 'content', label: 'Content & preferences', description: 'About, languages, and AI writing', icon: FileText },
+]
 
 export default function BusinessSettings() {
   const { business, subscription, refreshBusiness } = useAuth()
@@ -44,6 +53,7 @@ export default function BusinessSettings() {
   const [supportBusy, setSupportBusy] = useState(false)
   const [supportError, setSupportError] = useState('')
   const [supportSaved, setSupportSaved] = useState(false)
+  const [activeCategory, setActiveCategory] = useState<SettingsCategory>('business')
 
   useEffect(() => setForm(business), [business])
   useEffect(() => {
@@ -177,7 +187,8 @@ export default function BusinessSettings() {
 
   return (
     <DashboardLayout>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 22, flexWrap: 'wrap', gap: 10 }}>
+      <style>{`\n        .settings-category-nav { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin-bottom: 16px; }\n        @media (max-width: 760px) {\n          .settings-header { top: 58px !important; }\n          .settings-category-nav { display: flex; overflow-x: auto; padding: 2px 1px 6px; scrollbar-width: none; }\n          .settings-category-nav::-webkit-scrollbar { display: none; }\n        }\n      `}</style>
+      <div className="settings-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 10, position: 'sticky', top: 0, zIndex: 12, background: '#F6F3EE', padding: '8px 0 14px' }}>
         <div>
           <h1 style={{ fontFamily: 'Outfit, sans-serif', fontSize: 24, fontWeight: 600, color: '#0A0C10' }}>Settings</h1>
           <p style={{ color: 'rgba(10,12,16,0.5)', fontSize: 14, marginTop: 2 }}>Customize how your site looks and works.</p>
@@ -187,20 +198,43 @@ export default function BusinessSettings() {
         </button>
       </div>
 
+      <div className="settings-category-nav" role="tablist" aria-label="Settings categories">
+        {SETTINGS_CATEGORIES.map(category => {
+          const Icon = category.icon
+          const active = activeCategory === category.id
+          return (
+            <button
+              key={category.id}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => setActiveCategory(category.id)}
+              style={{ ...categoryButton, ...(active ? categoryButtonActive : {}) }}
+            >
+              <Icon size={17} />
+              <span style={{ minWidth: 0, textAlign: 'left' }}>
+                <strong style={{ display: 'block', fontSize: 13 }}>{category.label}</strong>
+                <small style={{ display: 'block', marginTop: 3, color: active ? 'rgba(10,12,16,0.62)' : 'rgba(10,12,16,0.48)', fontSize: 11, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{category.description}</small>
+              </span>
+            </button>
+          )
+        })}
+      </div>
+
       {saveError && (
         <div style={{ color: '#B91C1C', fontSize: 13, background: 'rgba(220,38,38,0.08)', padding: '10px 12px', borderRadius: 10, marginBottom: 16 }}>
           {saveError}
         </div>
       )}
 
-      <Section title="Visibility">
+      <Section title="Visibility" category="business" activeCategory={activeCategory}>
         <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
           <input type="checkbox" checked={form.isPublished} onChange={e => patch('isPublished', e.target.checked)} style={{ width: 17, height: 17 }} />
           <span style={{ fontSize: 14 }}>Site is published (visible to customers)</span>
         </label>
       </Section>
 
-      <Section title="Website address">
+      <Section title="Website address" category="business" activeCategory={activeCategory}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <div style={{ flex: 1, minWidth: 220, background: '#F6F3EE', borderRadius: 9, padding: '10px 12px', color: 'rgba(10,12,16,0.65)', fontSize: 13.5 }}>
             {publicStorefrontUrl(form.slug)}
@@ -228,7 +262,7 @@ export default function BusinessSettings() {
         </div>
       </Section>
 
-      <Section title="Branding">
+      <Section title="Branding" category="branding" activeCategory={activeCategory}>
         <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
           <ImageUploader label="Logo" imageUrl={form.logoUrl} uploading={uploadingLogo} onUpload={handleLogoUpload} shape="round" />
           <ImageUploader label="Cover photo" imageUrl={form.coverUrl} uploading={uploadingCover} onUpload={handleCoverUpload} shape="wide" />
@@ -245,7 +279,7 @@ export default function BusinessSettings() {
         </div>
       </Section>
 
-      <Section title="Business info">
+      <Section title="Business info" category="business" activeCategory={activeCategory}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
           <Field label="Name"><input value={form.name} onChange={e => patch('name', e.target.value)} style={inputStyle} /></Field>
           <Field label="Phone"><input value={form.phone} onChange={e => patch('phone', e.target.value)} style={inputStyle} /></Field>
@@ -266,7 +300,7 @@ export default function BusinessSettings() {
         </div>
       </Section>
 
-      <Section title="About page">
+      <Section title="About page" category="content" activeCategory={activeCategory}>
         <Field label="Your story">
           <textarea
             value={form.aboutContent}
@@ -309,11 +343,11 @@ export default function BusinessSettings() {
         </div>
       </Section>
 
-      <Section title="AI website copy">
+      <Section title="AI website copy" category="content" activeCategory={activeCategory}>
         <AICopyGenerator businessId={form.id} languages={form.languages} enabled={hasFeature(subscription, 'aiCopy')} planName={subscription?.plan?.name} />
       </Section>
 
-      <Section title="Languages">
+      <Section title="Languages" category="content" activeCategory={activeCategory}>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {ALL_LANGUAGES.map(l => {
             const active = form.languages.includes(l.code)
@@ -326,7 +360,7 @@ export default function BusinessSettings() {
         </div>
       </Section>
 
-      <Section title="Regional settings">
+      <Section title="Regional settings" category="business" activeCategory={activeCategory}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
           <Field label="Currency">
             <select value={form.currency} onChange={e => patch('currency', e.target.value)} style={inputStyle}>
@@ -350,7 +384,7 @@ export default function BusinessSettings() {
         </div>
       </Section>
 
-      <Section title="Template">
+      <Section title="Template" category="template" activeCategory={activeCategory}>
         <a href="/demo/restaurant-cafe" target="_blank" rel="noreferrer" style={{ display: 'inline-block', marginBottom: 12, color: '#8A6417', fontSize: 12.5, textDecoration: 'underline' }}>Preview the Restaurant & Café demo ↗</a>
         <TemplateSelector
           templates={templates}
@@ -361,7 +395,7 @@ export default function BusinessSettings() {
         />
       </Section>
 
-      <Section title="Opening hours">
+      <Section title="Opening hours" category="business" activeCategory={activeCategory}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {DAYS.map(day => {
             const hours = form.openingHours[day]
@@ -385,7 +419,7 @@ export default function BusinessSettings() {
         </div>
       </Section>
 
-      <Section title="Social links">
+      <Section title="Social links" category="social" activeCategory={activeCategory}>
         <p style={{ color: 'rgba(10,12,16,0.5)', fontSize: 12.5, lineHeight: 1.55, margin: '-3px 0 14px' }}>Add your public social profiles. After saving, configured links appear as labeled icons in your public website footer.</p>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
           <Field label="Facebook URL"><input type="url" inputMode="url" placeholder="https://facebook.com/your-page" value={form.social.facebookUrl ?? ''} onChange={e => patch('social', { ...form.social, facebookUrl: e.target.value })} style={inputStyle} /></Field>
@@ -398,9 +432,10 @@ export default function BusinessSettings() {
   )
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({ title, children, category, activeCategory }: { title: string; children: React.ReactNode; category: SettingsCategory; activeCategory: SettingsCategory }) {
+  const hidden = category !== activeCategory
   return (
-    <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} style={{ background: '#fff', borderRadius: 16, border: '1px solid rgba(10,12,16,0.06)', padding: '18px 20px', marginBottom: 16 }}>
+    <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: hidden ? 0 : 1, y: hidden ? 0 : 6 }} style={{ display: hidden ? 'none' : 'block', background: '#fff', borderRadius: 16, border: '1px solid rgba(10,12,16,0.06)', padding: '18px 20px', marginBottom: 16 }}>
       <div style={{ fontSize: 14, fontWeight: 600, color: '#0A0C10', marginBottom: 14 }}>{title}</div>
       {children}
     </motion.div>
@@ -450,3 +485,5 @@ function ImageUploader({ label, imageUrl, uploading, onUpload, shape }: { label:
 const inputStyle: React.CSSProperties = { border: '1px solid rgba(10,12,16,0.1)', borderRadius: 9, padding: '9px 11px', fontSize: 13.5, outline: 'none', fontFamily: 'inherit' }
 const chip: React.CSSProperties = { border: 'none', borderRadius: 8, padding: '8px 14px', fontSize: 13, cursor: 'pointer', fontWeight: 500 }
 const saveBtn: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 6, background: '#D4A853', color: '#0A0C10', border: 'none', borderRadius: 10, padding: '10px 18px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }
+const categoryButton: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 9, minWidth: 0, padding: '11px 12px', border: '1px solid rgba(10,12,16,0.08)', borderRadius: 12, background: '#fff', color: '#0A0C10', cursor: 'pointer', textAlign: 'left' }
+const categoryButtonActive: React.CSSProperties = { background: '#D4A853', borderColor: '#D4A853', boxShadow: '0 5px 14px rgba(212,168,83,0.22)' }
