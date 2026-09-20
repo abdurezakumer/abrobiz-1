@@ -13,6 +13,7 @@ export function friendlyError(error: unknown): string {
   if (/unsupported or malformed/i.test(msg)) return 'This photo format is not supported. Please choose a JPG, PNG, or WebP photo.'
   if (/browser could not (prepare|read) the image|could not prepare the image/i.test(msg)) return 'This phone photo could not be read. Choose a JPG or PNG photo and try again.'
   if (/could not save the file|upload service is temporarily unavailable|upload did not return/i.test(msg)) return 'The photo could not be uploaded. Check your connection and try the upload again.'
+  if (/could not save the payment proof|payment proof service/i.test(msg)) return 'The receipt could not be archived yet. Check your connection and tap the receipt area to try again.'
   if (/upload (network connection|timed out|was interrupted)|network.*upload|upload.*interrupted|upload.*timeout/i.test(msg)) return 'The upload was interrupted. AbroBiz retried it safely—please tap the receipt area to try once more.'
   if (/Bucket not found/i.test(msg)) return "Storage isn't set up correctly yet — contact support."
   if (/use a (JPEG|PNG|WebP)|file type/i.test(msg)) return 'That file type or size is not supported.'

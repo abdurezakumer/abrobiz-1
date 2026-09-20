@@ -1,7 +1,7 @@
 import { supabase } from '../supabaseClient'
 import { edgeFunctionError } from '../errors'
 import type { Payment } from '../../types'
-import { prepareImageForUpload } from '../fileUpload'
+import { createClientUuid, prepareImageForUpload } from '../fileUpload'
 
 function mapPayment(row: any): Payment {
   return {
@@ -49,8 +49,9 @@ async function uploadPaymentBytes(
   contentType: string,
   onProgress?: (progress: number) => void,
   signal?: AbortSignal,
-  uploadId = crypto.randomUUID(),
+  uploadId?: string,
 ): Promise<string> {
+  const clientUploadId = uploadId ?? createClientUuid()
   const projectUrl = (import.meta.env.VITE_SUPABASE_URL ?? '').replace(/\/$/, '')
   const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY ?? ''
   const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
@@ -72,7 +73,7 @@ async function uploadPaymentBytes(
       if (typeof XMLHttpRequest === 'undefined' || !projectUrl || !anonKey) {
         const { data, error } = await supabase.functions.invoke('telegram-payment-proof', {
           body: bytes,
-          headers: { 'X-Business-Id': businessId, 'X-Upload-Id': uploadId, 'Content-Type': contentType },
+          headers: { 'X-Business-Id': businessId, 'X-Upload-Id': clientUploadId, 'Content-Type': contentType },
           signal,
         })
         if (error) throw await edgeFunctionError(error)
@@ -89,7 +90,7 @@ async function uploadPaymentBytes(
         request.setRequestHeader('Authorization', `Bearer ${accessToken}`)
         request.setRequestHeader('apikey', anonKey)
         request.setRequestHeader('X-Business-Id', businessId)
-        request.setRequestHeader('X-Upload-Id', uploadId)
+        request.setRequestHeader('X-Upload-Id', clientUploadId)
         request.setRequestHeader('Content-Type', contentType)
         const abortRequest = () => request.abort()
         const cleanupAbort = () => signal?.removeEventListener('abort', abortRequest)

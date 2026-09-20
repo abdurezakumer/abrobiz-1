@@ -4,6 +4,26 @@ export const PAYMENT_UPLOAD_ACCEPT = IMAGE_UPLOAD_ACCEPT
 
 const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'])
 
+/**
+ * Some older mobile browsers do not expose crypto.randomUUID(), while the
+ * payment-proof endpoint still requires a UUID-shaped idempotency key. Keep
+ * the fallback cryptographically random so retries remain safe and do not
+ * collide with another upload.
+ */
+export function createClientUuid(): string {
+  const cryptoApi = globalThis.crypto
+  if (typeof cryptoApi?.randomUUID === 'function') return cryptoApi.randomUUID()
+  if (typeof cryptoApi?.getRandomValues === 'function') {
+    const bytes = new Uint8Array(16)
+    cryptoApi.getRandomValues(bytes)
+    bytes[6] = (bytes[6] & 0x0f) | 0x40
+    bytes[8] = (bytes[8] & 0x3f) | 0x80
+    const hex = Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('')
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+  }
+  throw new Error('This browser cannot securely start the upload. Please update your browser and try again.')
+}
+
 /** Mobile browsers do not all report the same MIME type for camera photos. */
 export function detectedUploadType(file: File): string {
   const type = file.type.trim().toLowerCase()
@@ -75,15 +95,30 @@ type DecodedImage = {
 
 async function decodeImage(file: File): Promise<DecodedImage> {
   if (typeof createImageBitmap === 'function') {
-    const bitmap = await createImageBitmap(file)
-    return { source: bitmap, width: bitmap.width, height: bitmap.height, close: () => bitmap.close() }
+    try {
+      // Preserve the camera's EXIF orientation where the browser supports it.
+      // Safari and some Android WebViews expose createImageBitmap but reject
+      // particular camera/HEIC files, so the HTMLImageElement path below is a
+      // required compatibility fallback rather than an optional enhancement.
+      const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' })
+      if (bitmap.width > 0 && bitmap.height > 0) {
+        return { source: bitmap, width: bitmap.width, height: bitmap.height, close: () => bitmap.close() }
+      }
+      bitmap.close()
+    } catch {
+      // Fall through to the object-URL decoder used by mobile Safari.
+    }
   }
 
   const url = URL.createObjectURL(file)
   try {
     const element = await new Promise<HTMLImageElement>((resolve, reject) => {
       const image = new Image()
-      image.onload = () => resolve(image)
+      image.decoding = 'async'
+      image.onload = () => {
+        if (image.naturalWidth > 0 && image.naturalHeight > 0) resolve(image)
+        else reject(new Error('This browser could not read the image. Please choose a JPEG or PNG file.'))
+      }
       image.onerror = () => reject(new Error('This browser could not read the image. Please choose a JPEG or PNG file.'))
       image.src = url
     })
@@ -99,5 +134,9 @@ async function imageBlob(canvas: HTMLCanvasElement, maxBytes: number): Promise<B
     const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/webp', quality))
     if (blob && blob.size <= maxBytes) return blob
   }
-  return new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.35))
+  for (const quality of [0.82, 0.68, 0.54, 0.4, 0.3, 0.2]) {
+    const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', quality))
+    if (blob && blob.size <= maxBytes) return blob
+  }
+  return null
 }

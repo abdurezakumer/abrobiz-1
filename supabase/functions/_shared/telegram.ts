@@ -41,7 +41,10 @@ export class TelegramClient {
     form.set('photo', new Blob([bytes], { type: contentType }), filename)
     if (opts.caption) form.set('caption', opts.caption)
     if (opts.replyMarkup) form.set('reply_markup', JSON.stringify(opts.replyMarkup))
-    return this.callFormData('sendPhoto', form)
+    // A camera photo can be several megabytes. The default external-request
+    // timeout is appropriate for small JSON calls but is too short for a
+    // Telegram multipart upload on a busy edge/mobile path.
+    return this.callFormData('sendPhoto', form, 60_000)
   }
 
   async editMessageText(chatId: string | number, messageId: number, text: string, opts: { replyMarkup?: unknown } = {}) {
@@ -100,11 +103,11 @@ export class TelegramClient {
     return data
   }
 
-  private async callFormData(method: string, body: FormData): Promise<{ ok: boolean; result?: unknown; description?: string }> {
+  private async callFormData(method: string, body: FormData, timeoutMs = 8_000): Promise<{ ok: boolean; result?: unknown; description?: string }> {
     const res = await fetchWithTimeout(`${TELEGRAM_API}/bot${this.token}/${method}`, {
       method: 'POST',
       body,
-    })
+    }, timeoutMs)
     const data = await readJsonResponse(res, 256 * 1024)
     if (!data.ok) {
       throw new Error(`Telegram API error (${method}): ${data.description ?? res.statusText}`)

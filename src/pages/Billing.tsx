@@ -11,7 +11,7 @@ import { daysRemaining } from '../lib/api/subscriptions'
 import { getOrCreateBusinessTelegramLink, disconnectTelegram, telegramPaymentDeepLink, notifyAdminsOfPayment, type TelegramLinkStatus } from '../lib/api/telegram'
 import { friendlyError } from '../lib/errors'
 import type { Plan, PaymentMethod, Payment } from '../types'
-import { PAYMENT_UPLOAD_ACCEPT, detectedUploadType, takeSelectedFile } from '../lib/fileUpload'
+import { PAYMENT_UPLOAD_ACCEPT, createClientUuid, detectedUploadType, takeSelectedFile } from '../lib/fileUpload'
 
 interface PaymentDraft {
   planId: string | null
@@ -267,7 +267,8 @@ export default function Billing() {
       }
       if (!business) throw new Error('Your business account is not ready yet.')
       // Upload directly after selection, just like the logo uploader. The
-      // receipt is kept in secure storage; no device cache is used.
+      // receipt is archived by the protected Telegram workflow; no device
+      // cache or Supabase Storage copy is used.
       const proofPath = await uploadPaymentProof(business.id, file, progress => {
         setUploadProgress(Math.min(99, 8 + Math.round(progress * 0.92)))
       }, uploadController.signal)
@@ -319,7 +320,7 @@ export default function Billing() {
     setSubmitting(true)
     setError('')
     try {
-      paymentIdempotencyKey.current ??= crypto.randomUUID()
+      paymentIdempotencyKey.current ??= createClientUuid()
       const idempotencyKey = paymentIdempotencyKey.current
       if (!proofPath) throw new Error('Please upload your payment receipt before submitting.')
       const payment = await submitPayment({
