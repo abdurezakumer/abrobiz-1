@@ -17,6 +17,7 @@ interface PaymentDraft {
   planId: string | null
   paymentMethodId: string | null
   note: string
+  proofFlowOpen: boolean
 }
 
 function paymentDraftKey(businessId: string) {
@@ -29,10 +30,11 @@ function readPaymentDraft(businessId: string): PaymentDraft | null {
     const raw = window.sessionStorage.getItem(key)
     if (!raw) return null
     const parsed = JSON.parse(raw) as Partial<PaymentDraft> & { proofPath?: unknown; proofFileName?: unknown }
-    const draft = {
+    const draft: PaymentDraft = {
       planId: typeof parsed.planId === 'string' ? parsed.planId : null,
       paymentMethodId: typeof parsed.paymentMethodId === 'string' ? parsed.paymentMethodId : null,
       note: typeof parsed.note === 'string' ? parsed.note : '',
+      proofFlowOpen: parsed.proofFlowOpen === true,
     }
     // Remove proof references written by older versions. A Telegram proof is
     // intentionally memory-only and must never be restored from browser cache.
@@ -69,6 +71,7 @@ export default function Billing() {
   const [savingProof, setSavingProof] = useState(false)
   const [uploadProgress, setUploadProgress] = useState<number | null>(null)
   const [proofUploadError, setProofUploadError] = useState(false)
+  const [proofFlowOpen, setProofFlowOpen] = useState(false)
   const [note, setNote] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
@@ -79,6 +82,7 @@ export default function Billing() {
   const [telegramLink, setTelegramLink] = useState<TelegramLinkStatus | null>(null)
   const paymentIdempotencyKey = useRef<string | null>(null)
   const proofUploadController = useRef<AbortController | null>(null)
+  const proofDialogRef = useRef<HTMLDivElement | null>(null)
   const draftHydrated = useRef(false)
   const optionsRequestId = useRef(0)
 
@@ -97,6 +101,7 @@ export default function Billing() {
     const finish = () => {
       if (requestId !== optionsRequestId.current || !plansFinished || !methodsFinished) return
       draftHydrated.current = true
+      setProofFlowOpen(draft?.proofFlowOpen === true)
       setShowOptionsOverlay(false)
     }
 
@@ -165,8 +170,25 @@ export default function Billing() {
       planId: selectedPlan?.id ?? null,
       paymentMethodId: selectedMethod?.id ?? null,
       note,
+      proofFlowOpen,
     })
-  }, [business?.id, note, plansError, selectedMethod?.id, selectedPlan, selectedPlan?.id])
+  }, [business?.id, note, plansError, proofFlowOpen, selectedMethod?.id, selectedPlan, selectedPlan?.id])
+
+  useEffect(() => {
+    if (!proofFlowOpen) return
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    const focusDialog = () => proofDialogRef.current?.focus()
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !savingProof && !submitting) setProofFlowOpen(false)
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    window.requestAnimationFrame(focusDialog)
+    return () => {
+      document.body.style.overflow = previousOverflow
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [proofFlowOpen, savingProof, submitting])
 
   useEffect(() => {
     const preventLossWhileWorking = (event: BeforeUnloadEvent) => {
@@ -247,6 +269,7 @@ export default function Billing() {
 
   async function handleProofSelection(file: File | null) {
     if (!file) return
+    setProofFlowOpen(true)
     const previousProofPath = proofPath
     const previousProofFileName = proofFile?.name ?? proofFileName
     const uploadController = new AbortController()
@@ -299,6 +322,11 @@ export default function Billing() {
     proofUploadController.current?.abort()
   }
 
+  function closeProofFlow() {
+    if (savingProof || submitting) return
+    setProofFlowOpen(false)
+  }
+
   async function handleSubmit() {
     if (!business || !selectedPlan) return
     if (!selectedMethod) {
@@ -335,6 +363,7 @@ export default function Billing() {
       })
       notifyAdminsOfPayment(payment.id)
       paymentIdempotencyKey.current = null
+      setProofFlowOpen(false)
       setProofPath(null)
       setHistory(previous => [payment, ...previous.filter(item => item.id !== payment.id)])
       setSubmittedPaymentId(payment.id)
@@ -365,6 +394,7 @@ export default function Billing() {
   return (
     <DashboardLayout>
       <style>{'@keyframes abrobiz-spin { to { transform: rotate(360deg); } } @keyframes billing-skeleton { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }'}</style>
+      <div aria-hidden={proofFlowOpen} style={proofFlowOpen ? billingPageBlur : undefined}>
       {showOptionsOverlay && (plansLoading || methodsLoading) && (
         <div role="dialog" aria-modal="true" aria-labelledby="billing-loading-title" style={billingOverlay}>
           <div style={billingOverlayCard}>
@@ -458,7 +488,7 @@ export default function Billing() {
                       </li>
                     ))}
                   </ul>
-                  <button onClick={() => { clearPaymentDraft(business.id); setSelectedPlan(plan); setSelectedMethod(methods[0] ?? null); setProofPath(null); setProofFile(null); setProofFileName(''); setNote(''); setSubmitted(false); setSubmittedPaymentId(null); setError('') }} style={selectBtn}>Select</button>
+                  <button onClick={() => { clearPaymentDraft(business.id); setProofFlowOpen(false); setSelectedPlan(plan); setSelectedMethod(methods[0] ?? null); setProofPath(null); setProofFile(null); setProofFileName(''); setNote(''); setSubmitted(false); setSubmittedPaymentId(null); setError('') }} style={selectBtn}>Select</button>
                 </div>
               ))}
             </div>
@@ -468,7 +498,7 @@ export default function Billing() {
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} style={{ background: '#fff', borderRadius: 16, border: '1.5px solid #D4A853', padding: 22, marginBottom: 30 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <div style={{ fontSize: 15, fontWeight: 600 }}>Full payment for {selectedPlan.name} — {selectedPlan.priceEtb} ETB</div>
-            <button onClick={() => { clearPaymentDraft(business.id); setSelectedPlan(null); setSelectedMethod(methods[0] ?? null); setProofPath(null); setProofFile(null); setProofFileName(''); setNote('') }} style={{ background: 'none', border: 'none', fontSize: 13, color: 'rgba(10,12,16,0.5)', cursor: 'pointer' }}>Cancel</button>
+            <button onClick={() => { clearPaymentDraft(business.id); setProofFlowOpen(false); setSelectedPlan(null); setSelectedMethod(methods[0] ?? null); setProofPath(null); setProofFile(null); setProofFileName(''); setNote('') }} style={{ background: 'none', border: 'none', fontSize: 13, color: 'rgba(10,12,16,0.5)', cursor: 'pointer' }}>Cancel</button>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
@@ -606,6 +636,82 @@ export default function Billing() {
           ))}
         </div>
       )}
+      </div>
+
+      {proofFlowOpen && (
+        <div role="dialog" aria-modal="true" aria-labelledby="proof-dialog-title" style={proofOverlay}>
+          <div ref={proofDialogRef} tabIndex={-1} style={proofDialog}>
+            <div style={proofDialogHeader}>
+              <div>
+                <div style={proofDialogEyebrow}>SECURE PAYMENT FLOW</div>
+                <h2 id="proof-dialog-title" style={proofDialogTitle}>Upload payment proof</h2>
+              </div>
+              <button type="button" onClick={closeProofFlow} disabled={savingProof || submitting} style={proofBackButton}>
+                Back
+              </button>
+            </div>
+            <p style={proofDialogText}>
+              Keep this screen open while AbroBiz securely receives your receipt. Your image is sent directly for payment review and is not saved in browser cache.
+            </p>
+            <label style={{ ...uploadSurface, marginBottom: 12, opacity: savingProof || submitting ? 0.7 : 1, cursor: savingProof || submitting ? 'not-allowed' : 'pointer' }}>
+              <div style={proofUploadCard}>
+                {savingProof ? (
+                  <>
+                    <div style={proofStatusTitle}>Uploading receipt… {uploadProgress ?? 0}%</div>
+                    <div role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={uploadProgress ?? 0} style={proofProgressTrack}>
+                      <div style={{ ...proofProgressFill, width: `${uploadProgress ?? 0}%` }} />
+                    </div>
+                    <div style={proofStatusHint}>Do not close this screen until the upload finishes.</div>
+                  </>
+                ) : proofReady ? (
+                  <>
+                    <CheckCircle2 size={34} color="#166534" style={{ display: 'block', margin: '0 auto 8px' }} />
+                    <div style={{ ...proofStatusTitle, color: '#166534' }}>Receipt uploaded successfully</div>
+                    <div style={proofStatusHint}>{displayedProofName || 'Payment receipt'} is ready to submit.</div>
+                    <div style={{ ...proofStatusHint, marginTop: 4 }}>Tap here if you want to replace it.</div>
+                  </>
+                ) : (
+                  <>
+                    <motion.div animate={{ y: [0, -6, 0] }} transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }} style={proofUploadIcon}>
+                      <ArrowUp size={17} color="#D4A853" strokeWidth={2.5} />
+                      <Upload size={24} color="rgba(10,12,16,0.4)" />
+                    </motion.div>
+                    <div style={proofStatusTitle}>Choose your receipt photo</div>
+                    <div style={proofStatusHint}>JPG, PNG, WebP, or a photo from your phone · up to 5 MB</div>
+                  </>
+                )}
+              </div>
+              <input
+                type="file"
+                accept={PAYMENT_UPLOAD_ACCEPT}
+                aria-label="Choose payment proof photo"
+                disabled={savingProof || submitting}
+                style={fileInputStyle}
+                onChange={e => void handleProofSelection(takeSelectedFile(e.currentTarget))}
+              />
+              <span style={proofChooseText}>{savingProof ? 'Uploading…' : proofReady ? 'Choose another photo' : 'Choose receipt photo'}</span>
+            </label>
+
+            {savingProof && (
+              <button type="button" onClick={cancelProofUpload} style={proofCancelButton}>Cancel upload</button>
+            )}
+            {error && (
+              <div role="alert" style={proofDialogError}>
+                <div>{error}</div>
+                {proofUploadError && telegramPaymentUrl && (
+                  <a href={telegramPaymentUrl} target="_blank" rel="noopener noreferrer" style={telegramErrorLink}>Open Telegram payment upload</a>
+                )}
+              </div>
+            )}
+            {!savingProof && proofReady && (
+              <button type="button" onClick={closeProofFlow} style={proofContinueButton}>Continue to payment submission</button>
+            )}
+            {!savingProof && !proofReady && (
+              <div style={proofDialogHint}>If you refreshed during an upload, choose the receipt again to restart it safely.</div>
+            )}
+          </div>
+        </div>
+      )}
     </DashboardLayout>
   )
 }
@@ -634,10 +740,29 @@ const refreshBtn: React.CSSProperties = { display: 'inline-flex', alignItems: 'c
 const stepNumber: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 22, height: 22, borderRadius: '50%', background: '#0A0C10', color: '#D4A853', fontSize: 11, fontWeight: 700 }
 const secureBadge: React.CSSProperties = { borderRadius: 999, padding: '5px 9px', background: 'rgba(22,101,52,0.1)', color: '#166534', fontSize: 10.5, fontWeight: 700 }
 const copyBtn: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 5, border: '1px solid rgba(10,12,16,0.12)', borderRadius: 8, padding: '8px 10px', background: '#fff', color: '#0A0C10', fontSize: 12, fontWeight: 650, cursor: 'pointer' }
+const billingPageBlur: React.CSSProperties = { filter: 'blur(5px)', pointerEvents: 'none', userSelect: 'none', transition: 'filter 180ms ease' }
 const billingOverlay: React.CSSProperties = { position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, background: 'rgba(10,12,16,0.34)', backdropFilter: 'blur(3px)' }
 const billingOverlayCard: React.CSSProperties = { width: 'min(100%, 340px)', background: '#fff', borderRadius: 18, padding: '26px 24px 22px', textAlign: 'center', boxShadow: '0 24px 70px rgba(10,12,16,0.2)' }
 const billingSpinner: React.CSSProperties = { width: 30, height: 30, border: '3px solid rgba(212,168,83,0.25)', borderTopColor: '#D4A853', borderRadius: '50%', animation: 'abrobiz-spin 0.8s linear infinite', margin: '0 auto 14px' }
 const overlayCancelBtn: React.CSSProperties = { border: '1px solid rgba(10,12,16,0.14)', borderRadius: 9, padding: '9px 18px', background: '#fff', color: '#0A0C10', fontSize: 13, fontWeight: 600, cursor: 'pointer' }
+const proofOverlay: React.CSSProperties = { position: 'fixed', inset: 0, zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left))', background: 'rgba(10,12,16,0.5)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }
+const proofDialog: React.CSSProperties = { width: 'min(100%, 470px)', maxHeight: 'calc(100dvh - 32px)', overflowY: 'auto', background: '#fff', borderRadius: 20, padding: '22px 20px 20px', boxShadow: '0 24px 90px rgba(10,12,16,0.32)', outline: 'none' }
+const proofDialogHeader: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, marginBottom: 10 }
+const proofDialogEyebrow: React.CSSProperties = { color: '#A27A22', fontSize: 10, fontWeight: 800, letterSpacing: 1.2, marginBottom: 5 }
+const proofDialogTitle: React.CSSProperties = { color: '#0A0C10', fontFamily: 'Outfit, sans-serif', fontSize: 23, lineHeight: 1.15, margin: 0 }
+const proofBackButton: React.CSSProperties = { border: '1px solid rgba(10,12,16,0.14)', borderRadius: 9, padding: '8px 12px', background: '#fff', color: '#0A0C10', fontSize: 12.5, fontWeight: 650, cursor: 'pointer', flexShrink: 0 }
+const proofDialogText: React.CSSProperties = { color: 'rgba(10,12,16,0.58)', fontSize: 13, lineHeight: 1.55, margin: '0 0 16px' }
+const proofUploadCard: React.CSSProperties = { border: '1.5px dashed rgba(10,12,16,0.2)', borderRadius: 14, padding: '30px 18px', textAlign: 'center', background: '#F6F3EE', minHeight: 150, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }
+const proofUploadIcon: React.CSSProperties = { display: 'inline-flex', flexDirection: 'column', alignItems: 'center', marginBottom: 8 }
+const proofStatusTitle: React.CSSProperties = { color: 'rgba(10,12,16,0.74)', fontSize: 15, fontWeight: 700, lineHeight: 1.35, wordBreak: 'break-word' }
+const proofStatusHint: React.CSSProperties = { color: 'rgba(10,12,16,0.48)', fontSize: 12, lineHeight: 1.45, marginTop: 7 }
+const proofProgressTrack: React.CSSProperties = { width: '100%', height: 9, background: 'rgba(10,12,16,0.1)', borderRadius: 999, overflow: 'hidden', marginTop: 15 }
+const proofProgressFill: React.CSSProperties = { height: '100%', background: 'linear-gradient(90deg, #D4A853, #F0C978)', borderRadius: 999, transition: 'width 180ms ease' }
+const proofChooseText: React.CSSProperties = { display: 'block', color: '#A27A22', fontSize: 12.5, fontWeight: 700, textAlign: 'center', marginTop: 8 }
+const proofCancelButton: React.CSSProperties = { display: 'block', width: '100%', border: '1px solid rgba(220,38,38,0.22)', borderRadius: 10, padding: '10px 12px', background: 'rgba(220,38,38,0.06)', color: '#991B1B', fontSize: 13, fontWeight: 700, cursor: 'pointer', marginBottom: 12 }
+const proofDialogError: React.CSSProperties = { color: '#991B1B', background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 10, padding: '10px 12px', fontSize: 12.5, lineHeight: 1.45, marginBottom: 12 }
+const proofContinueButton: React.CSSProperties = { display: 'block', width: '100%', border: 'none', borderRadius: 10, padding: '11px 14px', background: '#D4A853', color: '#0A0C10', fontSize: 13.5, fontWeight: 750, cursor: 'pointer' }
+const proofDialogHint: React.CSSProperties = { color: 'rgba(10,12,16,0.48)', fontSize: 12, lineHeight: 1.45, textAlign: 'center', marginTop: 10 }
 const planSkeleton: React.CSSProperties = { minHeight: 250, borderRadius: 16, background: 'linear-gradient(100deg, rgba(10,12,16,0.06) 30%, rgba(255,255,255,0.8) 50%, rgba(10,12,16,0.06) 70%)', backgroundSize: '200% 100%', animation: 'billing-skeleton 1.2s ease-in-out infinite' }
 const optionStateCard: React.CSSProperties = { background: '#fff', border: '1px solid rgba(10,12,16,0.08)', borderRadius: 14, padding: '18px 20px', marginBottom: 30, fontSize: 13.5 }
 const inlineError: React.CSSProperties = { background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', color: '#991B1B', borderRadius: 10, padding: '10px 12px', marginBottom: 14, fontSize: 13 }
