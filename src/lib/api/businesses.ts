@@ -1,8 +1,8 @@
 import { supabase } from '../supabaseClient'
 import type { Business, WeeklyHours } from '../../types'
 import { isValidBusinessSlug } from '../slugify'
-import { edgeFunctionError } from '../errors'
-import { prepareImageForUpload } from '../fileUpload'
+import { createClientUuid, prepareImageForUpload, readFileAsArrayBuffer } from '../fileUpload'
+import { uploadBinaryToFunction } from '../uploadClient'
 
 const DEFAULT_HOURS: WeeklyHours = {
   mon: { open: '08:00', close: '22:00', closed: false },
@@ -135,17 +135,24 @@ export async function updateBusiness(id: string, patch: Partial<{
 export async function uploadBusinessImage(
   bucket: 'logos' | 'covers',
   businessId: string,
-  file: File
+  file: File,
+  onProgress?: (progress: number) => void,
 ): Promise<string> {
   const uploadFile = await prepareImageForUpload(file, 5 * 1024 * 1024)
-  const uploadBytes = await uploadFile.arrayBuffer()
-  const { data, error } = await supabase.functions.invoke('storage-upload', {
-    body: uploadBytes,
-    headers: { 'X-Upload-Bucket': bucket, 'X-Business-Id': businessId, 'Content-Type': uploadFile.type },
+  const data = await uploadBinaryToFunction({
+    functionName: 'storage-upload',
+    bytes: await readFileAsArrayBuffer(uploadFile),
+    contentType: uploadFile.type,
+    headers: {
+      'X-Upload-Bucket': bucket,
+      'X-Business-Id': businessId,
+      'X-Upload-Id': createClientUuid(),
+    },
+    onProgress,
   })
-  if (error) throw await edgeFunctionError(error)
-  if (!data?.path) throw new Error('Upload did not return a file path.')
-  const { data: publicData } = supabase.storage.from(bucket).getPublicUrl(data.path)
+  const path = typeof data.path === 'string' ? data.path : ''
+  if (!path) throw new Error('Upload did not return a file path.')
+  const { data: publicData } = supabase.storage.from(bucket).getPublicUrl(path)
   return publicData.publicUrl
 }
 

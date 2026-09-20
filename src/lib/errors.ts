@@ -18,7 +18,7 @@ export function friendlyError(error: unknown): string {
   if (/responseType|arrayBuffer|securely start the upload|browser cannot/i.test(msg)) return 'This phone browser could not prepare the photo. Please update the browser or choose a JPG photo and try again.'
   if (/auth session missing|session.*missing|not authenticated/i.test(msg)) return 'Your session expired. Please sign in again and retry the receipt upload.'
   if (/Bucket not found/i.test(msg)) return "Storage isn't set up correctly yet — contact support."
-  if (/use a (JPEG|PNG|WebP)|file type/i.test(msg)) return 'That file type or size is not supported.'
+  if (/use a (JPEG|PNG|WebP)|please choose a (JPEG|PNG|WebP)|file type/i.test(msg)) return 'That file type or size is not supported. Please choose a JPG, PNG, or WebP photo.'
   if (/not authenticated|admins only|permission denied/i.test(msg)) return 'Please sign in again and try once more.'
   if (/already awaiting review|already waiting for admin review|already.*pending/i.test(msg)) return 'Your payment is already waiting for admin confirmation. Please wait for the review notification.'
   if (/payment proof was not found|proof path is invalid/i.test(msg)) return 'Your receipt upload is no longer available. Please choose the receipt photo again.'

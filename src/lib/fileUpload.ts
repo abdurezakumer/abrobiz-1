@@ -1,8 +1,10 @@
-export const IMAGE_UPLOAD_ACCEPT = 'image/jpeg,image/png,image/webp,image/heic,image/heif'
+// Let phone galleries expose their native photo format. The client/server
+// validators below still accept only safe, normalized image formats.
+export const IMAGE_UPLOAD_ACCEPT = 'image/*'
 // Payment receipts use the same photo picker behavior as logos and covers.
 export const PAYMENT_UPLOAD_ACCEPT = IMAGE_UPLOAD_ACCEPT
 
-const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'])
+const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif', 'image/avif'])
 
 /**
  * Some older mobile browsers do not expose crypto.randomUUID(), while the
@@ -35,6 +37,7 @@ export function detectedUploadType(file: File): string {
   if (extension === 'webp') return 'image/webp'
   if (extension === 'heic') return 'image/heic'
   if (extension === 'heif') return 'image/heif'
+  if (extension === 'avif') return 'image/avif'
   if (extension === 'pdf') return 'application/pdf'
   return ''
 }
@@ -80,7 +83,7 @@ export async function prepareImageForUpload(file: File, maxBytes: number): Promi
   if (!IMAGE_TYPES.has(detectedType)) {
     throw new Error('Please choose a JPEG, PNG, or WebP image.')
   }
-  const mustConvert = detectedType === 'image/heic' || detectedType === 'image/heif'
+  const mustConvert = !['image/jpeg', 'image/png', 'image/webp'].includes(detectedType)
   if (!mustConvert && file.size <= maxBytes && file.type === detectedType) return file
   if (!mustConvert && file.size <= maxBytes) return new File([file], file.name, { type: detectedType })
 

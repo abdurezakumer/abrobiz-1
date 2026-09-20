@@ -46,6 +46,7 @@ export default function BusinessSettings() {
   const [uploadingLogo, setUploadingLogo] = useState(false)
   const [uploadingCover, setUploadingCover] = useState(false)
   const [uploadingGallery, setUploadingGallery] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null)
   const [uploadError, setUploadError] = useState('')
   const [supportRequests, setSupportRequests] = useState<SupportRequest[]>([])
   const [requestedSubdomain, setRequestedSubdomain] = useState('')
@@ -108,43 +109,49 @@ export default function BusinessSettings() {
   async function handleLogoUpload(file: File) {
     setUploadingLogo(true)
     setUploadError('')
+    setUploadProgress(0)
     try {
-      const url = await uploadBusinessImage('logos', form!.id, file)
-      patch('logoUrl', url)
+      const url = await uploadBusinessImage('logos', form!.id, file, setUploadProgress)
       await updateBusiness(form!.id, { logoUrl: url })
+      patch('logoUrl', url)
     } catch (err) {
       setUploadError(friendlyError(err))
     } finally {
       setUploadingLogo(false)
+      setUploadProgress(null)
     }
   }
 
   async function handleCoverUpload(file: File) {
     setUploadingCover(true)
     setUploadError('')
+    setUploadProgress(0)
     try {
-      const url = await uploadBusinessImage('covers', form!.id, file)
-      patch('coverUrl', url)
+      const url = await uploadBusinessImage('covers', form!.id, file, setUploadProgress)
       await updateBusiness(form!.id, { coverUrl: url })
+      patch('coverUrl', url)
     } catch (err) {
       setUploadError(friendlyError(err))
     } finally {
       setUploadingCover(false)
+      setUploadProgress(null)
     }
   }
 
   async function handleGalleryUpload(file: File) {
     setUploadingGallery(true)
     setUploadError('')
+    setUploadProgress(0)
     try {
-      const url = await uploadBusinessImage('covers', form!.id, file)
+      const url = await uploadBusinessImage('covers', form!.id, file, setUploadProgress)
       const nextGallery = [...form!.galleryUrls, url]
-      patch('galleryUrls', nextGallery)
       await updateBusiness(form!.id, { galleryUrls: nextGallery })
+      patch('galleryUrls', nextGallery)
     } catch (err) {
       setUploadError(friendlyError(err))
     } finally {
       setUploadingGallery(false)
+      setUploadProgress(null)
     }
   }
 
@@ -265,8 +272,8 @@ export default function BusinessSettings() {
 
       <Section title="Branding" category="branding" activeCategory={activeCategory}>
         <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
-          <ImageUploader label="Logo" imageUrl={form.logoUrl} uploading={uploadingLogo} onUpload={handleLogoUpload} shape="round" />
-          <ImageUploader label="Cover photo" imageUrl={form.coverUrl} uploading={uploadingCover} onUpload={handleCoverUpload} shape="wide" />
+          <ImageUploader label="Logo" imageUrl={form.logoUrl} uploading={uploadingLogo} progress={uploadingLogo ? uploadProgress : null} onUpload={handleLogoUpload} shape="round" />
+          <ImageUploader label="Cover photo" imageUrl={form.coverUrl} uploading={uploadingCover} progress={uploadingCover ? uploadProgress : null} onUpload={handleCoverUpload} shape="wide" />
         </div>
         {uploadError && (
           <div style={{ color: '#DC2626', fontSize: 12.5, marginTop: 12, background: 'rgba(220,38,38,0.08)', padding: '9px 12px', borderRadius: 9 }}>
@@ -327,7 +334,7 @@ export default function BusinessSettings() {
             ))}
             {form.galleryUrls.length < 8 && (
               <label style={{ width: 90, height: 90, borderRadius: 10, border: '1px dashed rgba(10,12,16,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: '#F6F3EE' }}>
-                {uploadingGallery ? <span style={{ fontSize: 11, color: 'rgba(10,12,16,0.4)' }}>…</span> : (
+                {uploadingGallery ? <div style={{ width: 58, textAlign: 'center' }}><span style={{ fontSize: 11, color: 'rgba(10,12,16,0.4)' }}>{uploadProgress ?? 0}%</span><div role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={uploadProgress ?? 0} style={{ height: 4, marginTop: 5, borderRadius: 99, background: 'rgba(10,12,16,0.1)', overflow: 'hidden' }}><div style={{ width: `${uploadProgress ?? 0}%`, height: '100%', background: '#D4A853' }} /></div></div> : (
                   <motion.div
                     animate={{ y: [0, -4, 0] }}
                     transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
@@ -452,7 +459,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   )
 }
 
-function ImageUploader({ label, imageUrl, uploading, onUpload, shape }: { label: string; imageUrl?: string; uploading: boolean; onUpload: (f: File) => void; shape: 'round' | 'wide' }) {
+function ImageUploader({ label, imageUrl, uploading, progress, onUpload, shape }: { label: string; imageUrl?: string; uploading: boolean; progress: number | null; onUpload: (f: File) => void; shape: 'round' | 'wide' }) {
   return (
     <div>
       <div style={{ fontSize: 12, color: 'rgba(10,12,16,0.5)', marginBottom: 6 }}>{label}</div>
@@ -476,8 +483,9 @@ function ImageUploader({ label, imageUrl, uploading, onUpload, shape }: { label:
             </motion.div>
           )}
         </div>
-        <input type="file" accept={IMAGE_UPLOAD_ACCEPT} hidden onChange={e => { const file = takeSelectedFile(e.currentTarget); if (file) void onUpload(file) }} />
-        <span style={{ fontSize: 11.5, color: '#D4A853', marginTop: 4, display: 'block' }}>{uploading ? 'Uploading…' : 'Click to change'}</span>
+        <input type="file" accept={IMAGE_UPLOAD_ACCEPT} hidden disabled={uploading} onChange={e => { const file = takeSelectedFile(e.currentTarget); if (file) void onUpload(file) }} />
+        {uploading && <div role="progressbar" aria-label={`${label} upload progress`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress ?? 0} style={{ height: 5, width: shape === 'round' ? 84 : 220, maxWidth: '100%', marginTop: 7, borderRadius: 99, background: 'rgba(10,12,16,0.1)', overflow: 'hidden' }}><div style={{ width: `${progress ?? 0}%`, height: '100%', background: '#D4A853', transition: 'width 180ms ease' }} /></div>}
+        <span style={{ fontSize: 11.5, color: '#D4A853', marginTop: 4, display: 'block' }}>{uploading ? `Uploading… ${progress ?? 0}%` : 'Click to change'}</span>
       </label>
     </div>
   )

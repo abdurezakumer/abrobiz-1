@@ -246,19 +246,23 @@ function ItemForm({
   const [imageUrl, setImageUrl] = useState(existing?.imageUrl)
   const [isFeatured, setIsFeatured] = useState(existing?.isFeatured ?? false)
   const [uploading, setUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null)
   const [uploadError, setUploadError] = useState('')
   const [saving, setSaving] = useState(false)
 
   async function handleImage(file: File) {
+    if (uploading) return
     setUploading(true)
+    setUploadProgress(0)
     setUploadError('')
     try {
-      const url = await uploadItemImage(businessId, file)
+      const url = await uploadItemImage(businessId, file, setUploadProgress)
       setImageUrl(url)
     } catch (error) {
       setUploadError(friendlyError(error))
     } finally {
       setUploading(false)
+      setUploadProgress(null)
     }
   }
 
@@ -323,13 +327,14 @@ function ItemForm({
           <input type="number" step="0.01" value={price} onChange={e => setPrice(parseFloat(e.target.value) || 0)} style={{ ...formInput, width: 120 }} placeholder="Price" />
           <label style={{ fontSize: 12.5, color: '#0A0C10', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
             {safeImageUrl(imageUrl) && <img src={safeImageUrl(imageUrl) ?? undefined} alt="" width={32} height={32} loading="lazy" decoding="async" style={{ width: 32, height: 32, borderRadius: 6, objectFit: 'cover' }} />}
-            <span style={{ padding: '8px 12px', borderRadius: 8, background: '#F6F3EE', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+            <span style={{ padding: '8px 12px', borderRadius: 8, background: '#F6F3EE', display: 'inline-flex', alignItems: 'center', gap: 5, opacity: uploading ? 0.7 : 1 }}>
               {!uploading && <motion.span animate={{ y: [0, -3, 0] }} transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }} style={{ display: 'inline-flex' }}><ArrowUp size={13} /></motion.span>}
-              {uploading ? 'Uploading…' : imageUrl ? 'Change photo' : 'Add photo'}
+              {uploading ? `Uploading… ${uploadProgress ?? 0}%` : imageUrl ? 'Change photo' : 'Add photo'}
             </span>
-            <input type="file" accept={IMAGE_UPLOAD_ACCEPT} hidden onChange={e => { const file = takeSelectedFile(e.currentTarget); if (file) void handleImage(file) }} />
+            <input type="file" accept={IMAGE_UPLOAD_ACCEPT} hidden disabled={uploading} onChange={e => { const file = takeSelectedFile(e.currentTarget); if (file) void handleImage(file) }} />
           </label>
         </div>
+        {uploading && <div role="progressbar" aria-label="Menu image upload progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={uploadProgress ?? 0} style={{ height: 5, borderRadius: 99, background: 'rgba(10,12,16,0.1)', overflow: 'hidden' }}><div style={{ width: `${uploadProgress ?? 0}%`, height: '100%', background: '#D4A853', transition: 'width 180ms ease' }} /></div>}
         {uploadError && <div style={{ color: '#B91C1C', fontSize: 12.5 }}>{uploadError}</div>}
         <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: '#0A0C10', cursor: 'pointer' }}>
           <input type="checkbox" checked={isFeatured} onChange={e => setIsFeatured(e.target.checked)} style={{ width: 15, height: 15 }} />

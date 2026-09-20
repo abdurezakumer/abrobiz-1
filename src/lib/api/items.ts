@@ -1,7 +1,7 @@
 import { supabase } from '../supabaseClient'
 import type { Item, ItemTranslations } from '../../types'
-import { edgeFunctionError } from '../errors'
-import { prepareImageForUpload } from '../fileUpload'
+import { createClientUuid, prepareImageForUpload, readFileAsArrayBuffer } from '../fileUpload'
+import { uploadBinaryToFunction } from '../uploadClient'
 
 function mapItem(row: any): Item {
   return {
@@ -77,15 +77,21 @@ export async function deleteItem(id: string): Promise<void> {
   if (error) throw error
 }
 
-export async function uploadItemImage(businessId: string, file: File): Promise<string> {
+export async function uploadItemImage(businessId: string, file: File, onProgress?: (progress: number) => void): Promise<string> {
   const uploadFile = await prepareImageForUpload(file, 5 * 1024 * 1024)
-  const uploadBytes = await uploadFile.arrayBuffer()
-  const { data, error } = await supabase.functions.invoke('storage-upload', {
-    body: uploadBytes,
-    headers: { 'X-Upload-Bucket': 'item-images', 'X-Business-Id': businessId, 'Content-Type': uploadFile.type },
+  const data = await uploadBinaryToFunction({
+    functionName: 'storage-upload',
+    bytes: await readFileAsArrayBuffer(uploadFile),
+    contentType: uploadFile.type,
+    headers: {
+      'X-Upload-Bucket': 'item-images',
+      'X-Business-Id': businessId,
+      'X-Upload-Id': createClientUuid(),
+    },
+    onProgress,
   })
-  if (error) throw await edgeFunctionError(error)
-  if (!data?.path) throw new Error('Upload did not return a file path.')
-  const { data: publicData } = supabase.storage.from('item-images').getPublicUrl(data.path)
+  const path = typeof data.path === 'string' ? data.path : ''
+  if (!path) throw new Error('Upload did not return a file path.')
+  const { data: publicData } = supabase.storage.from('item-images').getPublicUrl(path)
   return publicData.publicUrl
 }
