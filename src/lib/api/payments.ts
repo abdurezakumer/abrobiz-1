@@ -72,7 +72,10 @@ async function uploadPaymentBytes(
 export async function uploadPaymentProof(businessId: string, file: File, onProgress?: (progress: number) => void, signal?: AbortSignal): Promise<string> {
   // Payment receipts are photos archived by Telegram, not Supabase Storage.
   // Large camera images are resized before the request for reliable phones.
-  const uploadFile = await prepareImageForUpload(file, 5 * 1024 * 1024)
+  // Telegram's sendPhoto endpoint is most reliable with JPEG. Phone camera
+  // images are often HEIC or oversized JPEGs, so normalize the proof to a
+  // bounded JPEG before sending it to the archive channel.
+  const uploadFile = await prepareImageForUpload(file, 5 * 1024 * 1024, 'image/jpeg')
   if (uploadFile.size > 5 * 1024 * 1024 || !['image/jpeg', 'image/png', 'image/webp'].includes(uploadFile.type)) {
     throw new Error('Use a JPEG, PNG, or WebP photo up to 5 MB.')
   }

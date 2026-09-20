@@ -94,27 +94,32 @@ export async function readFileAsArrayBuffer(file: Blob): Promise<ArrayBuffer> {
  * oversized supported images in the browser before sending them, keeping the
  * request small enough for mobile networks and the upload function.
  */
-export async function prepareImageForUpload(file: File, maxBytes: number): Promise<File> {
+export async function prepareImageForUpload(file: File, maxBytes: number, preferredMime?: 'image/jpeg' | 'image/webp'): Promise<File> {
   const detectedType = detectedUploadType(file)
   if (!IMAGE_TYPES.has(detectedType)) {
     throw new Error('Please choose a JPEG, PNG, or WebP image.')
   }
-  const mustConvert = !['image/jpeg', 'image/png', 'image/webp'].includes(detectedType)
+  const mustConvert = !['image/jpeg', 'image/png', 'image/webp'].includes(detectedType) || Boolean(preferredMime && detectedType !== preferredMime)
   if (!mustConvert && file.size <= maxBytes && file.type === detectedType) return file
   if (!mustConvert && file.size <= maxBytes) return new File([file], file.name, { type: detectedType })
 
-  const image = await decodeImage(file)
   const maxDimension = 2400
-  const scale = Math.min(1, maxDimension / Math.max(image.width, image.height))
-  const canvas = document.createElement('canvas')
-  canvas.width = Math.max(1, Math.round(image.width * scale))
-  canvas.height = Math.max(1, Math.round(image.height * scale))
-  const context = canvas.getContext('2d')
-  if (!context) throw new Error('This browser could not prepare the image. Please choose a smaller file.')
-  context.drawImage(image.source, 0, 0, canvas.width, canvas.height)
-  image.close()
-
-  const blob = await imageBlob(canvas, maxBytes)
+  // Downsample during decode where supported. This avoids creating a full
+  // 12–48 MP camera bitmap in mobile memory before drawing the smaller copy.
+  const image = await decodeImage(file, maxDimension)
+  let blob: Blob | null
+  try {
+    const scale = Math.min(1, maxDimension / Math.max(image.width, image.height))
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.max(1, Math.round(image.width * scale))
+    canvas.height = Math.max(1, Math.round(image.height * scale))
+    const context = canvas.getContext('2d')
+    if (!context) throw new Error('This browser could not prepare the image. Please choose a smaller file.')
+    context.drawImage(image.source, 0, 0, canvas.width, canvas.height)
+    blob = await imageBlob(canvas, maxBytes, preferredMime)
+  } finally {
+    image.close()
+  }
   if (!blob) throw new Error('This browser could not prepare the image. Please choose a smaller file.')
   const extension = blob.type === 'image/webp' ? 'webp' : 'jpg'
   const name = file.name.replace(/\.[^.]+$/, '') || 'upload'
@@ -128,14 +133,18 @@ type DecodedImage = {
   close: () => void
 }
 
-async function decodeImage(file: File): Promise<DecodedImage> {
+async function decodeImage(file: File, maxDecodeWidth: number): Promise<DecodedImage> {
   if (typeof createImageBitmap === 'function') {
     try {
       // Preserve the camera's EXIF orientation where the browser supports it.
       // Safari and some Android WebViews expose createImageBitmap but reject
       // particular camera/HEIC files, so the HTMLImageElement path below is a
       // required compatibility fallback rather than an optional enhancement.
-      const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' })
+      const bitmap = await createImageBitmap(file, {
+        imageOrientation: 'from-image',
+        resizeWidth: maxDecodeWidth,
+        resizeQuality: 'high',
+      })
       if (bitmap.width > 0 && bitmap.height > 0) {
         return { source: bitmap, width: bitmap.width, height: bitmap.height, close: () => bitmap.close() }
       }
@@ -164,14 +173,14 @@ async function decodeImage(file: File): Promise<DecodedImage> {
   }
 }
 
-async function imageBlob(canvas: HTMLCanvasElement, maxBytes: number): Promise<Blob | null> {
-  for (const quality of [0.82, 0.68, 0.54, 0.4]) {
-    const blob = await canvasBlob(canvas, 'image/webp', quality)
-    if (blob && blob.size <= maxBytes) return blob
-  }
-  for (const quality of [0.82, 0.68, 0.54, 0.4, 0.3, 0.2]) {
-    const blob = await canvasBlob(canvas, 'image/jpeg', quality)
-    if (blob && blob.size <= maxBytes) return blob
+async function imageBlob(canvas: HTMLCanvasElement, maxBytes: number, preferredMime?: 'image/jpeg' | 'image/webp'): Promise<Blob | null> {
+  const formats = preferredMime ? [preferredMime] : ['image/webp', 'image/jpeg'] as const
+  for (const format of formats) {
+    const qualities = format === 'image/jpeg' ? [0.82, 0.68, 0.54, 0.4, 0.3, 0.2] : [0.82, 0.68, 0.54, 0.4]
+    for (const quality of qualities) {
+      const blob = await canvasBlob(canvas, format, quality)
+      if (blob && blob.size <= maxBytes) return blob
+    }
   }
   return null
 }
