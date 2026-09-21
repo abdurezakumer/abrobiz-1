@@ -255,6 +255,10 @@ export default function Landing() {
                   borderRadius: 18, padding: 26,
                 }}
               >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7, color: '#D4A853', fontSize: 10, fontWeight: 850, letterSpacing: 1.1, marginBottom: 17 }}>
+                  <Sparkles size={13} /> {billingCycle === 'month' ? 'MONTHLY PLAN' : 'ANNUAL PLAN'}
+                  {billingCycle === 'year' && pricing.annualSavingsEtb > 0 && <span style={{ marginLeft: 'auto', color: '#9BD5A7', fontSize: 9.5, letterSpacing: .6 }}>BEST VALUE</span>}
+                </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'flex-start' }}>
                   <div style={{ fontSize: 15, fontWeight: 650 }}>{plan.name}</div>
                   {pricing.hasDiscount && <span style={landingOfferBadge}>{pricing.discountLabel}</span>}

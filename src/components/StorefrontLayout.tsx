@@ -58,7 +58,7 @@ export default function StorefrontLayout({
   const telegramUrl = safeTelegramUrl(business.social.telegramHandle)
 
   return (
-    <div style={{ position: 'relative', minHeight: '100vh', background: theme.bg, color: theme.text, fontFamily: 'Inter, sans-serif', display: 'flex', flexDirection: 'column' }}>
+    <div className="storefront-shell" style={{ position: 'relative', minHeight: '100vh', background: theme.bg, color: theme.text, fontFamily: 'Inter, sans-serif', display: 'flex', flexDirection: 'column' }}>
       <AmbientBackdrop theme={theme} accentColor={business.accentColor} />
       <header
         style={{
@@ -72,7 +72,7 @@ export default function StorefrontLayout({
           ) : (
             <div style={{ width: 30, height: 30, borderRadius: '50%', background: business.accentColor, flexShrink: 0 }} />
           )}
-          <span style={{ fontFamily: 'Outfit, sans-serif', fontWeight: 600, fontSize: 15.5 }}>{business.name}</span>
+          <span style={{ fontFamily: theme.headingFont, fontWeight: 650, fontSize: 16 }}>{business.name}</span>
         </Link>
 
         <nav style={{ display: 'flex', alignItems: 'center', gap: 4 }} className="storefront-nav-desktop">
@@ -139,6 +139,10 @@ export default function StorefrontLayout({
       <StorefrontFooter business={business} theme={theme} lang={lang} categoryLabel={categoryLabel} navItems={navItems} logoUrl={logoUrl} facebookUrl={facebookUrl} instagramUrl={instagramUrl} tiktokUrl={tiktokUrl} telegramUrl={telegramUrl} />
 
       <style>{`
+        .storefront-shell h1, .storefront-shell h2, .storefront-shell h3, .storefront-shell h4, .storefront-shell blockquote { font-family: ${theme.headingFont}; }
+        .storefront-shell h1 { font-size: clamp(2.25rem, 7vw, 5.75rem); }
+        .storefront-shell h2 { font-size: clamp(1.5rem, 3.5vw, 2.5rem); }
+        .storefront-shell h3 { font-size: clamp(1.05rem, 2vw, 1.35rem); }
         @media (max-width: 720px) {
           .storefront-nav-desktop { display: none !important; }
           .storefront-nav-toggle { display: block !important; }

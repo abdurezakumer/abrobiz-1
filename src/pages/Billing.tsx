@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
-import { ArrowUp, Check, Upload, Clock, CheckCircle2, XCircle, RefreshCw, Copy, CheckCheck } from 'lucide-react'
+import { ArrowUp, Check, Upload, Clock, CheckCircle2, XCircle, RefreshCw, Copy, CheckCheck, Sparkles, BadgePercent } from 'lucide-react'
 import DashboardLayout from '../components/DashboardLayout'
 import TelegramConnectCard from '../components/TelegramConnectCard'
 import { useAuth } from '../lib/authContext'
@@ -496,14 +496,20 @@ export default function Billing() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14, marginBottom: 30 }}>
               {plans.map(plan => {
                 const pricing = getPlanPrice(plan, billingCycle)
-                return <div key={plan.id} style={{ background: '#fff', borderRadius: 18, border: pricing.hasDiscount ? '1.5px solid rgba(212,168,83,0.7)' : '1px solid rgba(10,12,16,0.06)', padding: 20, boxShadow: pricing.hasDiscount ? '0 12px 30px rgba(212,168,83,0.12)' : 'none' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: '#0A0C10' }}>{plan.name}</div>
-                    {pricing.hasDiscount && <span style={offerBadge}>{pricing.discountLabel}</span>}
+                return <div key={plan.id} style={{ ...planCard, border: pricing.hasDiscount ? '1.5px solid rgba(212,168,83,0.7)' : planCard.border, boxShadow: pricing.hasDiscount ? '0 16px 34px rgba(212,168,83,0.15)' : planCard.boxShadow }}>
+                  <div style={planCardGlow} aria-hidden="true" />
+                  <div style={planCycleHeader}>
+                    <div style={planCycleMark}><Sparkles size={14} /></div>
+                    <span>{billingCycle === 'month' ? 'MONTHLY PLAN' : 'ANNUAL PLAN'}</span>
+                    {billingCycle === 'year' && pricing.annualSavingsEtb > 0 && <span style={bestValuePill}>BEST VALUE</span>}
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, position: 'relative' }}>
+                    <div><div style={{ fontSize: 17, fontWeight: 750, color: '#0A0C10', fontFamily: 'Outfit, sans-serif' }}>{plan.name}</div><div style={planCycleCaption}>{billingCycle === 'month' ? 'Flexible month-to-month access' : 'One full year of access'}</div></div>
+                    {pricing.hasDiscount && <span style={offerBadge}><BadgePercent size={12} /> {pricing.discountLabel}</span>}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
                     <span style={{ fontSize: 28, fontWeight: 750, color: '#0A0C10', fontFamily: 'Outfit, sans-serif' }}>{formatEtb(pricing.priceEtb)}</span>
-                    <span style={{ fontSize: 13, color: 'rgba(10,12,16,0.45)' }}>ETB/{billingCycle}</span>
+                    <span style={{ fontSize: 13, color: 'rgba(10,12,16,0.45)' }}>ETB/{billingCycle === 'month' ? 'month' : 'year'}</span>
                     {pricing.hasDiscount && <span style={{ fontSize: 13, color: 'rgba(10,12,16,0.42)', textDecoration: 'line-through' }}>{formatEtb(pricing.originalPriceEtb)} ETB</span>}
                   </div>
                   {billingCycle === 'year' && pricing.annualSavingsEtb > 0 && <div style={savingText}>Save {formatEtb(pricing.annualSavingsEtb)} ETB vs monthly</div>}
@@ -766,7 +772,13 @@ const selectBtn: React.CSSProperties = { background: '#D4A853', color: '#0A0C10'
 const billingCycleToggle: React.CSSProperties = { display: 'inline-flex', padding: 3, gap: 2, borderRadius: 10, background: '#F0EDE7', border: '1px solid rgba(10,12,16,0.08)' }
 const billingCycleButton: React.CSSProperties = { border: 'none', borderRadius: 7, padding: '7px 11px', background: 'transparent', color: 'rgba(10,12,16,0.55)', fontSize: 12, fontWeight: 700, cursor: 'pointer' }
 const billingCycleButtonActive: React.CSSProperties = { background: '#0A0C10', color: '#F0EDE7', boxShadow: '0 2px 5px rgba(10,12,16,0.14)' }
-const offerBadge: React.CSSProperties = { display: 'inline-flex', borderRadius: 999, padding: '5px 8px', background: 'rgba(212,168,83,0.16)', color: '#8A6417', fontSize: 10.5, fontWeight: 800, whiteSpace: 'nowrap' }
+const planCard: React.CSSProperties = { position: 'relative', overflow: 'hidden', background: '#fff', borderRadius: 20, border: '1px solid rgba(10,12,16,0.06)', padding: 20, boxShadow: '0 8px 24px rgba(10,12,16,0.04)' }
+const planCardGlow: React.CSSProperties = { position: 'absolute', top: -44, right: -28, width: 128, height: 128, borderRadius: '50%', background: 'radial-gradient(circle, rgba(212,168,83,0.22), rgba(212,168,83,0) 70%)', pointerEvents: 'none' }
+const planCycleHeader: React.CSSProperties = { position: 'relative', display: 'flex', alignItems: 'center', gap: 7, marginBottom: 18, color: '#8A6417', fontSize: 10, fontWeight: 850, letterSpacing: 1.05 }
+const planCycleMark: React.CSSProperties = { width: 26, height: 26, display: 'grid', placeItems: 'center', borderRadius: 9, background: 'linear-gradient(135deg, #0A0C10, #34404A)', color: '#F0C978' }
+const bestValuePill: React.CSSProperties = { marginLeft: 'auto', padding: '4px 7px', borderRadius: 999, background: 'rgba(22,101,52,0.1)', color: '#166534', fontSize: 9, letterSpacing: 0.5 }
+const planCycleCaption: React.CSSProperties = { color: 'rgba(10,12,16,0.44)', fontSize: 11.5, marginTop: 3 }
+const offerBadge: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 4, borderRadius: 999, padding: '5px 8px', background: 'rgba(212,168,83,0.16)', color: '#8A6417', fontSize: 10.5, fontWeight: 800, whiteSpace: 'nowrap' }
 const savingText: React.CSSProperties = { color: '#166534', fontSize: 11.5, fontWeight: 700, marginTop: 5 }
 const methodChip: React.CSSProperties = { border: 'none', borderRadius: 8, padding: '8px 14px', fontSize: 13, cursor: 'pointer', fontWeight: 500 }
 const uploadSurface: React.CSSProperties = { display: 'block', width: '100%', padding: 0, marginBottom: 14, background: 'transparent', cursor: 'pointer', textAlign: 'left' }

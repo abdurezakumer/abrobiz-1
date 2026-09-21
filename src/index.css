@@ -25,6 +25,11 @@ input, textarea, select, button {
   font-family: inherit;
 }
 
+@keyframes abrobiz-skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
