@@ -1,14 +1,14 @@
 import { type ReactNode } from 'react'
 import { Link, useLocation, useParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Clock, Facebook, Instagram, Mail, MapPin, Music2, Phone, Send, Menu as MenuIcon, X } from 'lucide-react'
+import { Clock, Facebook, Instagram, Mail, MapPin, MessageCircle, Music2, Phone, Send, Menu as MenuIcon, X } from 'lucide-react'
 import { useState } from 'react'
 import type { Business, Language } from '../types'
 import type { StorefrontTheme } from '../lib/storefrontTheme'
 import type { StorefrontEntitlements } from '../lib/useStorefrontData'
 import { DAY_LABELS, t } from '../lib/i18n'
 import { publicStorefrontUrl, storefrontPath } from '../lib/storefrontUrl'
-import { safeHttpsUrl, safeImageUrl, safeMailto, safeTel, safeTelegramUrl } from '../lib/safeUrl'
+import { safeHttpsUrl, safeImageUrl, safeMailto, safeTel, safeTelegramUrl, safeWhatsappUrl } from '../lib/safeUrl'
 import AmbientBackdrop from './AmbientBackdrop'
 import BusinessLocation from './BusinessLocation'
 
@@ -56,6 +56,7 @@ export default function StorefrontLayout({
   const instagramUrl = safeHttpsUrl(business.social.instagramUrl)
   const tiktokUrl = safeHttpsUrl(business.social.tiktokUrl)
   const telegramUrl = safeTelegramUrl(business.social.telegramHandle)
+  const whatsappUrl = safeWhatsappUrl(business.phone)
 
   return (
     <div className="storefront-shell" style={{ position: 'relative', minHeight: '100vh', background: theme.bg, color: theme.text, fontFamily: 'Inter, sans-serif', display: 'flex', flexDirection: 'column' }}>
@@ -138,6 +139,11 @@ export default function StorefrontLayout({
 
       <StorefrontFooter business={business} theme={theme} lang={lang} categoryLabel={categoryLabel} navItems={navItems} logoUrl={logoUrl} facebookUrl={facebookUrl} instagramUrl={instagramUrl} tiktokUrl={tiktokUrl} telegramUrl={telegramUrl} />
 
+      {whatsappUrl && <a className="storefront-whatsapp" href={whatsappUrl} target="_blank" rel="noopener noreferrer" aria-label={`Chat with ${business.name} on WhatsApp`}>
+        <MessageCircle size={20} aria-hidden="true" />
+        <span>WhatsApp</span>
+      </a>}
+
       <style>{`
         .storefront-shell h1, .storefront-shell h2, .storefront-shell h3, .storefront-shell h4, .storefront-shell blockquote { font-family: ${theme.headingFont}; }
         .storefront-shell h1 { font-size: clamp(2.25rem, 7vw, 5.75rem); }
@@ -151,6 +157,10 @@ export default function StorefrontLayout({
         }
         .storefront-footer a:hover { color: ${theme.text} !important; }
         .storefront-footer a:focus-visible, .storefront-footer button:focus-visible { outline: 2px solid ${business.accentColor}; outline-offset: 3px; }
+        .storefront-whatsapp { position: fixed; right: 18px; bottom: calc(18px + env(safe-area-inset-bottom)); z-index: 30; display: inline-flex; align-items: center; gap: 8px; padding: 12px 15px; border-radius: 999px; background: #25D366; color: #062B16; box-shadow: 0 12px 28px rgba(5, 64, 29, .28); text-decoration: none; font: 750 12.5px Inter, sans-serif; transition: transform .18s ease, box-shadow .18s ease; }
+        .storefront-whatsapp:hover { color: #062B16 !important; transform: translateY(-2px); box-shadow: 0 16px 32px rgba(5, 64, 29, .34); }
+        .storefront-whatsapp:focus-visible { outline: 3px solid ${theme.text}; outline-offset: 3px; }
+        @media (max-width: 420px) { .storefront-whatsapp { right: 12px; padding: 12px; } .storefront-whatsapp span { display: none; } }
       `}</style>
     </div>
   )

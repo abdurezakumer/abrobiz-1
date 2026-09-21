@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { safeHttpsUrl, safeImageUrl, safeInternalPath, safeMailto, safeTel, safeTelegramUrl } from '../safeUrl'
+import { safeHttpsUrl, safeImageUrl, safeInternalPath, safeMailto, safeTel, safeTelegramUrl, safeWhatsappUrl } from '../safeUrl'
 
 describe('safe browser URLs', () => {
   it('rejects executable and non-HTTPS external protocols', () => {
@@ -26,6 +26,9 @@ describe('safe browser URLs', () => {
     expect(safeMailto('owner@example.com')).toBe('mailto:owner%40example.com')
     expect(safeMailto('x@example.com\r\nBcc:evil@example.com')).toBeNull()
     expect(safeTel('+251 911 000 000')).toContain('tel:')
+    expect(safeWhatsappUrl('+251 911 000 000')).toBe('https://wa.me/251911000000')
+    expect(safeWhatsappUrl('0911000000')).toBe('https://wa.me/251911000000')
+    expect(safeWhatsappUrl('javascript:alert(1)')).toBeNull()
     expect(safeTelegramUrl('@abrobiz_bot')).toBe('https://t.me/abrobiz_bot')
     expect(safeTelegramUrl('javascript:alert(1)')).toBeNull()
   })

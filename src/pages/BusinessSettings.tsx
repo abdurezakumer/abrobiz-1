@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
-import { ArrowUp, Building2, Check, FileText, LayoutTemplate, Palette, Share2, Upload } from 'lucide-react'
+import { ArrowUp, Building2, Check, Facebook, FileText, Instagram, LayoutTemplate, Music2, Palette, Send, Share2, Upload } from 'lucide-react'
+import type { ReactNode } from 'react'
 import DashboardLayout from '../components/DashboardLayout'
 import { useAuth } from '../lib/authContext'
 import { updateBusiness, uploadBusinessImage } from '../lib/api/businesses'
@@ -428,12 +429,12 @@ export default function BusinessSettings() {
       </Section>
 
       <Section title="Social links" category="social" activeCategory={activeCategory}>
-        <p style={{ color: 'rgba(10,12,16,0.5)', fontSize: 12.5, lineHeight: 1.55, margin: '-3px 0 14px' }}>Add your public social profiles. After saving, configured links appear as labeled icons in your public website footer.</p>
+        <p style={{ color: 'rgba(10,12,16,0.5)', fontSize: 12.5, lineHeight: 1.55, margin: '-3px 0 14px' }}>Add only your username or page name. AbroBiz adds the official platform link automatically, and saved profiles appear as real icons in your public website footer.</p>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
-          <Field label="Facebook URL"><input type="url" inputMode="url" placeholder="https://facebook.com/your-page" value={form.social.facebookUrl ?? ''} onChange={e => patch('social', { ...form.social, facebookUrl: e.target.value })} style={inputStyle} /></Field>
-          <Field label="Instagram URL"><input type="url" inputMode="url" placeholder="https://instagram.com/your-profile" value={form.social.instagramUrl ?? ''} onChange={e => patch('social', { ...form.social, instagramUrl: e.target.value })} style={inputStyle} /></Field>
-          <Field label="TikTok URL"><input type="url" inputMode="url" placeholder="https://tiktok.com/@your-profile" value={form.social.tiktokUrl ?? ''} onChange={e => patch('social', { ...form.social, tiktokUrl: e.target.value })} style={inputStyle} /></Field>
-          <Field label="Telegram handle"><input inputMode="text" placeholder="@your-handle" value={form.social.telegramHandle ?? ''} onChange={e => patch('social', { ...form.social, telegramHandle: e.target.value })} style={inputStyle} /></Field>
+          <SocialField label="Facebook" prefix="https://facebook.com/" icon={<Facebook size={16} />} value={socialUsername(form.social.facebookUrl, 'facebook.com')} onChange={value => patch('social', { ...form.social, facebookUrl: socialUrl(value, 'https://facebook.com/') })} />
+          <SocialField label="Instagram" prefix="https://instagram.com/" icon={<Instagram size={16} />} value={socialUsername(form.social.instagramUrl, 'instagram.com')} onChange={value => patch('social', { ...form.social, instagramUrl: socialUrl(value, 'https://instagram.com/') })} />
+          <SocialField label="TikTok" prefix="https://tiktok.com/" icon={<Music2 size={16} />} value={socialUsername(form.social.tiktokUrl, 'tiktok.com')} onChange={value => patch('social', { ...form.social, tiktokUrl: socialUrl(value, 'https://tiktok.com/') })} />
+          <SocialField label="Telegram" prefix="https://t.me/" icon={<Send size={16} />} value={socialUsername(form.social.telegramHandle, 't.me')} onChange={value => patch('social', { ...form.social, telegramHandle: socialHandle(value) })} />
         </div>
       </Section>
     </DashboardLayout>
@@ -457,6 +458,41 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       {children}
     </label>
   )
+}
+
+function SocialField({ label, prefix, icon, value, onChange }: { label: string; prefix: string; icon: ReactNode; value: string; onChange: (value: string) => void }) {
+  return (
+    <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 7, color: '#0A0C10', fontSize: 12.5, fontWeight: 650 }}>{icon}<span>{label}</span></span>
+      <span style={{ display: 'flex', alignItems: 'center', minWidth: 0, border: '1px solid rgba(10,12,16,0.1)', borderRadius: 9, background: '#fff', overflow: 'hidden' }}>
+        <span style={{ flexShrink: 0, padding: '9px 0 9px 10px', color: 'rgba(10,12,16,0.42)', fontSize: 12 }}>{prefix}</span>
+        <input aria-label={`${label} username`} value={value} onChange={event => onChange(event.target.value)} placeholder="your-username" style={{ ...inputStyle, minWidth: 0, flex: 1, border: 'none', borderRadius: 0, paddingLeft: 3 }} />
+      </span>
+    </label>
+  )
+}
+
+function socialUsername(value: string | undefined, host: string): string {
+  if (!value?.trim()) return ''
+  const candidate = value.trim()
+  try {
+    const parsed = new URL(candidate.includes('://') ? candidate : `https://${candidate}`)
+    if (parsed.hostname === host || parsed.hostname.endsWith(`.${host}`)) return parsed.pathname.replace(/^\/+|\/+$/g, '').replace(/^@/, '')
+  } catch { /* Treat it as a username below. */ }
+  return candidate.replace(/^@/, '').replace(/^\/+|\/+$/g, '')
+}
+
+function socialUrl(value: string, prefix: string): string | undefined {
+  const clean = value.trim()
+  if (!clean) return undefined
+  if (/^https:\/\//i.test(clean)) return clean
+  return `${prefix}${clean.replace(/^@/, '').replace(/^\/+/, '')}`
+}
+
+function socialHandle(value: string): string | undefined {
+  const clean = value.trim()
+  if (!clean) return undefined
+  return socialUsername(clean, 't.me').replace(/^@/, '')
 }
 
 function ImageUploader({ label, imageUrl, uploading, progress, onUpload, shape }: { label: string; imageUrl?: string; uploading: boolean; progress: number | null; onUpload: (f: File) => void; shape: 'round' | 'wide' }) {
