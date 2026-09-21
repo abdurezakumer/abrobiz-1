@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "lib": ["deno.window"],
+    "allowImportingTsExtensions": true
+  },
+  "fmt": {
+    "lineWidth": 120
+  }
+}
