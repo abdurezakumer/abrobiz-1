@@ -12,6 +12,7 @@ export interface StorefrontLabels {
   itemLabel: string
   categoryLabel: string
   icon: string
+  slug?: string
 }
 
 export interface StorefrontEntitlements {
@@ -130,12 +131,12 @@ export function useStorefrontData(slug: string | undefined, pagePath: string): S
             setLabels(cachedCategory.labels)
           } else {
             const { data } = await retryRead(async () => {
-              const result = await supabase.from('business_categories').select('label, item_label, category_label, icon').eq('id', biz.categoryId!).maybeSingle()
+              const result = await supabase.from('business_categories').select('slug, label, item_label, category_label, icon').eq('id', biz.categoryId!).maybeSingle()
               if (result.error) throw result.error
               return result
             }).catch(() => ({ data: null }))
             if (data && !cancelled) {
-              const nextLabels = { label: data.label, itemLabel: data.item_label, categoryLabel: data.category_label, icon: data.icon }
+              const nextLabels = { slug: data.slug, label: data.label, itemLabel: data.item_label, categoryLabel: data.category_label, icon: data.icon }
               categoryCache.set(biz.categoryId, { labels: nextLabels, expiresAt: Date.now() + PUBLIC_CONFIG_TTL })
               setLabels(nextLabels)
             }

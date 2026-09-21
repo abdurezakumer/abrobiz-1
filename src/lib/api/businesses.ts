@@ -40,6 +40,15 @@ function mapBusiness(row: any): Business {
     isPublished: row.is_published,
     isBlocked: row.is_blocked,
     blockedReason: row.blocked_reason ?? undefined,
+    seoTitle: row.seo_title ?? undefined,
+    seoDescription: row.seo_description ?? undefined,
+    seoImageUrl: row.seo_image_url ?? undefined,
+    seoIndexingEnabled: row.seo_indexing_enabled !== false,
+    seoTitleSource: row.seo_title_source ?? 'automatic',
+    seoDescriptionSource: row.seo_description_source ?? 'automatic',
+    seoImageSource: row.seo_image_source ?? 'automatic',
+    seoContentVersion: row.seo_content_version ?? undefined,
+    seoLastGeneratedAt: row.seo_last_generated_at ?? undefined,
     createdAt: row.created_at,
   }
 }
@@ -105,6 +114,13 @@ export async function updateBusiness(id: string, patch: Partial<{
   timezone: string
   isPublished: boolean
   categoryId: string | null
+  seoTitle: string | null
+  seoDescription: string | null
+  seoImageUrl: string | null
+  seoIndexingEnabled: boolean
+  seoTitleSource: Business['seoTitleSource']
+  seoDescriptionSource: Business['seoDescriptionSource']
+  seoImageSource: Business['seoImageSource']
 }>): Promise<void> {
   const dbPatch: Record<string, unknown> = {}
   if (patch.name !== undefined) dbPatch.name = patch.name
@@ -126,6 +142,13 @@ export async function updateBusiness(id: string, patch: Partial<{
   if (patch.timezone !== undefined) dbPatch.timezone = patch.timezone
   if (patch.isPublished !== undefined) dbPatch.is_published = patch.isPublished
   if (patch.categoryId !== undefined) dbPatch.category_id = patch.categoryId
+  if (patch.seoTitle !== undefined) dbPatch.seo_title = patch.seoTitle
+  if (patch.seoDescription !== undefined) dbPatch.seo_description = patch.seoDescription
+  if (patch.seoImageUrl !== undefined) dbPatch.seo_image_url = patch.seoImageUrl
+  if (patch.seoIndexingEnabled !== undefined) dbPatch.seo_indexing_enabled = patch.seoIndexingEnabled
+  if (patch.seoTitleSource !== undefined) dbPatch.seo_title_source = patch.seoTitleSource
+  if (patch.seoDescriptionSource !== undefined) dbPatch.seo_description_source = patch.seoDescriptionSource
+  if (patch.seoImageSource !== undefined) dbPatch.seo_image_source = patch.seoImageSource
 
   const { error } = await supabase.from('businesses').update(dbPatch).eq('id', id)
   if (error) throw error

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
-import { ArrowUp, Building2, Check, Facebook, FileText, Instagram, LayoutTemplate, Music2, Palette, Send, Share2, Upload } from 'lucide-react'
+import { ArrowUp, Building2, Check, Facebook, FileText, Instagram, LayoutTemplate, Music2, Palette, RotateCcw, Search, Send, Share2, Upload } from 'lucide-react'
 import type { ReactNode } from 'react'
 import DashboardLayout from '../components/DashboardLayout'
 import { useAuth } from '../lib/authContext'
@@ -18,6 +18,7 @@ import { BUILTIN_TEMPLATES } from '../lib/templateRegistry'
 import AICopyGenerator from '../components/AICopyGenerator'
 import { hasFeature } from '../lib/entitlements'
 import { listMySupportRequests, requestWebsiteAddressChange, type SupportRequest } from '../lib/api/support'
+import { buildTenantSeo } from '../lib/seo'
 
 const ALL_LANGUAGES: { code: Language; label: string }[] = [
   { code: 'en', label: 'English' },
@@ -26,12 +27,13 @@ const ALL_LANGUAGES: { code: Language; label: string }[] = [
 ]
 
 const DAYS: (keyof WeeklyHours)[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
-type SettingsCategory = 'business' | 'branding' | 'social' | 'template' | 'content'
+type SettingsCategory = 'business' | 'branding' | 'social' | 'template' | 'content' | 'seo'
 
 const SETTINGS_CATEGORIES: { id: SettingsCategory; label: string; description: string; icon: typeof Building2 }[] = [
   { id: 'business', label: 'Business info', description: 'Details, address, hours, and visibility', icon: Building2 },
   { id: 'branding', label: 'Branding', description: 'Logo, cover photo, and colors', icon: Palette },
   { id: 'social', label: 'Social links', description: 'Profiles shown on your website', icon: Share2 },
+  { id: 'seo', label: 'Website SEO', description: 'Search visibility and previews', icon: Search },
   { id: 'template', label: 'Website template', description: 'Choose your website design', icon: LayoutTemplate },
   { id: 'content', label: 'Content & preferences', description: 'About, languages, and AI writing', icon: FileText },
 ]
@@ -78,6 +80,9 @@ export default function BusinessSettings() {
     setSaving(true)
     setSaveError('')
     try {
+      const titleChanged = (form.seoTitle ?? '').trim() !== (business?.seoTitle ?? '').trim()
+      const descriptionChanged = (form.seoDescription ?? '').trim() !== (business?.seoDescription ?? '').trim()
+      const imageChanged = (form.seoImageUrl ?? '').trim() !== (business?.seoImageUrl ?? '').trim()
       await updateBusiness(form.id, {
         name: form.name,
         description: form.description,
@@ -96,6 +101,13 @@ export default function BusinessSettings() {
         timezone: form.timezone,
         categoryId: form.categoryId,
         isPublished: form.isPublished,
+        seoTitle: form.seoTitle?.trim() || null,
+        seoDescription: form.seoDescription?.trim() || null,
+        seoImageUrl: form.seoImageUrl?.trim() || null,
+        seoIndexingEnabled: form.seoIndexingEnabled,
+        seoTitleSource: form.seoTitle?.trim() ? (titleChanged ? 'owner_customized' : (form.seoTitleSource ?? 'automatic')) : 'automatic',
+        seoDescriptionSource: form.seoDescription?.trim() ? (descriptionChanged ? 'owner_customized' : (form.seoDescriptionSource ?? 'automatic')) : 'automatic',
+        seoImageSource: form.seoImageUrl?.trim() ? (imageChanged ? 'owner_customized' : (form.seoImageSource ?? 'automatic')) : 'automatic',
       })
       await refreshBusiness()
       setSaved(true)
@@ -192,6 +204,13 @@ export default function BusinessSettings() {
     if (has && form!.languages.length === 1) return
     patch('languages', has ? form!.languages.filter(l => l !== code) : [...form!.languages, code])
   }
+
+  const selectedCategory = categories.find(category => category.id === form.categoryId)
+  const seoPreview = buildTenantSeo(form, {
+    categoryLabel: selectedCategory?.label,
+    categorySlug: selectedCategory?.slug,
+    canonicalUrl: publicStorefrontUrl(form.slug),
+  }, true)
 
   return (
     <DashboardLayout>
@@ -437,6 +456,27 @@ export default function BusinessSettings() {
           <SocialField label="Telegram" prefix="https://t.me/" icon={<Send size={16} />} value={socialUsername(form.social.telegramHandle, 't.me')} onChange={value => patch('social', { ...form.social, telegramHandle: socialHandle(value) })} />
         </div>
       </Section>
+
+      <Section title="Website SEO" category="seo" activeCategory={activeCategory}>
+        <div style={{ display: 'grid', gap: 16 }}>
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
+            <input type="checkbox" checked={form.seoIndexingEnabled !== false} onChange={event => patch('seoIndexingEnabled', event.target.checked)} style={{ width: 17, height: 17, marginTop: 2 }} />
+            <span><strong style={{ display: 'block', fontSize: 14 }}>Allow search engines to discover my website</strong><small style={{ display: 'block', color: 'rgba(10,12,16,0.52)', marginTop: 4, lineHeight: 1.5 }}>Your website is indexed only after it is published and its AbroBiz plan is active.</small></span>
+          </label>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
+            <Field label="SEO title (optional)"><input value={form.seoTitle ?? ''} maxLength={160} onChange={event => patch('seoTitle', event.target.value)} placeholder={seoPreview.title} style={inputStyle} /></Field>
+            <Field label="Social image URL (optional)"><input value={form.seoImageUrl ?? ''} maxLength={2048} onChange={event => patch('seoImageUrl', event.target.value)} placeholder="Your cover image is used automatically" style={inputStyle} /></Field>
+          </div>
+          <Field label="Meta description (optional)"><textarea value={form.seoDescription ?? ''} maxLength={500} onChange={event => patch('seoDescription', event.target.value)} rows={3} placeholder={seoPreview.description} style={{ ...inputStyle, width: '100%', resize: 'vertical' }} /></Field>
+          <div style={{ border: '1px solid rgba(10,12,16,0.1)', borderRadius: 14, padding: 15, background: '#FBFAF7' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: 10 }}><strong style={{ fontSize: 13 }}>Search preview</strong><span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: '#166534', fontSize: 11.5 }}><Search size={13} /> Automatically prepared</span></div>
+            <div style={{ color: '#1a0dab', fontSize: 17, lineHeight: 1.3, fontWeight: 600 }}>{seoPreview.title}</div>
+            <div style={{ color: '#16803c', fontSize: 12, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{seoPreview.canonicalUrl}</div>
+            <div style={{ color: 'rgba(10,12,16,0.66)', fontSize: 13, lineHeight: 1.5, marginTop: 5 }}>{seoPreview.description}</div>
+          </div>
+          {(form.seoTitle || form.seoDescription || form.seoImageUrl) && <button type="button" onClick={() => { patch('seoTitle', ''); patch('seoDescription', ''); patch('seoImageUrl', ''); }} style={{ ...secondaryBtn, width: 'fit-content' }}><RotateCcw size={14} /> Reset to automatic</button>}
+        </div>
+      </Section>
     </DashboardLayout>
   )
 }
@@ -528,6 +568,7 @@ function ImageUploader({ label, imageUrl, uploading, progress, onUpload, shape }
 }
 
 const inputStyle: React.CSSProperties = { border: '1px solid rgba(10,12,16,0.1)', borderRadius: 9, padding: '9px 11px', fontSize: 13.5, outline: 'none', fontFamily: 'inherit' }
+const secondaryBtn: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 6, background: '#F6F3EE', color: '#0A0C10', border: '1px solid rgba(10,12,16,0.1)', borderRadius: 10, padding: '9px 13px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }
 const chip: React.CSSProperties = { border: 'none', borderRadius: 8, padding: '8px 14px', fontSize: 13, cursor: 'pointer', fontWeight: 500 }
 const saveBtn: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 6, background: '#D4A853', color: '#0A0C10', border: 'none', borderRadius: 10, padding: '10px 18px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }
 const categoryButton: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 9, minWidth: 0, padding: '11px 12px', border: '1px solid rgba(10,12,16,0.08)', borderRadius: 12, background: '#fff', color: '#0A0C10', cursor: 'pointer', textAlign: 'left' }

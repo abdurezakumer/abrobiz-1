@@ -184,7 +184,7 @@ function StorefrontFooter({ business, theme, lang, categoryLabel, navItems, logo
       <div className="storefront-footer-grid" style={{ maxWidth: 1120, margin: '0 auto', display: 'grid', gridTemplateColumns: '1.35fr .8fr 1fr 1fr', gap: 30 }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-            {logoUrl ? <img src={logoUrl} alt="" width={38} height={38} decoding="async" style={{ width: 38, height: 38, borderRadius: 12, objectFit: 'cover' }} /> : <div aria-hidden style={{ width: 38, height: 38, borderRadius: 12, background: business.accentColor }} />}
+            {logoUrl ? <img src={logoUrl} alt={`${business.name} logo`} width={38} height={38} decoding="async" style={{ width: 38, height: 38, borderRadius: 12, objectFit: 'cover' }} /> : <div aria-hidden style={{ width: 38, height: 38, borderRadius: 12, background: business.accentColor }} />}
             <div><h2 id="storefront-footer-title" style={{ margin: 0, fontSize: 18, lineHeight: 1.15, fontFamily: theme.headingFont, letterSpacing: '-.02em' }}>{business.name}</h2>{categoryLabel && categoryLabel !== 'Business' && <div style={{ marginTop: 5, color: theme.textDim, fontSize: 11.5, letterSpacing: '.08em', textTransform: 'uppercase' }}>{categoryLabel}</div>}</div>
           </div>
           {business.description && <p style={{ maxWidth: 300, margin: '16px 0 0', color: theme.textDim, fontSize: 12.5, lineHeight: 1.65 }}>{business.description}</p>}

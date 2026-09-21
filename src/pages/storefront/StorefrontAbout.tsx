@@ -58,7 +58,7 @@ export function AboutSection({ business, theme, copy }: { business: Business; th
                     initial={{ opacity: 0, scale: 0.95 }} whileInView={{ opacity: 1, scale: 1 }} viewport={{ once: true }} transition={{ delay: i * 0.05 }}
                   >
                     <TiltCard style={{ borderRadius: 12, overflow: 'hidden', border: `1px solid ${theme.border}` }}>
-                      <img src={safeImageUrl(url) ?? undefined} alt="" width={140} height={140} loading="lazy" decoding="async" style={{ width: '100%', height: 140, objectFit: 'cover', display: 'block' }} />
+                    <img src={safeImageUrl(url) ?? undefined} alt={`${business.name} gallery image ${i + 1}`} width={140} height={140} loading="lazy" decoding="async" style={{ width: '100%', height: 140, objectFit: 'cover', display: 'block' }} />
                     </TiltCard>
                   </motion.div>
                 ))}

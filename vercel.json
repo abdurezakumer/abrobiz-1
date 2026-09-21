@@ -1,5 +1,20 @@
 {
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }],
+  "rewrites": [
+    { "source": "/sitemap-index.xml", "destination": "/api/seo-sitemap-index" },
+    { "source": "/sitemaps/tenants-:page.xml", "destination": "/api/seo-tenant-sitemap-chunk?page=:page" },
+    { "source": "/sitemap.xml", "has": [{ "type": "host", "value": "(?<tenant>[a-z0-9-]+)\\.abrobiz\\.com" }], "destination": "/api/seo-tenant-sitemap" },
+    { "source": "/robots.txt", "has": [{ "type": "host", "value": "(?<tenant>[a-z0-9-]+)\\.abrobiz\\.com" }], "destination": "/api/seo-tenant-robots" },
+    { "source": "/", "has": [{ "type": "host", "value": "(?<tenant>[a-z0-9-]+)\\.abrobiz\\.com" }], "destination": "/api/seo-tenant-render" },
+    { "source": "/menu", "has": [{ "type": "host", "value": "(?<tenant>[a-z0-9-]+)\\.abrobiz\\.com" }], "destination": "/api/seo-tenant-render" },
+    { "source": "/about", "has": [{ "type": "host", "value": "(?<tenant>[a-z0-9-]+)\\.abrobiz\\.com" }], "destination": "/api/seo-tenant-render" },
+    { "source": "/contact", "has": [{ "type": "host", "value": "(?<tenant>[a-z0-9-]+)\\.abrobiz\\.com" }], "destination": "/api/seo-tenant-render" },
+    { "source": "/book", "has": [{ "type": "host", "value": "(?<tenant>[a-z0-9-]+)\\.abrobiz\\.com" }], "destination": "/api/seo-tenant-render" },
+    { "source": "/about", "has": [{ "type": "host", "value": "(?:www\\.)?abrobiz\\.com" }], "destination": "/api/seo-platform-render?path=/about" },
+    { "source": "/contact", "has": [{ "type": "host", "value": "(?:www\\.)?abrobiz\\.com" }], "destination": "/api/seo-platform-render?path=/contact" },
+    { "source": "/privacy", "has": [{ "type": "host", "value": "(?:www\\.)?abrobiz\\.com" }], "destination": "/api/seo-platform-render?path=/privacy" },
+    { "source": "/terms", "has": [{ "type": "host", "value": "(?:www\\.)?abrobiz\\.com" }], "destination": "/api/seo-platform-render?path=/terms" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ],
   "headers": [
     {
       "source": "/assets/(.*)",

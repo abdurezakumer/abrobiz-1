@@ -9,5 +9,12 @@ Disallow: /reset-password
 Disallow: /verify-email
 Disallow: /legal-acceptance
 Disallow: /marketing-policy
+Disallow: /billing
+Disallow: /payments
+Disallow: /security
+Disallow: /account
+Disallow: /r/
+Disallow: /demo/
 
 Sitemap: https://abrobiz.com/sitemap.xml
+Sitemap: https://abrobiz.com/sitemap-index.xml

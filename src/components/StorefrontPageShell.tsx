@@ -4,6 +4,8 @@ import { useStorefrontData, type StorefrontData } from '../lib/useStorefrontData
 import { themeFor, type StorefrontTheme } from '../lib/storefrontTheme'
 import StorefrontLayout from './StorefrontLayout'
 import { businessSlugFromHostname, publicStorefrontUrl } from '../lib/storefrontUrl'
+import { applySeoDefinition } from '../lib/seoDom'
+import { buildTenantSeo } from '../lib/seo'
 
 export default function StorefrontPageShell({
   pagePath, render,
@@ -16,46 +18,36 @@ export default function StorefrontPageShell({
   const data = useStorefrontData(slug, pagePath)
 
   useEffect(() => {
-    const business = data.business
-    if (!business) return
-    const copy = data.approvedCopy[data.lang] ?? data.approvedCopy.en
-    const description = (copy?.seo?.description || copy?.hero?.subheadline || business.description || business.aboutContent || `Discover ${business.name} on AbroBiz.`).slice(0, 160)
-    document.title = `${business.name} | AbroBiz`
-    const canonical = publicStorefrontUrl(business.slug)
-    const setMeta = (key: string, value: string, attribute: 'name' | 'property' = 'name') => {
-      let element = document.head.querySelector<HTMLMetaElement>(`meta[${attribute}="${key}"]`)
-      if (!element) {
-        element = document.createElement('meta')
-        element.setAttribute(attribute, key)
-        document.head.appendChild(element)
+    if (!data.business) {
+      if (data.business === null) {
+        document.title = 'Page not found — AbroBiz'
+        const robots = document.head.querySelector<HTMLMetaElement>('meta[name="robots"]') ?? document.createElement('meta')
+        robots.name = 'robots'
+        robots.content = 'noindex,nofollow'
+        if (!robots.parentElement) document.head.appendChild(robots)
       }
-      element.content = value
+      return undefined
     }
-    setMeta('description', description)
-    setMeta('og:title', business.name, 'property')
-    setMeta('og:description', description, 'property')
-    setMeta('og:url', canonical, 'property')
-    setMeta('og:type', 'website', 'property')
-    if (business.coverUrl) setMeta('og:image', business.coverUrl, 'property')
-    setMeta('twitter:card', 'summary_large_image')
-    setMeta('twitter:title', business.name)
-    setMeta('twitter:description', description)
-    let link = document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]')
-    if (!link) { link = document.createElement('link'); link.rel = 'canonical'; document.head.appendChild(link) }
-    link.href = canonical
-    const schemaId = 'abrobiz-business-schema'
-    document.getElementById(schemaId)?.remove()
-    const schema = document.createElement('script')
-    schema.id = schemaId
-    schema.type = 'application/ld+json'
-    schema.textContent = JSON.stringify({ '@context': 'https://schema.org', '@type': 'LocalBusiness', name: business.name, description, url: canonical, image: business.coverUrl || business.logoUrl, telephone: business.phone || undefined, email: business.email || undefined, address: business.address || undefined })
-    document.head.appendChild(schema)
-    return () => { document.getElementById(schemaId)?.remove() }
-  }, [data.business, data.lang, data.approvedCopy])
+    const seo = buildTenantSeo(data.business, {
+      categoryLabel: data.labels.label,
+      categorySlug: data.labels.slug,
+      canonicalUrl: publicStorefrontUrl(data.business.slug),
+      siteName: 'AbroBiz',
+    }, data.entitlements.siteActive)
+    return applySeoDefinition(seo)
+  }, [data.business, data.entitlements.siteActive, data.labels.label, data.labels.slug])
 
   if (data.business === undefined) return null
 
-  if (!data.business || data.business.isBlocked || !data.entitlements.siteActive) {
+  if (data.business === null) {
+    return (
+      <div style={{ minHeight: '100vh', background: '#080A0E', color: '#F5F3EF', display: 'grid', placeItems: 'center', padding: 24, fontFamily: 'Inter, sans-serif', textAlign: 'center' }}>
+        <div><div style={{ color: '#D4A853', fontSize: 12, letterSpacing: 2, fontWeight: 700 }}>ABROBIZ</div><h1 style={{ fontFamily: 'Outfit, sans-serif', fontSize: 34, margin: '14px 0 10px' }}>Website not found</h1><p style={{ color: 'rgba(245,243,239,.62)', lineHeight: 1.7, margin: 0 }}>This public business website does not exist or is not currently available.</p></div>
+      </div>
+    )
+  }
+
+  if (data.business.isBlocked || !data.entitlements.siteActive) {
     return (
       <div style={{ minHeight: '100vh', background: 'radial-gradient(circle at top, #232832 0%, #111318 58%)', color: '#F5F3EF', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, fontFamily: 'Inter, sans-serif' }}>
         <div style={{ width: 'min(520px, 100%)', textAlign: 'center', padding: '42px 28px', borderRadius: 24, border: '1px solid rgba(212,168,83,0.28)', background: 'rgba(255,255,255,0.055)', boxShadow: '0 24px 80px rgba(0,0,0,0.28)' }}>

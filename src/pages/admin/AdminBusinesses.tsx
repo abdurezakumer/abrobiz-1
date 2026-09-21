@@ -68,6 +68,11 @@ export default function AdminBusinesses() {
                 {b.subscriptionStatus ?? '—'}
               </div>
 
+              <div style={{ minWidth: 128, fontSize: 11.5, color: b.seoIndexingEnabled === false ? '#B42318' : '#166534' }}>
+                <strong>SEO {b.seoIndexingEnabled === false ? 'off' : 'ready'}</strong>
+                <span style={{ display: 'block', color: 'rgba(10,12,16,0.42)', marginTop: 3 }}>title: {b.seoTitleSource ?? 'automatic'}</span>
+              </div>
+
               <div style={{ display: 'flex', gap: 8 }}>
                 {b.ownerEmail && <a href={`mailto:${b.ownerEmail}`} style={iconBtn} title="Email owner"><Mail size={14} /></a>}
                 <a href={publicStorefrontUrl(b.slug)} target="_blank" rel="noopener noreferrer" style={iconBtn}><ExternalLink size={14} /></a>

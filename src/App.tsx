@@ -1,9 +1,10 @@
-import { lazy, Suspense, type ReactNode } from 'react'
+import { lazy, Suspense, useEffect, type ReactNode } from 'react'
 import { Routes, Route } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import { AuthProvider } from './lib/authContext'
 import { RequireAuth, RequireSetup, RequireGuest, RequireOwner, RequireAdmin, RequireAdminPermission, RequireSuperAdmin } from './components/Guards'
 import PageLoadingSkeleton from './components/PageLoadingSkeleton'
+import PlatformSeoHead from './components/SeoHead'
 
 import Landing from './pages/Landing'
 import Terms from './pages/Terms'
@@ -56,6 +57,26 @@ function HostPublicPage({ page }: { page: ReactNode }) {
   return isBusinessSubdomain() ? <StorefrontHome /> : page
 }
 
+function HostNotFound() {
+  const tenant = isBusinessSubdomain()
+  useEffect(() => {
+    document.title = 'Page not found — AbroBiz'
+    let robots = document.head.querySelector<HTMLMetaElement>('meta[name="robots"]')
+    if (!robots) { robots = document.createElement('meta'); robots.name = 'robots'; document.head.appendChild(robots) }
+    robots.content = 'noindex,nofollow'
+  }, [])
+  return (
+    <main style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24, background: '#080A0E', color: '#F0EDE7', textAlign: 'center', fontFamily: 'Inter, sans-serif' }}>
+      <div>
+        <p style={{ color: '#D4A853', letterSpacing: 2, fontSize: 12, fontWeight: 700 }}>ABROBIZ</p>
+        <h1 style={{ fontFamily: 'Outfit, sans-serif', fontSize: 42, margin: '12px 0' }}>{tenant ? 'Page not available' : 'Page not found'}</h1>
+        <p style={{ color: 'rgba(240,237,231,.62)', lineHeight: 1.7 }}>{tenant ? 'That public storefront page does not exist.' : 'That public page does not exist.'}</p>
+        <a href={tenant ? '/' : '/'} style={{ color: '#D4A853' }}>{tenant ? 'Return to storefront' : 'Return to AbroBiz'}</a>
+      </div>
+    </main>
+  )
+}
+
 // Kept for compatibility with older route-level imports; the active fallback uses the skeleton below.
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 function RouteFallback() {
@@ -66,6 +87,7 @@ export default function App() {
   return (
     <AuthProvider>
       <Toaster position="top-center" richColors />
+      <PlatformSeoHead />
       <Suspense fallback={<RouteFallbackSkeleton />}>
       <Routes>
         <Route path="/" element={<HostStorefront page={<StorefrontHome />} />} />
@@ -119,7 +141,7 @@ export default function App() {
         <Route path="/admin/management" element={<RequireSuperAdmin><AdminManagement /></RequireSuperAdmin>} />
         <Route path="/admin/audit" element={<RequireSuperAdmin><AdminAudit /></RequireSuperAdmin>} />
 
-        <Route path="*" element={<Landing />} />
+        <Route path="*" element={<HostNotFound />} />
       </Routes>
       </Suspense>
     </AuthProvider>

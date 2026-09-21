@@ -77,7 +77,7 @@ export default function StorefrontHome() {
 
             {business.galleryUrls.length > 0 && (
               <section id="gallery" style={{ scrollMarginTop: 72, borderTop: `1px solid ${theme.border}` }}>
-                <GallerySection images={business.galleryUrls} theme={theme} accentColor={business.accentColor} />
+                <GallerySection images={business.galleryUrls} businessName={business.name} theme={theme} accentColor={business.accentColor} />
               </section>
             )}
 
@@ -97,7 +97,7 @@ export default function StorefrontHome() {
   )
 }
 
-function GallerySection({ images, theme, accentColor }: { images: string[]; theme: { textDim: string; headingFont: string; border: string; card: string }; accentColor: string }) {
+function GallerySection({ images, businessName, theme, accentColor }: { images: string[]; businessName: string; theme: { textDim: string; headingFont: string; border: string; card: string }; accentColor: string }) {
   return (
     <div style={{ maxWidth: 980, margin: '0 auto', padding: '64px 20px 76px' }}>
       <div style={{ textAlign: 'center', marginBottom: 28 }}>
@@ -111,7 +111,7 @@ function GallerySection({ images, theme, accentColor }: { images: string[]; them
           {images.map((url, index) => (
             <motion.div key={url} initial={{ opacity: 0, y: 12 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: index * 0.04 }} style={{ breakInside: 'avoid', marginBottom: 14 }}>
               <TiltCard style={{ background: theme.card, border: `1px solid ${theme.border}`, borderRadius: 16, overflow: 'hidden' }}>
-                <img src={safeImageUrl(url) ?? undefined} alt="" loading="lazy" decoding="async" style={{ display: 'block', width: '100%', minHeight: index % 3 === 1 ? 220 : 160, objectFit: 'cover' }} />
+                <img src={safeImageUrl(url) ?? undefined} alt={`${businessName} gallery image ${index + 1}`} width={640} height={index % 3 === 1 ? 440 : 320} loading="lazy" decoding="async" style={{ display: 'block', width: '100%', height: index % 3 === 1 ? 220 : 160, objectFit: 'cover' }} />
               </TiltCard>
             </motion.div>
           ))}

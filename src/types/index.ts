@@ -98,6 +98,8 @@ export interface BusinessSocial {
   telegramHandle?: string
 }
 
+export type SeoFieldSource = 'automatic' | 'owner_customized' | 'ai_generated' | 'admin_managed'
+
 export interface Business {
   id: string
   ownerId: string
@@ -123,6 +125,15 @@ export interface Business {
   isPublished: boolean
   isBlocked: boolean
   blockedReason?: string
+  seoTitle?: string
+  seoDescription?: string
+  seoImageUrl?: string
+  seoIndexingEnabled?: boolean
+  seoTitleSource?: SeoFieldSource
+  seoDescriptionSource?: SeoFieldSource
+  seoImageSource?: SeoFieldSource
+  seoContentVersion?: number
+  seoLastGeneratedAt?: string
   createdAt: string
 }
 
