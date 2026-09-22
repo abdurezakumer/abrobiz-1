@@ -37,7 +37,7 @@ if (import.meta.main) {
       const passwordCheck = validatePassword(password)
       if (!passwordCheck.valid) return json({ error: passwordCheck.error }, 400, req)
       if (!name || name.length > 120 || !phone || phone.length > 40) return json({ error: 'Enter your name and phone number.' }, 400, req)
-      if (referralCode && !/^[A-Z0-9][A-Z0-9_-]{2,31}$/.test(referralCode)) return json({ error: 'Enter a valid referral code or leave it blank.' }, 400, req)
+      if (referralCode && !/^(SA\d{3}|MA\d{2})$/.test(referralCode)) return json({ error: 'Enter a valid referral code (SA123 or MA12), or leave it blank.' }, 400, req)
 
       const limited = await enforceRateLimits(req, [
         { scope: 'signup-ip', limit: 10, windowSeconds: 900 },

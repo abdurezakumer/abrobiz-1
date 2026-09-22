@@ -6,6 +6,7 @@ import { listBusinessCategories } from '../lib/api/businessCategories'
 import { createBusinessWithTrial, getMyBusiness, isSlugAvailable, updateBusiness } from '../lib/api/businesses'
 import { categoryIcon } from '../lib/icons'
 import { useAuth } from '../lib/authContext'
+import { completeGooglePhonePrompt, completeGoogleReferralPrompt } from '../lib/api/marketing'
 import { isValidBusinessSlug, slugify } from '../lib/slugify'
 import { listActiveTemplates, mergeTemplateOptions } from '../lib/api/templates'
 import { friendlyError } from '../lib/errors'
@@ -16,7 +17,7 @@ import { BUILTIN_TEMPLATES } from '../lib/templateRegistry'
 export default function SetupWizard() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { refreshBusiness } = useAuth()
+  const { refreshBusiness, profile, session } = useAuth()
   const [step, setStep] = useState(0)
   const [categories, setCategories] = useState<BusinessCategory[]>([])
   const [templates, setTemplates] = useState<Template[]>(BUILTIN_TEMPLATES)
@@ -28,12 +29,73 @@ export default function SetupWizard() {
   const [templateSlug, setTemplateSlug] = useState<TemplateSlug>('clean-minimal')
   const [templateTouched, setTemplateTouched] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [referralCode, setReferralCode] = useState('')
+  const [referralPromptOpen, setReferralPromptOpen] = useState(false)
+  const [referralSubmitting, setReferralSubmitting] = useState(false)
+  const [referralError, setReferralError] = useState('')
+  const [referralCompletedLocally, setReferralCompletedLocally] = useState(false)
+  const [phone, setPhone] = useState('')
+  const [phonePromptOpen, setPhonePromptOpen] = useState(false)
+  const [phoneSubmitting, setPhoneSubmitting] = useState(false)
+  const [phoneError, setPhoneError] = useState('')
   const [error, setError] = useState(() => {
     const state = location.state as { emailError?: string } | null
     const saved = sessionStorage.getItem('abrobiz:email-error')
     if (saved) sessionStorage.removeItem('abrobiz:email-error')
     return state?.emailError ?? saved ?? ''
   })
+
+  const isGoogleAccount = Boolean(
+    session?.user.app_metadata?.provider === 'google'
+      || session?.user.identities?.some(identity => identity.provider === 'google'),
+  )
+  const referralComplete = profile?.referralPromptCompletedAt != null || referralCompletedLocally
+
+  useEffect(() => {
+    if (isGoogleAccount && profile?.role === 'owner' && !referralComplete) {
+      setReferralPromptOpen(true)
+    }
+  }, [isGoogleAccount, profile?.role, referralComplete])
+
+  useEffect(() => {
+    if (isGoogleAccount && profile?.role === 'owner' && referralComplete && !profile.phone?.trim()) {
+      setPhonePromptOpen(true)
+    }
+  }, [isGoogleAccount, profile?.role, referralComplete, profile?.phone])
+
+  async function finishGoogleReferralPrompt(code?: string) {
+    setReferralSubmitting(true)
+    setReferralError('')
+    try {
+      await completeGoogleReferralPrompt(code)
+      setReferralPromptOpen(false)
+      setReferralCode('')
+      setReferralCompletedLocally(true)
+      if (!profile?.phone?.trim()) setPhonePromptOpen(true)
+    } catch (err) {
+      setReferralError(friendlyError(err))
+    } finally {
+      setReferralSubmitting(false)
+    }
+  }
+
+  async function finishGooglePhonePrompt() {
+    const normalizedPhone = phone.trim()
+    if (!/^[+0-9() .-]{3,40}$/.test(normalizedPhone)) {
+      setPhoneError('Enter a valid phone number.')
+      return
+    }
+    setPhoneSubmitting(true)
+    setPhoneError('')
+    try {
+      await completeGooglePhonePrompt(normalizedPhone)
+      setPhonePromptOpen(false)
+    } catch (err) {
+      setPhoneError(friendlyError(err))
+    } finally {
+      setPhoneSubmitting(false)
+    }
+  }
 
   useEffect(() => {
     listBusinessCategories().then(setCategories)
@@ -221,6 +283,95 @@ export default function SetupWizard() {
           )}
         </div>
       </div>
+
+      <AnimatePresence>
+        {referralPromptOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            style={referralOverlay}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="referral-prompt-title"
+          >
+            <motion.div initial={{ opacity: 0, y: 12, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} style={referralCard}>
+              <div style={referralEyebrow}>WELCOME TO ABROBIZ</div>
+              <h2 id="referral-prompt-title" style={referralTitle}>Were you referred by a partner?</h2>
+              <p style={referralCopy}>Enter the short code from your Sales Person or Marketing Admin. You can also skip this step and continue setting up your website.</p>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                <span style={labelStyle}>Referral code (optional)</span>
+                <input
+                  value={referralCode}
+                  onChange={event => setReferralCode(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5))}
+                  placeholder="SA123 or MA12"
+                  maxLength={5}
+                  autoCapitalize="characters"
+                  autoComplete="off"
+                  style={inputStyle}
+                  aria-describedby={referralError ? 'referral-prompt-error' : undefined}
+                />
+              </label>
+              {referralError && <div id="referral-prompt-error" style={referralErrorStyle}>{referralError}</div>}
+              <div style={referralActions}>
+                <button type="button" disabled={referralSubmitting} onClick={() => void finishGoogleReferralPrompt()} style={ghostBtn}>Skip for now</button>
+                <button
+                  type="button"
+                  disabled={referralSubmitting || !/^(SA\d{3}|MA\d{2})$/.test(referralCode)}
+                  onClick={() => void finishGoogleReferralPrompt(referralCode)}
+                  style={{ ...primaryBtn, opacity: referralSubmitting || !/^(SA\d{3}|MA\d{2})$/.test(referralCode) ? 0.45 : 1 }}
+                >
+                  {referralSubmitting ? 'Saving…' : 'Continue'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {phonePromptOpen && !referralPromptOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            style={referralOverlay}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="phone-prompt-title"
+          >
+            <motion.div initial={{ opacity: 0, y: 12, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} style={referralCard}>
+              <div style={referralEyebrow}>ONE MORE DETAIL</div>
+              <h2 id="phone-prompt-title" style={referralTitle}>Add your phone number</h2>
+              <p style={referralCopy}>We use this to help you manage your AbroBiz account and contact you about important website or payment updates.</p>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                <span style={labelStyle}>Phone number</span>
+                <input
+                  value={phone}
+                  onChange={event => setPhone(event.target.value.slice(0, 40))}
+                  placeholder="+251 9XX XXX XXX"
+                  inputMode="tel"
+                  autoComplete="tel"
+                  style={inputStyle}
+                  aria-describedby={phoneError ? 'phone-prompt-error' : undefined}
+                  autoFocus
+                />
+              </label>
+              {phoneError && <div id="phone-prompt-error" style={referralErrorStyle}>{phoneError}</div>}
+              <div style={{ ...referralActions, justifyContent: 'flex-end' }}>
+                <button
+                  type="button"
+                  disabled={phoneSubmitting || !/^[+0-9() .-]{3,40}$/.test(phone.trim())}
+                  onClick={() => void finishGooglePhonePrompt()}
+                  style={{ ...primaryBtn, opacity: phoneSubmitting || !/^[+0-9() .-]{3,40}$/.test(phone.trim()) ? 0.45 : 1 }}
+                >
+                  {phoneSubmitting ? 'Saving…' : 'Save and continue'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
@@ -240,3 +391,10 @@ const ghostBtn: React.CSSProperties = {
   display: 'flex', alignItems: 'center', gap: 6, background: 'none', color: 'rgba(240,237,231,0.6)',
   border: 'none', fontSize: 14.5, fontWeight: 500,
 }
+const referralOverlay: React.CSSProperties = { position: 'fixed', inset: 0, zIndex: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, background: 'rgba(3,5,8,0.82)', backdropFilter: 'blur(10px)' }
+const referralCard: React.CSSProperties = { width: '100%', maxWidth: 430, background: '#12161D', border: '1px solid rgba(212,168,83,0.28)', borderRadius: 20, padding: '30px 28px', boxShadow: '0 24px 80px rgba(0,0,0,0.45)' }
+const referralEyebrow: React.CSSProperties = { color: '#D4A853', fontSize: 11, letterSpacing: 1.8, fontWeight: 700 }
+const referralTitle: React.CSSProperties = { color: '#F0EDE7', fontFamily: 'Outfit, sans-serif', fontSize: 24, lineHeight: 1.2, margin: '10px 0 9px' }
+const referralCopy: React.CSSProperties = { color: 'rgba(240,237,231,0.58)', fontSize: 14, lineHeight: 1.6, margin: '0 0 22px' }
+const referralActions: React.CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginTop: 22 }
+const referralErrorStyle: React.CSSProperties = { color: '#F87171', fontSize: 13, lineHeight: 1.45, background: 'rgba(248,113,113,0.08)', padding: '10px 12px', borderRadius: 10, marginTop: 12 }

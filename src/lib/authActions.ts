@@ -93,11 +93,11 @@ export async function signInWithGoogleCredential(credential: string, referralCod
 
   // The Google ID-token flow cannot send custom user metadata during the
   // provider exchange. Complete attribution after authentication through the
-  // existing server-side RPC. An empty code intentionally means direct signup.
+  // server-side Google onboarding RPC. An empty code intentionally leaves the
+  // choice to the setup prompt.
   const code = referralCode?.trim().toUpperCase()
   if (code && data.user) {
-    const { error: attributionError } = await supabase.rpc('create_marketing_attribution', {
-      p_owner_id: data.user.id,
+    const { error: attributionError } = await supabase.rpc('complete_google_referral_prompt', {
       p_referral_code: code,
     })
     if (attributionError) throw attributionError

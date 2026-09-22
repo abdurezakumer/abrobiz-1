@@ -70,6 +70,7 @@ export interface Profile {
   legalVersion?: string | null
   marketingPolicyAcceptedAt?: string | null
   marketingPolicyVersion?: string | null
+  referralPromptCompletedAt?: string | null
 }
 
 export interface BusinessCategory {

@@ -23,7 +23,9 @@ function mapProfileRow(row: any, email: string | undefined): Profile {
   return {
     id: row.id,
     role: row.role,
-    platformId: row.platform_id ?? `ABZ-${String(row.id).replaceAll('-', '').slice(0, 12).toUpperCase()}`,
+    // The database is the source of truth. This is only a defensive display
+    // fallback for a session racing a profile migration and is not an ID.
+    platformId: row.platform_id ?? 'U00000000',
     adminRole: row.admin_role ?? (row.role === 'admin' || row.role === 'super_admin' ? 'super_admin' : 'none'),
     name: row.name,
     phone: row.phone,
@@ -34,6 +36,7 @@ function mapProfileRow(row: any, email: string | undefined): Profile {
     legalVersion: row.legal_version ?? null,
     marketingPolicyAcceptedAt: row.marketing_policy_accepted_at ?? null,
     marketingPolicyVersion: row.marketing_policy_version ?? null,
+    referralPromptCompletedAt: row.referral_prompt_completed_at ?? null,
   }
 }
 
@@ -66,7 +69,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     const { data: profileRow, error: profileError } = await supabase
       .from('profiles')
-      .select('id, role, platform_id, admin_role, name, phone, email_verified_at, terms_accepted_at, privacy_accepted_at, legal_version, marketing_policy_accepted_at, marketing_policy_version')
+      .select('id, role, platform_id, admin_role, name, phone, email_verified_at, terms_accepted_at, privacy_accepted_at, legal_version, marketing_policy_accepted_at, marketing_policy_version, referral_prompt_completed_at')
       .eq('id', s.user.id)
       .single()
 
@@ -141,7 +144,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, role, platform_id, admin_role, name, phone, email_verified_at, terms_accepted_at, privacy_accepted_at, legal_version, marketing_policy_accepted_at, marketing_policy_version')
+      .select('id, role, platform_id, admin_role, name, phone, email_verified_at, terms_accepted_at, privacy_accepted_at, legal_version, marketing_policy_accepted_at, marketing_policy_version, referral_prompt_completed_at')
       .eq('id', currentSession.user.id)
       .single()
 
@@ -149,7 +152,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile(data ? {
       id: data.id,
       role: data.role,
-      platformId: data.platform_id ?? `ABZ-${String(data.id).replaceAll('-', '').slice(0, 12).toUpperCase()}`,
+      platformId: data.platform_id ?? 'U00000000',
       adminRole: data.admin_role ?? (data.role === 'admin' || data.role === 'super_admin' ? 'super_admin' : 'none'),
       name: data.name,
       phone: data.phone,
@@ -160,6 +163,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       legalVersion: data.legal_version ?? null,
       marketingPolicyAcceptedAt: data.marketing_policy_accepted_at ?? null,
       marketingPolicyVersion: data.marketing_policy_version ?? null,
+      referralPromptCompletedAt: data.referral_prompt_completed_at ?? null,
     } : null)
   }, [])
 

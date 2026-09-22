@@ -68,7 +68,7 @@ export default function Register() {
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <Field label="Full name"><input required value={name} onChange={e => setName(e.target.value)} style={inputStyle} placeholder="Abebe Kebede" /></Field>
             <Field label="Phone number"><input required value={phone} onChange={e => setPhone(e.target.value)} style={inputStyle} placeholder="09XXXXXXXX" /></Field>
-            <Field label="Referral code (optional)"><input value={referralCode} onChange={e => setReferralCode(e.target.value.toUpperCase())} style={inputStyle} placeholder="Enter a partner code if you were referred" maxLength={32} autoCapitalize="characters" /></Field>
+            <Field label="Referral code (optional)"><input value={referralCode} onChange={e => setReferralCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5))} style={inputStyle} placeholder="SA123 or MA12" maxLength={5} autoCapitalize="characters" /></Field>
             <Field label="Email"><input required type="email" value={email} onChange={e => setEmail(e.target.value)} style={inputStyle} placeholder="you@example.com" /></Field>
             <Field label="Password"><input required minLength={12} maxLength={128} type="password" value={password} onChange={e => setPassword(e.target.value)} style={inputStyle} placeholder="12+ characters with upper, lower, number and symbol" /></Field>
             {password && <div style={{ marginTop: -7, fontSize: 12, color: passwordCheckColor(passwordStrength(password)) }}>Password strength: {passwordStrength(password)}</div>}
