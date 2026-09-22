@@ -48,6 +48,13 @@ const adminKeyboard = buildInlineKeyboard([
   [{ text: 'Platform info', callback_data: 'admin:info' }, { text: 'Support', callback_data: 'admin:support' }],
 ])
 
+const superAdminKeyboard = buildInlineKeyboard([
+  [{ text: 'Overview', callback_data: 'super:overview' }, { text: 'Admins', callback_data: 'super:admins' }],
+  [{ text: 'Find user', callback_data: 'super:users' }, { text: 'Payments', callback_data: 'super:payments' }],
+  [{ text: 'Audit activity', callback_data: 'super:audit' }],
+  [{ text: 'Close console', callback_data: 'super:exit' }],
+])
+
 const accountKeyboard = buildInlineKeyboard([
   [{ text: 'Disconnect Telegram', callback_data: 'account:disconnect' }],
   [{ text: 'View plans', callback_data: 'info:plans' }, { text: 'Contact support', callback_data: 'info:support' }],
@@ -116,6 +123,7 @@ async function handleInfoForChat(chatId: string, ctx: Ctx): Promise<void> {
       '/disconnect — disconnect this Telegram account',
       '/pay — submit a payment after connecting your account',
       '/payments — admin payment history with filters',
+      '/superadmin — private super-admin console for authorized accounts',
       '/support — contact AbroBiz support',
       '/admin — admin tools for authorized administrators',
     ].join('\n'),
@@ -188,6 +196,72 @@ async function linkedAdminId(chatId: string, ctx: Ctx): Promise<string | null> {
   return canReviewPayments ? String(profile.id) : null
 }
 
+async function linkedSuperAdminId(chatId: string, ctx: Ctx): Promise<string | null> {
+  const { data: link } = await ctx.db
+    .from('admin_telegram_links')
+    .select('admin_id')
+    .eq('telegram_chat_id', chatId)
+    .not('linked_at', 'is', null)
+    .maybeSingle()
+  if (!link?.admin_id) return null
+  const { data: profile } = await ctx.db
+    .from('profiles')
+    .select('id, role, admin_role')
+    .eq('id', link.admin_id)
+    .maybeSingle()
+  if (!profile || (profile.role !== 'super_admin' && profile.admin_role !== 'super_admin')) return null
+  return String(profile.id)
+}
+
+type SuperAdminSessionState = 'menu' | 'awaiting_user_search'
+
+type SuperAdminSession = {
+  admin_id: string
+  state: SuperAdminSessionState
+  payload: Record<string, unknown>
+  expires_at: string
+}
+
+async function getSuperAdminSession(chatId: string, ctx: Ctx): Promise<{ adminId: string; session: SuperAdminSession } | null> {
+  const adminId = await linkedSuperAdminId(chatId, ctx)
+  if (!adminId) return null
+  const { data: session } = await ctx.db
+    .from('telegram_super_admin_sessions')
+    .select('admin_id, state, payload, expires_at')
+    .eq('telegram_chat_id', chatId)
+    .maybeSingle()
+  if (!session || session.admin_id !== adminId || Date.parse(String(session.expires_at)) <= Date.now()) {
+    await ctx.db.from('telegram_super_admin_sessions').delete().eq('telegram_chat_id', chatId)
+    return null
+  }
+  return {
+    adminId,
+    session: {
+      admin_id: String(session.admin_id),
+      state: session.state as SuperAdminSessionState,
+      payload: session.payload && typeof session.payload === 'object' && !Array.isArray(session.payload) ? session.payload : {},
+      expires_at: String(session.expires_at),
+    },
+  }
+}
+
+async function saveSuperAdminSession(chatId: string, adminId: string, state: SuperAdminSessionState, ctx: Ctx, payload: Record<string, unknown> = {}): Promise<void> {
+  // The webhook always uses the service-role client, so the short-lived FSM
+  // state cannot be read or forged from the browser.
+  await ctx.db.from('telegram_super_admin_sessions').upsert({
+    telegram_chat_id: chatId,
+    admin_id: adminId,
+    state,
+    payload,
+    updated_at: new Date().toISOString(),
+    expires_at: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+  })
+}
+
+async function clearSuperAdminSession(chatId: string, ctx: Ctx): Promise<void> {
+  await ctx.db.from('telegram_super_admin_sessions').delete().eq('telegram_chat_id', chatId)
+}
+
 async function handleAdminLegacy(chatId: string, ctx: Ctx): Promise<void> {
   if (!await isLinkedAdmin(chatId, ctx)) {
     await ctx.tg.sendMessage(chatId, 'Admin commands are available only to an authorized AbroBiz administrator.')
@@ -201,7 +275,217 @@ async function handleAdmin(chatId: string, ctx: Ctx): Promise<void> {
     await ctx.tg.sendMessage(chatId, 'Admin commands are available only to an authorized AbroBiz administrator.')
     return
   }
-  await ctx.tg.sendMessage(chatId, 'AbroBiz admin console\n\nReview payment proofs, approve valid payments, or reject with a reason.\n\nUse /payments with filters for historical records.', { replyMarkup: adminKeyboard })
+  const replyMarkup = await linkedSuperAdminId(chatId, ctx)
+    ? buildInlineKeyboard([
+      [{ text: 'Pending payments', callback_data: 'admin:pending' }],
+      [{ text: 'Payment history', callback_data: 'admin:history' }],
+      [{ text: 'Approved', callback_data: 'admin:history:approved' }, { text: 'Rejected', callback_data: 'admin:history:rejected' }],
+      [{ text: 'Super admin console', callback_data: 'super:menu' }],
+      [{ text: 'Platform info', callback_data: 'admin:info' }, { text: 'Support', callback_data: 'admin:support' }],
+    ])
+    : adminKeyboard
+  await ctx.tg.sendMessage(chatId, 'AbroBiz admin console\n\nReview payment proofs, approve valid payments, or reject with a reason.\n\nUse /payments with filters for historical records.', { replyMarkup })
+}
+
+async function sendSuperAdminText(chatId: string, value: string, ctx: Ctx, replyMarkup: unknown = superAdminKeyboard): Promise<void> {
+  const chunks: string[] = []
+  for (let start = 0; start < value.length; start += 3800) chunks.push(value.slice(start, start + 3800))
+  if (chunks.length === 0) chunks.push('')
+  for (let index = 0; index < chunks.length; index += 1) {
+    await ctx.tg.sendMessage(chatId, chunks[index], { replyMarkup: index === chunks.length - 1 ? replyMarkup : undefined })
+  }
+}
+
+async function requireSuperAdmin(chatId: string, ctx: Ctx): Promise<string | null> {
+  const adminId = await linkedSuperAdminId(chatId, ctx)
+  if (!adminId) {
+    await ctx.tg.sendMessage(chatId, 'This console is available only to the linked AbroBiz super administrator.')
+    return null
+  }
+  return adminId
+}
+
+async function handleSuperAdminMenu(chatId: string, ctx: Ctx): Promise<void> {
+  const adminId = await requireSuperAdmin(chatId, ctx)
+  if (!adminId) return
+  await saveSuperAdminSession(chatId, adminId, 'menu', ctx)
+  await ctx.tg.sendMessage(chatId, 'AbroBiz Super Admin Console\n\nChoose a read-only platform operation. Payment review remains available through the existing payment workflow.', { replyMarkup: superAdminKeyboard })
+}
+
+async function handleSuperAdminOverview(chatId: string, ctx: Ctx): Promise<void> {
+  const adminId = await requireSuperAdmin(chatId, ctx)
+  if (!adminId) return
+  await saveSuperAdminSession(chatId, adminId, 'menu', ctx)
+  const [users, businesses, published, blocked, pending, approved, rejected, admins] = await Promise.all([
+    ctx.db.from('profiles').select('id', { count: 'exact', head: true }),
+    ctx.db.from('businesses').select('id', { count: 'exact', head: true }),
+    ctx.db.from('businesses').select('id', { count: 'exact', head: true }).eq('is_published', true),
+    ctx.db.from('businesses').select('id', { count: 'exact', head: true }).eq('is_blocked', true),
+    ctx.db.from('payments').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+    ctx.db.from('payments').select('id', { count: 'exact', head: true }).eq('status', 'approved'),
+    ctx.db.from('payments').select('id', { count: 'exact', head: true }).eq('status', 'rejected'),
+    ctx.db.from('profiles').select('id', { count: 'exact', head: true }).in('role', ['admin', 'super_admin']),
+  ])
+  await ctx.tg.sendMessage(chatId, [
+    'AbroBiz platform overview',
+    '',
+    `Users: ${users.count ?? 0}`,
+    `Administrators: ${admins.count ?? 0}`,
+    `Businesses: ${businesses.count ?? 0}`,
+    `Published websites: ${published.count ?? 0}`,
+    `Blocked websites: ${blocked.count ?? 0}`,
+    '',
+    `Payments pending: ${pending.count ?? 0}`,
+    `Payments approved: ${approved.count ?? 0}`,
+    `Payments rejected: ${rejected.count ?? 0}`,
+  ].join('\n'), { replyMarkup: superAdminKeyboard })
+}
+
+async function handleSuperAdminAdmins(chatId: string, ctx: Ctx): Promise<void> {
+  const adminId = await requireSuperAdmin(chatId, ctx)
+  if (!adminId) return
+  await saveSuperAdminSession(chatId, adminId, 'menu', ctx)
+  const { data, error } = await ctx.db
+    .from('profiles')
+    .select('id, platform_id, name, email, phone, role, admin_role, created_at')
+    .in('role', ['admin', 'super_admin'])
+    .order('created_at', { ascending: false })
+    .limit(25)
+  if (error) {
+    await ctx.tg.sendMessage(chatId, 'The administrator directory is temporarily unavailable.', { replyMarkup: superAdminKeyboard })
+    return
+  }
+  const lines = ['AbroBiz administrator directory', '']
+  for (const row of data ?? []) {
+    lines.push(
+      `${row.name || 'Unnamed'} · ${row.admin_role || row.role}`,
+      `ID: ${row.platform_id || row.id}`,
+      `Email: ${row.email || '—'}${row.phone ? ` · Phone: ${row.phone}` : ''}`,
+      '',
+    )
+  }
+  if (!data?.length) lines.push('No administrators found.')
+  await sendSuperAdminText(chatId, lines.join('\n'), ctx)
+}
+
+function safeSearchPattern(value: string): string {
+  return `%${value.replace(/[%_]/g, '').slice(0, 100)}%`
+}
+
+async function handleSuperAdminUserPrompt(chatId: string, ctx: Ctx): Promise<void> {
+  const adminId = await requireSuperAdmin(chatId, ctx)
+  if (!adminId) return
+  await saveSuperAdminSession(chatId, adminId, 'awaiting_user_search', ctx)
+  await ctx.tg.sendMessage(chatId, 'Send a user email, phone number, platform ID, or part of the user name. Send /cancel to return.', {
+    replyMarkup: buildInlineKeyboard([[{ text: 'Cancel', callback_data: 'super:cancel' }]]),
+  })
+}
+
+async function handleSuperAdminUserSearch(chatId: string, value: string, ctx: Ctx): Promise<void> {
+  const state = await getSuperAdminSession(chatId, ctx)
+  if (!state || state.session.state !== 'awaiting_user_search') {
+    await handleSuperAdminMenu(chatId, ctx)
+    return
+  }
+  const term = value.trim().slice(0, 100)
+  if (!term) {
+    await ctx.tg.sendMessage(chatId, 'Enter a search value, or send /cancel to return.')
+    return
+  }
+  await clearSuperAdminSession(chatId, ctx)
+  const pattern = safeSearchPattern(term)
+  const results = await Promise.all([
+    ctx.db.from('profiles').select('id, platform_id, name, email, phone, role, admin_role, created_at').ilike('name', pattern).limit(20),
+    ctx.db.from('profiles').select('id, platform_id, name, email, phone, role, admin_role, created_at').ilike('email', pattern).limit(20),
+    ctx.db.from('profiles').select('id, platform_id, name, email, phone, role, admin_role, created_at').ilike('phone', pattern).limit(20),
+    ctx.db.from('profiles').select('id, platform_id, name, email, phone, role, admin_role, created_at').ilike('platform_id', pattern).limit(20),
+  ])
+  const users = [...new Map(results.flatMap(result => result.data ?? []).map(row => [row.id, row])).values()]
+  const businessRows = users.length
+    ? (await ctx.db.from('businesses').select('owner_id, name, slug, is_published, is_blocked').in('owner_id', users.map(row => row.id))).data ?? []
+    : []
+  const businesses = new Map(businessRows.map(row => [row.owner_id, row]))
+  const lines = [`User search: ${term}`, `Matches: ${users.length}`, '']
+  for (const user of users.slice(0, 20)) {
+    const business = businesses.get(user.id)
+    lines.push(
+      `${user.name || 'Unnamed'} · ${user.role}${user.admin_role && user.admin_role !== 'none' ? `/${user.admin_role}` : ''}`,
+      `ID: ${user.platform_id || user.id}`,
+      `Email: ${user.email || '—'}${user.phone ? ` · Phone: ${user.phone}` : ''}`,
+      business ? `Business: ${business.name} (${business.slug}.abrobiz.com)${business.is_blocked ? ' · BLOCKED' : business.is_published ? ' · published' : ' · draft'}` : 'Business: none',
+      '',
+    )
+  }
+  if (!users.length) lines.push('No matching users found.')
+  await sendSuperAdminText(chatId, lines.join('\n'), ctx)
+}
+
+async function handleSuperAdminAudit(chatId: string, ctx: Ctx): Promise<void> {
+  const adminId = await requireSuperAdmin(chatId, ctx)
+  if (!adminId) return
+  await saveSuperAdminSession(chatId, adminId, 'menu', ctx)
+  const { data: logs, error } = await ctx.db
+    .from('admin_logs')
+    .select('id, admin_id, action, target_table, target_id, meta, created_at')
+    .order('created_at', { ascending: false })
+    .limit(20)
+  if (error) {
+    await ctx.tg.sendMessage(chatId, 'The audit activity feed is temporarily unavailable.', { replyMarkup: superAdminKeyboard })
+    return
+  }
+  const actorIds = [...new Set((logs ?? []).map(row => row.admin_id).filter(Boolean))]
+  const { data: actors } = actorIds.length
+    ? await ctx.db.from('profiles').select('id, name, platform_id').in('id', actorIds)
+    : { data: [] }
+  const actorMap = new Map((actors ?? []).map(row => [row.id, row]))
+  const lines = ['Recent administrator activity', '']
+  for (const log of logs ?? []) {
+    const actor = actorMap.get(log.admin_id)
+    lines.push(
+      `${log.created_at} · ${log.action}`,
+      `Actor: ${actor?.name || 'Administrator'} (${actor?.platform_id || log.admin_id || 'unknown'})`,
+      log.target_table ? `Target: ${log.target_table}${log.target_id ? `/${log.target_id}` : ''}` : '',
+      log.meta && Object.keys(log.meta).length ? `Details: ${JSON.stringify(log.meta).slice(0, 700)}` : '',
+      '',
+    )
+  }
+  if (!logs?.length) lines.push('No administrator activity has been recorded.')
+  await sendSuperAdminText(chatId, lines.filter(line => line !== undefined).join('\n'), ctx)
+}
+
+async function handleSuperAdminPayments(chatId: string, ctx: Ctx): Promise<void> {
+  const adminId = await requireSuperAdmin(chatId, ctx)
+  if (!adminId) return
+  await saveSuperAdminSession(chatId, adminId, 'menu', ctx)
+  await handlePaymentHistory(chatId, [], ctx)
+}
+
+async function handleSuperAdminCallback(cb: TelegramCallbackQuery, ctx: Ctx): Promise<boolean> {
+  const data = cb.data ?? ''
+  if (!data.startsWith('super:')) return false
+  const chatId = String(cb.message?.chat.id ?? cb.from.id)
+  if (cb.message?.chat.type !== 'private' || String(cb.from.id) !== chatId) {
+    await ctx.tg.sendMessage(chatId, 'The super-admin console is available only in the linked private chat.')
+    return true
+  }
+  if (!await linkedSuperAdminId(chatId, ctx)) {
+    await ctx.tg.sendMessage(chatId, 'This super-admin console is no longer authorized.')
+    return true
+  }
+  if (data === 'super:menu') await handleSuperAdminMenu(chatId, ctx)
+  else if (data === 'super:overview') await handleSuperAdminOverview(chatId, ctx)
+  else if (data === 'super:admins') await handleSuperAdminAdmins(chatId, ctx)
+  else if (data === 'super:users') await handleSuperAdminUserPrompt(chatId, ctx)
+  else if (data === 'super:payments') await handleSuperAdminPayments(chatId, ctx)
+  else if (data === 'super:audit') await handleSuperAdminAudit(chatId, ctx)
+  else if (data === 'super:cancel') {
+    await clearSuperAdminSession(chatId, ctx)
+    await ctx.tg.sendMessage(chatId, 'Search cancelled.', { replyMarkup: superAdminKeyboard })
+  } else if (data === 'super:exit') {
+    await clearSuperAdminSession(chatId, ctx)
+    await ctx.tg.sendMessage(chatId, 'Super-admin console closed. Send /superadmin to open it again.', { replyMarkup: adminKeyboard })
+  }
+  return true
 }
 
 async function handlePendingLegacy(chatId: string, ctx: Ctx): Promise<void> {
@@ -530,6 +814,12 @@ async function handleMessage(msg: TelegramMessage, ctx: Ctx): Promise<void> {
   const text = msg.text?.trim()
   if (!text) return
 
+  const superSession = await getSuperAdminSession(chatId, ctx)
+  if (superSession?.session.state === 'awaiting_user_search' && !text.startsWith('/')) {
+    await handleSuperAdminUserSearch(chatId, text, ctx)
+    return
+  }
+
   const { data: adminPending } = await ctx.db.from('telegram_admin_pending_actions').select('*').eq('telegram_chat_id', chatId).maybeSingle()
   if (adminPending?.state === 'awaiting_custom_reason' && !text.startsWith('/')) {
     await ctx.db.from('telegram_admin_pending_actions').delete().eq('telegram_chat_id', chatId)
@@ -571,6 +861,13 @@ async function handleMessage(msg: TelegramMessage, ctx: Ctx): Promise<void> {
     await ctx.tg.sendMessage(chatId, supportMessage())
     return
   }
+  if (command === '/superadmin' || command === '/sa') {
+    if (msg.chat.type !== 'private') {
+      await ctx.tg.sendMessage(chatId, 'For security, open the super-admin console from the linked private chat.')
+      return
+    }
+    return handleSuperAdminMenu(chatId, ctx)
+  }
   if (command === '/admin') {
     return handleAdmin(chatId, ctx)
   }
@@ -596,6 +893,7 @@ async function handleMessage(msg: TelegramMessage, ctx: Ctx): Promise<void> {
   if (command === '/cancel') {
     await ctx.db.from('telegram_pending_actions').delete().eq('telegram_chat_id', chatId)
     await ctx.db.from('telegram_admin_pending_actions').delete().eq('telegram_chat_id', chatId)
+    await clearSuperAdminSession(chatId, ctx)
     await ctx.tg.sendMessage(chatId, 'Cancelled.')
     return
   }
@@ -922,9 +1220,12 @@ async function handleCallback(cb: TelegramCallbackQuery, ctx: Ctx): Promise<void
   const data = cb.data ?? ''
 
   try {
-    if (data === 'pay:cancel') {
+    if (await handleSuperAdminCallback(cb, ctx)) {
+      return
+    } else if (data === 'pay:cancel') {
       await ctx.db.from('telegram_pending_actions').delete().eq('telegram_chat_id', chatId)
       await ctx.db.from('telegram_admin_pending_actions').delete().eq('telegram_chat_id', chatId)
+      await clearSuperAdminSession(chatId, ctx)
       await ctx.tg.sendMessage(chatId, 'Payment session cancelled.')
     } else if (data === 'admin:pending') {
       await handlePending(chatId, ctx)

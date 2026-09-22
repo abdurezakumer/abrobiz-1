@@ -67,6 +67,13 @@ class QueryBuilder {
     return this
   }
 
+  ilike(col: string, pattern: string) {
+    const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/%/g, '.*').replace(/_/g, '.')
+    const matcher = new RegExp(`^${escaped}$`, 'i')
+    this.filters.push(row => matcher.test(String(row[col] ?? '')))
+    return this
+  }
+
   in(col: string, vals: unknown[]) {
     this.filters.push(row => vals.includes(row[col]))
     return this
@@ -134,7 +141,8 @@ class QueryBuilder {
   // Used when a SELECT with no .single()/.maybeSingle() is awaited directly
   then(resolve: (v: { data: Row[]; error: null }) => void) {
     this.flushMutations()
-    resolve({ data: this.matching(), error: null })
+    const data = this.matching()
+    resolve({ data, error: null, count: data.length } as { data: Row[]; error: null })
   }
 
   private flushMutations() {
