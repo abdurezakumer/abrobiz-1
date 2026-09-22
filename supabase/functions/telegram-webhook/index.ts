@@ -8,6 +8,7 @@ import { checkSecret } from '../_shared/endpointSecurity.ts'
 import { isRecord, readJsonBody } from '../_shared/requestSecurity.ts'
 import { enforceRateLimit } from '../_shared/rateLimit.ts'
 import { logEvent, logFailure } from '../_shared/observability.ts'
+import { buildTelegramProofCaption, buildTelegramProofMetadataMessage } from '../_shared/telegramProof.ts'
 
 export interface Ctx {
   db: SupabaseClient
@@ -42,6 +43,8 @@ const infoKeyboard = buildInlineKeyboard([
 
 const adminKeyboard = buildInlineKeyboard([
   [{ text: 'Pending payments', callback_data: 'admin:pending' }],
+  [{ text: 'Payment history', callback_data: 'admin:history' }],
+  [{ text: 'Approved', callback_data: 'admin:history:approved' }, { text: 'Rejected', callback_data: 'admin:history:rejected' }],
   [{ text: 'Platform info', callback_data: 'admin:info' }, { text: 'Support', callback_data: 'admin:support' }],
 ])
 
@@ -112,6 +115,7 @@ async function handleInfoForChat(chatId: string, ctx: Ctx): Promise<void> {
       '/connect <token> — connect using the secure dashboard token',
       '/disconnect — disconnect this Telegram account',
       '/pay — submit a payment after connecting your account',
+      '/payments — admin payment history with filters',
       '/support — contact AbroBiz support',
       '/admin — admin tools for authorized administrators',
     ].join('\n'),
@@ -197,7 +201,7 @@ async function handleAdmin(chatId: string, ctx: Ctx): Promise<void> {
     await ctx.tg.sendMessage(chatId, 'Admin commands are available only to an authorized AbroBiz administrator.')
     return
   }
-  await ctx.tg.sendMessage(chatId, 'AbroBiz admin console\n\nReview payment proofs, approve valid payments, or reject with a reason.', { replyMarkup: adminKeyboard })
+  await ctx.tg.sendMessage(chatId, 'AbroBiz admin console\n\nReview payment proofs, approve valid payments, or reject with a reason.\n\nUse /payments with filters for historical records.', { replyMarkup: adminKeyboard })
 }
 
 async function handlePendingLegacy(chatId: string, ctx: Ctx): Promise<void> {
@@ -265,6 +269,238 @@ async function handlePending(chatId: string, ctx: Ctx): Promise<void> {
   }
 }
 
+type PaymentHistoryFilters = {
+  status?: 'pending' | 'approved' | 'rejected'
+  business?: string
+  owner?: string
+  from?: string
+  to?: string
+  limit: number
+}
+
+function unquoteFilter(value: string): string {
+  return value.replace(/^(?:"([\s\S]*)"|'([\s\S]*)')$/, '$1$2').trim().slice(0, 100)
+}
+
+function parsePaymentHistoryFilters(args: string[]): { filters?: PaymentHistoryFilters; error?: string } {
+  const filters: PaymentHistoryFilters = { limit: 10 }
+  const tokens = args.join(' ').match(/(?:[^\s"]+|"[^"]*"|'[^']*')+/g) ?? []
+  for (const token of tokens) {
+    const separator = token.indexOf('=') >= 0 ? token.indexOf('=') : token.indexOf(':')
+    if (separator < 0) {
+      const status = token.toLowerCase()
+      if (['pending', 'approved', 'rejected'].includes(status)) filters.status = status as PaymentHistoryFilters['status']
+      else if (status !== 'all' && status !== 'help') return { error: `Unknown filter "${token}". Use status, business, owner, from, to, or limit.` }
+      continue
+    }
+    const key = token.slice(0, separator).toLowerCase()
+    const value = unquoteFilter(token.slice(separator + 1))
+    if (key === 'status') {
+      if (!['pending', 'approved', 'rejected'].includes(value.toLowerCase())) return { error: 'Status must be pending, approved, or rejected.' }
+      filters.status = value.toLowerCase() as PaymentHistoryFilters['status']
+    } else if (key === 'business' || key === 'owner') {
+      if (!value) return { error: `${key} cannot be empty.` }
+      filters[key] = value
+    } else if (key === 'from' || key === 'to') {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(Date.parse(`${value}T00:00:00.000Z`))) return { error: `${key} must use YYYY-MM-DD.` }
+      filters[key] = value
+    } else if (key === 'limit') {
+      const limit = Number(value)
+      if (!Number.isInteger(limit) || limit < 1 || limit > 20) return { error: 'Limit must be a whole number from 1 to 20.' }
+      filters.limit = limit
+    } else {
+      return { error: `Unknown filter "${key}". Use status, business, owner, from, to, or limit.` }
+    }
+  }
+  if (filters.from && filters.to && filters.from > filters.to) return { error: 'The from date cannot be after the to date.' }
+  return { filters }
+}
+
+function paymentHistoryHelp(): string {
+  return [
+    'Payment history filters:',
+    '/payments',
+    '/payments status=pending',
+    '/payments status=approved from=2026-01-01 to=2026-12-31',
+    '/payments business="Cafe Name" limit=20',
+    '/payments owner=john@example.com',
+    '/payment <payment-id>',
+    '',
+    'Statuses: pending, approved, rejected. Results include owner contact, plan, billing cycle, payment metadata, and Telegram archive IDs.',
+  ].join('\n')
+}
+
+async function findPaymentBusinessIds(filters: PaymentHistoryFilters, ctx: Ctx): Promise<string[] | null> {
+  let businessIds: string[] | null = null
+  if (filters.business) {
+    const pattern = `%${filters.business.replace(/[%_]/g, '')}%`
+    const [{ data: nameRows }, { data: slugRows }] = await Promise.all([
+      ctx.db.from('businesses').select('id').ilike('name', pattern).limit(100),
+      ctx.db.from('businesses').select('id').ilike('slug', pattern).limit(100),
+    ])
+    businessIds = [...new Set([...(nameRows ?? []), ...(slugRows ?? [])].map(row => row.id))]
+  }
+  if (filters.owner) {
+    const pattern = `%${filters.owner.replace(/[%_]/g, '')}%`
+    const [{ data: names }, { data: emails }, { data: platformIds }] = await Promise.all([
+      ctx.db.from('profiles').select('id').ilike('name', pattern).limit(100),
+      ctx.db.from('profiles').select('id').ilike('email', pattern).limit(100),
+      ctx.db.from('profiles').select('id').ilike('platform_id', pattern).limit(100),
+    ])
+    const ownerIds = [...new Set([...(names ?? []), ...(emails ?? []), ...(platformIds ?? [])].map(row => row.id))]
+    const { data: ownerBusinesses } = ownerIds.length
+      ? await ctx.db.from('businesses').select('id').in('owner_id', ownerIds).limit(200)
+      : { data: [] }
+    const ownerBusinessIds = (ownerBusinesses ?? []).map(row => row.id)
+    businessIds = businessIds ? businessIds.filter(id => ownerBusinessIds.includes(id)) : ownerBusinessIds
+  }
+  return businessIds
+}
+
+function addDateFilters(query: any, filters: PaymentHistoryFilters): any {
+  let filtered = query
+  if (filters.status) filtered = filtered.eq('status', filters.status)
+  if (filters.from) filtered = filtered.gte('created_at', `${filters.from}T00:00:00.000Z`)
+  if (filters.to) {
+    const end = new Date(`${filters.to}T00:00:00.000Z`)
+    end.setUTCDate(end.getUTCDate() + 1)
+    filtered = filtered.lt('created_at', end.toISOString())
+  }
+  return filtered
+}
+
+function formatPaymentRecord(payment: any, owner: any, proof: any, includeMetadata = true): string {
+  const business = payment.businesses ?? {}
+  const plan = payment.plans ?? {}
+  const method = payment.payment_methods ?? {}
+  const lines = [
+    `Payment: ${payment.id}`,
+    `Status: ${payment.status}`,
+    `Business: ${business.name ?? 'Business'}${business.slug ? ` (${business.slug}.abrobiz.com)` : ''}`,
+    `Owner: ${owner?.name ?? 'Owner'}${owner?.platform_id ? ` · ${owner.platform_id}` : ''}`,
+    `Email: ${owner?.email ?? '—'}`,
+    `Phone: ${owner?.phone ?? '—'}`,
+    `Plan: ${plan.name ?? 'Plan'} · ${payment.billing_cycle ?? '—'}`,
+    `Payment method: ${method.name ?? proof?.metadata?.payment?.method_name ?? '—'}`,
+    `Amount: ${payment.amount_etb} ETB`,
+    payment.owner_note ? `Owner note: ${payment.owner_note}` : '',
+    `Created: ${payment.created_at}`,
+    payment.reviewed_at ? `Reviewed: ${payment.reviewed_at}` : '',
+    payment.rejection_reason ? `Rejection: ${payment.rejection_reason}` : '',
+    proof?.telegram_channel_id ? `Archive channel: ${proof.telegram_channel_id}` : '',
+    proof?.telegram_message_id ? `Archive message: ${proof.telegram_message_id}` : '',
+    proof?.telegram_file_id ? `Archive file ID: ${proof.telegram_file_id}` : '',
+    proof?.content_type ? `Proof type: ${proof.content_type}` : '',
+    proof?.file_size ? `Proof size: ${proof.file_size} bytes` : '',
+    proof?.created_at ? `Proof archived: ${proof.created_at}` : '',
+    proof?.consumed_at ? `Proof linked: ${proof.consumed_at}` : '',
+    includeMetadata && proof?.metadata ? `Metadata: ${JSON.stringify(proof.metadata).slice(0, 1800)}` : '',
+  ]
+  return lines.filter(Boolean).join('\n').slice(0, 3900)
+}
+
+async function sendPaymentRecord(chatId: string, payment: any, owner: any, proof: any, ctx: Ctx): Promise<void> {
+  const caption = formatPaymentRecord(payment, owner, proof)
+  const replyMarkup = payment.status === 'pending'
+    ? buildInlineKeyboard([[{ text: 'Approve', callback_data: `approve:${payment.id}` }, { text: 'Reject', callback_data: `reject:${payment.id}` }]])
+    : undefined
+  if (proof?.telegram_file_id) {
+    const business = payment.businesses ?? {}
+    const mediaCaption = [
+      `Payment: ${payment.id}`,
+      `Status: ${payment.status}`,
+      `Business: ${business.name ?? 'Business'}`,
+      `Amount: ${payment.amount_etb} ETB`,
+    ].join('\n')
+    await ctx.tg.sendPhoto(chatId, proof.telegram_file_id, { caption: mediaCaption, replyMarkup })
+    // Telegram captions are limited to 1024 characters. Send the complete
+    // audit record separately so admins receive all metadata and identifiers.
+    await ctx.tg.sendMessage(chatId, caption)
+  } else {
+    await ctx.tg.sendMessage(chatId, caption, { replyMarkup })
+  }
+}
+
+async function loadPaymentContext(paymentIds: string[], ctx: Ctx): Promise<{ owners: Map<string, any>; proofs: Map<string, any> }> {
+  const paymentsWithOwners = paymentIds.length
+    ? await ctx.db.from('payments').select('id, businesses(owner_id)').in('id', paymentIds)
+    : { data: [] }
+  const ownerIds = [...new Set((paymentsWithOwners.data ?? []).map((row: any) => row.businesses?.owner_id).filter(Boolean))]
+  const proofRows = paymentIds.length
+    ? await ctx.db.from('telegram_payment_proofs').select('id, payment_id, telegram_channel_id, telegram_message_id, telegram_file_id, content_type, file_size, consumed_at, created_at, metadata').in('payment_id', paymentIds)
+    : { data: [] }
+  const { data: ownerRows } = ownerIds.length
+    ? await ctx.db.from('profiles').select('id, name, email, phone, platform_id').in('id', ownerIds)
+    : { data: [] }
+  return {
+    owners: new Map((ownerRows ?? []).map((row: any) => [row.id, row])),
+    proofs: new Map((proofRows ?? []).map((row: any) => [row.payment_id, row])),
+  }
+}
+
+async function handlePaymentHistory(chatId: string, args: string[], ctx: Ctx): Promise<void> {
+  if (!await isLinkedAdmin(chatId, ctx)) {
+    await ctx.tg.sendMessage(chatId, 'Admin commands are available only to an authorized AbroBiz administrator.')
+    return
+  }
+  const parsed = parsePaymentHistoryFilters(args)
+  if (parsed.error) {
+    await ctx.tg.sendMessage(chatId, `${parsed.error}\n\n${paymentHistoryHelp()}`)
+    return
+  }
+  const filters = parsed.filters!
+  if (args.some(arg => arg.toLowerCase() === 'help')) {
+    await ctx.tg.sendMessage(chatId, paymentHistoryHelp())
+    return
+  }
+  const businessIds = await findPaymentBusinessIds(filters, ctx)
+  if ((filters.business || filters.owner) && !businessIds?.length) {
+    await ctx.tg.sendMessage(chatId, 'No payments matched those business or owner filters.')
+    return
+  }
+  let query = ctx.db
+    .from('payments')
+    .select('id, business_id, plan_id, billing_cycle, amount_etb, payment_method_id, telegram_proof_id, owner_note, status, reviewed_at, rejection_reason, created_at, plans(name), payment_methods(name), businesses(id, name, slug, owner_id)')
+    .order('created_at', { ascending: false })
+    .limit(filters.limit)
+  if (businessIds) query = query.in('business_id', businessIds)
+  query = addDateFilters(query, filters)
+  const { data: payments, error } = await query
+  if (error) {
+    await ctx.tg.sendMessage(chatId, 'Payment history is temporarily unavailable. Please try again.')
+    return
+  }
+  if (!payments?.length) {
+    await ctx.tg.sendMessage(chatId, 'No payments matched those filters.')
+    return
+  }
+  const paymentIds = payments.map((payment: any) => payment.id)
+  const context = await loadPaymentContext(paymentIds, ctx)
+  await ctx.tg.sendMessage(chatId, `Found ${payments.length} payment${payments.length === 1 ? '' : 's'}${filters.status ? ` with status ${filters.status}` : ''}.`)
+  for (const payment of payments) {
+    const ownerId = payment.businesses?.owner_id
+    await sendPaymentRecord(chatId, payment, context.owners.get(ownerId), context.proofs.get(payment.id), ctx)
+  }
+}
+
+async function handlePaymentDetails(chatId: string, paymentId: string | undefined, ctx: Ctx): Promise<void> {
+  if (!await isLinkedAdmin(chatId, ctx)) {
+    await ctx.tg.sendMessage(chatId, 'Admin commands are available only to an authorized AbroBiz administrator.')
+    return
+  }
+  if (!paymentId || !/^[0-9a-f-]{36}$/i.test(paymentId)) {
+    await ctx.tg.sendMessage(chatId, 'Usage: /payment <payment-id>')
+    return
+  }
+  const { data: payment, error } = await ctx.db.from('payments').select('id, business_id, plan_id, billing_cycle, amount_etb, payment_method_id, telegram_proof_id, owner_note, status, reviewed_at, rejection_reason, created_at, plans(name), payment_methods(name), businesses(id, name, slug, owner_id)').eq('id', paymentId).maybeSingle()
+  if (error || !payment) {
+    await ctx.tg.sendMessage(chatId, 'Payment not found.')
+    return
+  }
+  const context = await loadPaymentContext([payment.id], ctx)
+  await sendPaymentRecord(chatId, payment, context.owners.get(payment.businesses?.owner_id), context.proofs.get(payment.id), ctx)
+}
+
 async function handleConnectCommand(chatId: string, username: string | undefined, token: string | undefined, ctx: Ctx): Promise<void> {
   if (!token) {
     await ctx.tg.sendMessage(chatId, 'Open AbroBiz Dashboard → Billing → Connect Telegram, then open the secure link. You can also send /connect followed by the token from that link.')
@@ -288,7 +524,7 @@ async function handleMessage(msg: TelegramMessage, ctx: Ctx): Promise<void> {
   const chatId = String(msg.chat.id)
 
   if (msg.photo && msg.photo.length > 0) {
-    return handlePhoto(chatId, msg.photo, ctx)
+    return handlePhoto(chatId, msg, ctx)
   }
 
   const text = msg.text?.trim()
@@ -340,6 +576,12 @@ async function handleMessage(msg: TelegramMessage, ctx: Ctx): Promise<void> {
   }
   if (command === '/pending') {
     return handlePending(chatId, ctx)
+  }
+  if (command === '/payments' || command === '/history') {
+    return handlePaymentHistory(chatId, args, ctx)
+  }
+  if (command === '/payment') {
+    return handlePaymentDetails(chatId, args[0]?.trim(), ctx)
   }
   if (command === '/pay') {
     return handlePayCommand(chatId, ctx)
@@ -459,7 +701,8 @@ async function handlePayCommand(chatId: string, ctx: Ctx): Promise<void> {
 
 // ── Callback (inline button) queries ────────────────────────────────────
 
-async function handlePhoto(chatId: string, photos: TelegramPhotoSize[], ctx: Ctx): Promise<void> {
+async function handlePhoto(chatId: string, msg: TelegramMessage, ctx: Ctx): Promise<void> {
+  const photos = msg.photo ?? []
   const { data: pending } = await ctx.db.from('telegram_pending_actions').select('*').eq('telegram_chat_id', chatId).maybeSingle()
   if (!pending || pending.state !== 'awaiting_proof' || !pending.business_id || !pending.plan_id || !pending.payment_method_id || !pending.billing_cycle) {
     await ctx.tg.sendMessage(chatId, 'Send /pay first to choose a plan and payment method, then send your proof photo.')
@@ -471,10 +714,15 @@ async function handlePhoto(chatId: string, photos: TelegramPhotoSize[], ctx: Ctx
     await ctx.tg.sendMessage(chatId, 'Payment proof submission is temporarily unavailable. Please contact /support.')
     return
   }
-  const { data: plan } = await ctx.db.from('plans').select('id').eq('id', pending.plan_id).eq('is_active', true).eq('is_trial', false).single()
+  const { data: plan } = await ctx.db.from('plans').select('id, name').eq('id', pending.plan_id).eq('is_active', true).eq('is_trial', false).single()
+  const { data: method } = await ctx.db.from('payment_methods').select('id, name').eq('id', pending.payment_method_id).eq('is_active', true).maybeSingle()
+  const { data: business } = await ctx.db.from('businesses').select('id, name, slug, owner_id').eq('id', pending.business_id).maybeSingle()
+  const { data: owner } = business?.owner_id
+    ? await ctx.db.from('profiles').select('id, name, email, phone, platform_id').eq('id', business.owner_id).maybeSingle()
+    : { data: null }
   const { data: calculatedAmount } = plan ? await ctx.db.rpc('plan_price_for_cycle', { p_plan_id: pending.plan_id, p_billing_cycle: pending.billing_cycle }) : { data: null }
   const amountEtb = Number(calculatedAmount)
-  if (!plan || !Number.isFinite(amountEtb)) {
+  if (!plan || !method || !business || !owner || !Number.isFinite(amountEtb)) {
     await ctx.tg.sendMessage(chatId, "That plan isn't available anymore — send /pay to start over.")
     return
   }
@@ -487,8 +735,30 @@ async function handlePhoto(chatId: string, photos: TelegramPhotoSize[], ctx: Ctx
 
   const largest = photos[photos.length - 1]
   const archiveReference = crypto.randomUUID()
+  const metadata: Record<string, unknown> = {
+    schema_version: 1,
+    source: 'telegram_bot',
+    client_upload_id: archiveReference,
+    content_type: 'image/jpeg',
+    file_size: largest.file_size ?? null,
+    uploaded_at: new Date().toISOString(),
+    business: { id: business.id, name: business.name, slug: business.slug },
+    owner: { id: owner.id, name: owner.name, email: owner.email, phone: owner.phone, platform_id: owner.platform_id },
+    plan: { id: plan.id, name: plan.name },
+    payment: { billing_cycle: pending.billing_cycle, amount_etb: amountEtb, payment_method_id: method.id, method_name: method.name, status: 'pending' },
+    telegram: {
+      chat_id: chatId,
+      username: msg.from?.username ?? null,
+      message_id: msg.message_id,
+      photo_file_id: largest.file_id,
+      width: largest.width,
+      height: largest.height,
+      available_sizes: photos.length,
+    },
+    archive: { channel_id: paymentChannel },
+  }
   const archived = await ctx.tg.sendPhoto(paymentChannel, largest.file_id, {
-    caption: ['AbroBiz payment proof', `Business ID: ${pending.business_id}`, `Reference: ${archiveReference}`].join('\\n'),
+    caption: buildTelegramProofCaption(metadata),
   })
   const archivedMessage = archived.result as { message_id?: number; photo?: Array<{ file_id?: string }> } | undefined
   const telegramMessageId = archivedMessage?.message_id
@@ -497,8 +767,13 @@ async function handlePhoto(chatId: string, photos: TelegramPhotoSize[], ctx: Ctx
     await ctx.tg.sendMessage(chatId, 'Telegram did not confirm the archived receipt. Please send the photo again or contact /support.')
     return
   }
-
-  const { data: owner } = await ctx.db.from('businesses').select('owner_id').eq('id', pending.business_id).single()
+  metadata.archive = { channel_id: paymentChannel, message_id: telegramMessageId, file_id: telegramFileId }
+  const metadataMessage = await ctx.tg.sendMessage(paymentChannel, buildTelegramProofMetadataMessage(metadata)).catch(() => null)
+  const metadataMessageId = (metadataMessage?.result as { message_id?: number } | undefined)?.message_id
+  if (Number.isSafeInteger(metadataMessageId)) {
+    metadata.archive = { ...metadata.archive, metadata_message_id: metadataMessageId }
+    await ctx.tg.editMessageText(paymentChannel, metadataMessageId as number, buildTelegramProofMetadataMessage(metadata)).catch(() => {})
+  }
   const { data: proof, error: proofError } = await ctx.db
     .from('telegram_payment_proofs')
     .insert({
@@ -508,7 +783,8 @@ async function handlePhoto(chatId: string, photos: TelegramPhotoSize[], ctx: Ctx
       telegram_message_id: telegramMessageId,
       telegram_file_id: telegramFileId,
       content_type: 'image/jpeg',
-      uploaded_by: owner?.owner_id,
+      uploaded_by: owner.id,
+      metadata,
     })
     .select('id')
     .single()
@@ -532,6 +808,15 @@ async function handlePhoto(chatId: string, photos: TelegramPhotoSize[], ctx: Ctx
     logEvent('error', { service: 'abrobiz-edge', function_name: 'telegram-webhook', operation: 'insert_payment', error_category: 'DATABASE_ERROR', error_code: insertError?.code ?? 'unknown', outcome: 'failed' })
     await ctx.tg.sendMessage(chatId, `The receipt was archived, but the payment could not be submitted. Please contact /support with reference ${archiveReference}.`)
     return
+  }
+
+  const paymentMetadata = metadata.payment && typeof metadata.payment === 'object' && !Array.isArray(metadata.payment)
+    ? metadata.payment as Record<string, unknown>
+    : {}
+  metadata.payment = { ...paymentMetadata, id: payment.id, status: 'pending' }
+  await ctx.tg.editMessageCaption(paymentChannel, telegramMessageId, buildTelegramProofCaption(metadata, String(payment.id))).catch(() => {})
+  if (Number.isSafeInteger(metadataMessageId)) {
+    await ctx.tg.editMessageText(paymentChannel, metadataMessageId as number, buildTelegramProofMetadataMessage(metadata)).catch(() => {})
   }
 
   await ctx.db.from('telegram_pending_actions').delete().eq('telegram_chat_id', chatId)
@@ -643,6 +928,10 @@ async function handleCallback(cb: TelegramCallbackQuery, ctx: Ctx): Promise<void
       await ctx.tg.sendMessage(chatId, 'Payment session cancelled.')
     } else if (data === 'admin:pending') {
       await handlePending(chatId, ctx)
+    } else if (data === 'admin:history') {
+      await handlePaymentHistory(chatId, [], ctx)
+    } else if (data.startsWith('admin:history:')) {
+      await handlePaymentHistory(chatId, [`status=${data.slice('admin:history:'.length)}`], ctx)
     } else if (data === 'admin:info') {
       if (await isLinkedAdmin(chatId, ctx)) await handleInfoForChat(chatId, ctx)
       else await ctx.tg.sendMessage(chatId, 'This admin menu is no longer authorized.')

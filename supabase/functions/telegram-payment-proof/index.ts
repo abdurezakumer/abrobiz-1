@@ -6,6 +6,7 @@ import { detectAllowedFile } from '../_shared/fileSecurity.ts'
 import { enforceRateLimits } from '../_shared/rateLimit.ts'
 import { isBearerAuthorization, readBinaryBody, validUuid } from '../_shared/requestSecurity.ts'
 import { logFailure } from '../_shared/observability.ts'
+import { buildTelegramProofCaption, buildTelegramProofMetadataMessage } from '../_shared/telegramProof.ts'
 
 const MAX_BYTES = 5 * 1024 * 1024
 
@@ -54,8 +55,9 @@ if (import.meta.main) {
       if (limited) return limited
 
       const db = createAdminClient()
-      const { data: business } = await db.from('businesses').select('id, name, slug').eq('id', businessId).eq('owner_id', userData.user.id).maybeSingle()
+      const { data: business } = await db.from('businesses').select('id, name, slug, owner_id').eq('id', businessId).eq('owner_id', userData.user.id).maybeSingle()
       if (!business) return json({ error: 'Not found or not authorized.' }, 403, req)
+      const { data: owner } = await db.from('profiles').select('id, name, email, phone, platform_id').eq('id', business.owner_id).maybeSingle()
       // A retry after a lost mobile response returns the original proof and
       // never posts a second receipt to the archive channel.
       const { data: existing } = await db
@@ -75,11 +77,19 @@ if (import.meta.main) {
       if (!extension) return json({ error: 'Unsupported or malformed image.' }, 415, req)
 
       const tg = new TelegramClient(Deno.env.get('TELEGRAM_BOT_TOKEN')!)
-      const caption = [
-        'AbroBiz payment proof',
-        `Business: ${String(business.name ?? 'Business').slice(0, 120)}`,
-        `Reference: ${uploadId}`,
-      ].join('\n')
+      const metadata: Record<string, unknown> = {
+        schema_version: 1,
+        source: 'web_uploader',
+        client_upload_id: uploadId,
+        content_type: contentType,
+        file_size: body.bytes.byteLength,
+        uploaded_at: new Date().toISOString(),
+        business: { id: business.id, name: business.name, slug: business.slug },
+        owner: owner ? { id: owner.id, name: owner.name, email: owner.email, phone: owner.phone, platform_id: owner.platform_id } : { id: business.owner_id },
+        telegram: { uploader: 'AbroBiz web uploader' },
+        archive: { channel_id: configuredChannel },
+      }
+      const caption = buildTelegramProofCaption(metadata)
       const archived = await tg.sendPhotoBytes(
         configuredChannel,
         body.bytes,
@@ -94,6 +104,33 @@ if (import.meta.main) {
         throw new Error('Telegram did not return an archived payment proof')
       }
 
+      metadata.archive = {
+        channel_id: configuredChannel,
+        message_id: telegramMessageId,
+        file_id: telegramFileId,
+      }
+      const metadataMessage = await tg.sendMessage(
+        configuredChannel,
+        buildTelegramProofMetadataMessage(metadata),
+      ).catch(() => null)
+      const metadataMessageId = (metadataMessage?.result as { message_id?: number } | undefined)?.message_id
+      if (Number.isSafeInteger(metadataMessageId)) {
+        metadata.archive = { ...metadata.archive, metadata_message_id: metadataMessageId }
+        await tg.editMessageText(
+          configuredChannel,
+          metadataMessageId as number,
+          buildTelegramProofMetadataMessage(metadata),
+        ).catch(() => {})
+      }
+      // The first caption is sent before Telegram assigns the archive
+      // message ID. Update it so the channel record and database metadata
+      // carry the same complete audit reference.
+      await tg.editMessageCaption(
+        configuredChannel,
+        telegramMessageId,
+        buildTelegramProofCaption(metadata),
+      ).catch(() => {})
+
       const { data: proof, error: insertError } = await db
         .from('telegram_payment_proofs')
         .insert({
@@ -105,6 +142,7 @@ if (import.meta.main) {
           content_type: contentType,
           file_size: body.bytes.byteLength,
           uploaded_by: userData.user.id,
+          metadata,
         })
         .select('id')
         .single()

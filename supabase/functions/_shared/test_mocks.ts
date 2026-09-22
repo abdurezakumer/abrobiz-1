@@ -173,6 +173,14 @@ export class MockTelegram {
     this.sent.push({ method: 'sendPhoto', chatId: String(chatId), text: opts.caption, replyMarkup: opts.replyMarkup })
     return { ok: true }
   }
+  async editMessageCaption(chatId: string | number, _messageId: number, caption: string, opts: { replyMarkup?: unknown } = {}) {
+    this.sent.push({ method: 'editMessageCaption', chatId: String(chatId), text: caption, replyMarkup: opts.replyMarkup })
+    return { ok: true }
+  }
+  async editMessageText(chatId: string | number, _messageId: number, text: string, opts: { replyMarkup?: unknown } = {}) {
+    this.sent.push({ method: 'editMessageText', chatId: String(chatId), text, replyMarkup: opts.replyMarkup })
+    return { ok: true }
+  }
   async editMessageText(chatId: string | number, _messageId: number, text: string, opts: { replyMarkup?: unknown } = {}) {
     this.sent.push({ method: 'editMessageText', chatId: String(chatId), text, replyMarkup: opts.replyMarkup })
     return { ok: true }

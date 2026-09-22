@@ -1,5 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4'
 import { createAdminClient } from '../_shared/db.ts'
+import { TelegramClient } from '../_shared/telegram.ts'
+import { buildTelegramProofCaption, buildTelegramProofMetadataMessage } from '../_shared/telegramProof.ts'
 import { corsHeaders } from '../_shared/cors.ts'
 import { enforceRateLimits } from '../_shared/rateLimit.ts'
 import { isBearerAuthorization, isRecord, readJsonBody, validUuid } from '../_shared/requestSecurity.ts'
@@ -115,6 +117,28 @@ if (import.meta.main) {
           logFailure(req, { function_name: 'submit-payment', operation: 'create_telegram_payment', error_category: error?.code === '23505' ? 'CONFLICT' : 'DATABASE_ERROR', error_code: error?.code ?? 'unknown', status: error?.code === '23505' ? 409 : 400 })
           const safeError = safeDatabaseError(error)
           return json({ error: safeError.message }, safeError.status, req)
+        }
+        const { data: proofRecord } = await db
+          .from('telegram_payment_proofs')
+          .select('telegram_channel_id, telegram_message_id, metadata')
+          .eq('id', telegramProofId)
+          .maybeSingle()
+        const botToken = Deno.env.get('TELEGRAM_BOT_TOKEN')
+        if (proofRecord?.telegram_channel_id && Number.isSafeInteger(proofRecord.telegram_message_id) && botToken) {
+          const metadata = proofRecord.metadata && typeof proofRecord.metadata === 'object' && !Array.isArray(proofRecord.metadata)
+            ? proofRecord.metadata as Record<string, unknown>
+            : {}
+          await new TelegramClient(botToken)
+            .editMessageCaption(proofRecord.telegram_channel_id, proofRecord.telegram_message_id, buildTelegramProofCaption(metadata, String(data.id)))
+            .catch(() => {})
+          const archive = metadata.archive && typeof metadata.archive === 'object' && !Array.isArray(metadata.archive)
+            ? metadata.archive as Record<string, unknown>
+            : {}
+          if (Number.isSafeInteger(archive.metadata_message_id)) {
+            await new TelegramClient(botToken)
+              .editMessageText(proofRecord.telegram_channel_id, archive.metadata_message_id as number, buildTelegramProofMetadataMessage(metadata))
+              .catch(() => {})
+          }
         }
         return json({ payment: data }, 200, req)
       }
