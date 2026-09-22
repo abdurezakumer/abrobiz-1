@@ -51,6 +51,7 @@ const adminKeyboard = buildInlineKeyboard([
 const superAdminKeyboard = buildInlineKeyboard([
   [{ text: 'Overview', callback_data: 'super:overview' }, { text: 'Admins', callback_data: 'super:admins' }],
   [{ text: 'Find user', callback_data: 'super:users' }, { text: 'Payments', callback_data: 'super:payments' }],
+  [{ text: 'Payment review', callback_data: 'admin:pending' }, { text: 'Payment history', callback_data: 'admin:history' }],
   [{ text: 'Audit activity', callback_data: 'super:audit' }],
   [{ text: 'Close console', callback_data: 'super:exit' }],
 ])
@@ -904,8 +905,17 @@ async function handleMessage(msg: TelegramMessage, ctx: Ctx): Promise<void> {
 async function handleStart(chatId: string, username: string | undefined, token: string | undefined, ctx: Ctx): Promise<void> {
   if (!token) {
     const { data: business } = await ctx.db.from('business_telegram_links').select('id').eq('telegram_chat_id', chatId).maybeSingle()
-    const { data: admin } = await ctx.db.from('admin_telegram_links').select('id').eq('telegram_chat_id', chatId).maybeSingle()
-    if (business || admin) {
+    const { data: admin } = await ctx.db.from('admin_telegram_links').select('id, admin_id').eq('telegram_chat_id', chatId).maybeSingle()
+    if (admin) {
+      const superAdmin = Boolean(await linkedSuperAdminId(chatId, ctx))
+      const paymentAdmin = await isLinkedAdmin(chatId, ctx)
+      await ctx.tg.sendMessage(chatId, superAdmin
+        ? 'You are connected as the AbroBiz Super Admin. Open the platform console below or use /superadmin.'
+        : paymentAdmin
+          ? 'You are connected as an AbroBiz administrator. Payment approvals and admin tools are available below.'
+          : 'You are connected to AbroBiz. Your current administrator role does not include payment-review tools.',
+      { replyMarkup: superAdmin ? superAdminKeyboard : paymentAdmin ? adminKeyboard : infoKeyboard })
+    } else if (business) {
       await ctx.tg.sendMessage(chatId, "You're already connected. Send /pay to submit a payment or /info to see all commands.", { replyMarkup: accountKeyboard })
     } else {
       await ctx.tg.sendMessage(chatId, "Welcome to AbroBiz! Open your dashboard and tap \u201cConnect Telegram\u201d to link your account.\n\nUse /info for platform information, /plans for pricing, or /support for help.", { replyMarkup: infoKeyboard })
@@ -940,7 +950,7 @@ async function handleStart(chatId: string, username: string | undefined, token: 
 
   const { data: adminLink } = await ctx.db.from('admin_telegram_links').select('id, admin_id').eq('link_token', token).maybeSingle()
   const { data: adminProfile } = adminLink?.admin_id
-    ? await ctx.db.from('profiles').select('id').eq('id', adminLink.admin_id).in('role', ['admin', 'super_admin']).maybeSingle()
+    ? await ctx.db.from('profiles').select('id, role, admin_role').eq('id', adminLink.admin_id).in('role', ['admin', 'super_admin']).maybeSingle()
     : { data: null }
   if (adminLink && adminProfile) {
     const { data: linkedBusiness } = await ctx.db.from('business_telegram_links').select('id').eq('telegram_chat_id', chatId).not('linked_at', 'is', null).maybeSingle()
@@ -957,7 +967,14 @@ async function handleStart(chatId: string, username: string | undefined, token: 
       await ctx.tg.sendMessage(chatId, 'This Telegram account is already connected elsewhere. Disconnect that connection first, then try again.')
       return
     }
-    await ctx.tg.sendMessage(chatId, '\u2705 You\u2019re connected as an admin. Payment approval requests will show up here with Approve/Reject buttons. Use /admin for admin tools.', { replyMarkup: infoKeyboard })
+    const superAdmin = adminProfile.role === 'super_admin' || adminProfile.admin_role === 'super_admin'
+    const paymentAdmin = await isLinkedAdmin(chatId, ctx)
+    await ctx.tg.sendMessage(chatId, superAdmin
+      ? '\u2705 You\u2019re connected as the AbroBiz Super Admin. Use the console below to manage the platform, administrators, users, payments, and audit activity.'
+      : paymentAdmin
+        ? '\u2705 You\u2019re connected as an AbroBiz administrator. Payment approval requests will show up here with Approve/Reject buttons.'
+        : '\u2705 You\u2019re connected to AbroBiz. Your current administrator role does not include payment-review tools.',
+    { replyMarkup: superAdmin ? superAdminKeyboard : paymentAdmin ? adminKeyboard : infoKeyboard })
     return
   }
 
