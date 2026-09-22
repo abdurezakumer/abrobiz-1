@@ -8,6 +8,7 @@ export interface MarketingCustomer {
   ownerId: string
   ownerName: string
   ownerEmail: string
+  ownerPhone: string
   ownerPlatformId: string
   businessName: string
   businessSlug: string
@@ -20,9 +21,11 @@ export interface MarketingCustomer {
   planName: string
   amountRequired: number
   paidAmount: number
+  qualifyingAmount: number
   paymentId: string | null
   paymentCreatedAt: string | null
   paymentUpdatedAt: string | null
+  subscriptionStatus: string | null
   daysPending: number
   lastReminderAt: string | null
   salesPersonName: string | null
@@ -105,11 +108,11 @@ export async function getMarketingWorkspace(profile: Profile): Promise<Marketing
   const attributions = attributionRows ?? []
   const ownerIds = attributions.map((row: any) => row.owner_id)
   const { data: ownerRows, error: ownerError } = ownerIds.length
-    ? await supabase.from('profiles').select('id, name, email, platform_id').in('id', ownerIds)
+    ? await supabase.from('profiles').select('id, name, email, phone, platform_id').in('id', ownerIds)
     : { data: [], error: null }
   if (ownerError) throw ownerError
   const { data: businessRows, error: businessError } = ownerIds.length
-    ? await supabase.from('businesses').select('id, owner_id, name, slug').in('owner_id', ownerIds)
+    ? await supabase.from('businesses').select('id, owner_id, name, slug, is_blocked').in('owner_id', ownerIds)
     : { data: [], error: null }
   if (businessError) throw businessError
 
@@ -160,8 +163,7 @@ export async function getMarketingWorkspace(profile: Profile): Promise<Marketing
     const payments = paymentsByBusiness.get(business.id) ?? []
     const subscription = subscriptionByBusiness.get(business.id)
     const approved = payments.find(payment => payment.status === 'approved')
-    const pending = payments.find(payment => payment.status === 'pending')
-    const latest = approved ?? pending ?? payments[0]
+    const latest = payments[0]
     const submittedAmount = Number(latest?.amount_etb ?? 0)
     const pendingSince = latest?.created_at ?? row.attributed_at
     const daysPending = Math.max(0, Math.floor((Date.now() - new Date(pendingSince).getTime()) / 86400000))
@@ -170,6 +172,7 @@ export async function getMarketingWorkspace(profile: Profile): Promise<Marketing
       ownerId: row.owner_id,
       ownerName: owner.name || 'Unnamed owner',
       ownerEmail: owner.email || '—',
+      ownerPhone: owner.phone || '—',
       ownerPlatformId: owner.platform_id || '—',
       businessName: business.name || 'Business not set up',
       businessSlug: business.slug || '',
@@ -178,13 +181,15 @@ export async function getMarketingWorkspace(profile: Profile): Promise<Marketing
       referralCode: row.referral_code_snapshot,
       source: row.source,
       attributedAt: row.attributed_at,
-      paymentStatus: approved ? 'approved' : pending ? 'pending' : latest?.status ?? 'unpaid',
+      paymentStatus: latest?.status ?? 'unpaid',
       planName: latest?.plans?.name ?? subscription?.plans?.name ?? 'No plan selected',
-      amountRequired: Number(latest?.plans?.price_etb ?? subscription?.plans?.price_etb ?? 0),
+      amountRequired: Number(latest?.amount_etb ?? latest?.plans?.price_etb ?? subscription?.plans?.price_etb ?? 0),
       paidAmount: submittedAmount,
+      qualifyingAmount: Number(approved?.amount_etb ?? 0),
       paymentId: latest?.id ?? null,
       paymentCreatedAt: latest?.created_at ?? null,
       paymentUpdatedAt: latest?.reviewed_at ?? latest?.created_at ?? null,
+      subscriptionStatus: subscription?.status ?? null,
       daysPending,
       lastReminderAt: lastReminderByAttribution.get(row.id) ?? null,
       salesPersonName: row.sales_person_id ? teamById.get(row.sales_person_id)?.name ?? null : null,
@@ -245,14 +250,14 @@ export async function getMarketingWorkspace(profile: Profile): Promise<Marketing
     activity,
     summary: {
       customers: customers.length,
-      paidCustomers: customers.filter(customer => customer.paymentStatus === 'approved').length,
+      paidCustomers: customers.filter(customer => customer.qualifyingAmount > 0).length,
       pendingCustomers: customers.filter(customer => customer.paymentStatus === 'pending').length,
-      qualifyingPayments: customers.filter(customer => customer.paymentStatus === 'approved').reduce((sum, customer) => sum + customer.paidAmount, 0),
+      qualifyingPayments: customers.reduce((sum, customer) => sum + customer.qualifyingAmount, 0),
       commissionTotal: partnerLedger.reduce((sum, entry) => sum + entry.amountEtb, 0),
       commissionPending: partnerLedger.filter(entry => ['pending', 'calculated', 'eligible'].includes(entry.status)).reduce((sum, entry) => sum + entry.amountEtb, 0),
       commissionPaid: partnerLedger.filter(entry => entry.status === 'paid').reduce((sum, entry) => sum + entry.amountEtb, 0),
-      activeCustomers: customers.filter(customer => customer.paymentStatus === 'approved').length,
-      conversionRate: customers.length ? Math.round((customers.filter(customer => customer.paymentStatus === 'approved').length / customers.length) * 100) : 0,
+      activeCustomers: customers.filter(customer => customer.subscriptionStatus === 'active').length,
+      conversionRate: customers.length ? Math.round((customers.filter(customer => customer.qualifyingAmount > 0).length / customers.length) * 100) : 0,
       myCommission: myLedger.reduce((sum, entry) => sum + entry.amountEtb, 0),
       teamCommission: teamLedger.reduce((sum, entry) => sum + entry.amountEtb, 0),
       pendingCommission: myLedger.filter(entry => ['pending', 'calculated', 'eligible'].includes(entry.status)).reduce((sum, entry) => sum + entry.amountEtb, 0),
