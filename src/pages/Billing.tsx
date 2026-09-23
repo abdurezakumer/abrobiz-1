@@ -92,6 +92,7 @@ export default function Billing() {
   const [telegramLink, setTelegramLink] = useState<TelegramLinkStatus | null>(null)
   const paymentIdempotencyKey = useRef<string | null>(null)
   const proofUploadController = useRef<AbortController | null>(null)
+  const proofUploadAttempt = useRef(0)
   const proofDialogRef = useRef<HTMLDivElement | null>(null)
   const draftHydrated = useRef(false)
   const optionsRequestId = useRef(0)
@@ -280,7 +281,8 @@ export default function Billing() {
   }
 
   async function handleProofSelection(file: File | null) {
-    if (!file) return
+    if (!file || savingProof || submitting) return
+    const attempt = ++proofUploadAttempt.current
     setProofFlowOpen(true)
     const previousProofPath = proofPath
     const previousProofFileName = proofFile?.name ?? proofFileName
@@ -292,6 +294,26 @@ export default function Billing() {
     paymentIdempotencyKey.current = null
     setSavingProof(true)
     try {
+      // A successful submit can be acknowledged after the phone loses focus.
+      // Refresh before archiving another receipt so a second tap cannot create
+      // a duplicate payment or surface an opaque upload error.
+      if (business) {
+        try {
+          const latestPayments = await listPaymentsForBusiness(business.id)
+          if (proofUploadAttempt.current !== attempt) return
+          setHistory(latestPayments)
+          const pendingPayment = latestPayments.find(payment => payment.status === 'pending')
+          if (pendingPayment) {
+            setSubmittedPaymentId(pendingPayment.id)
+            setSubmitted(true)
+            setProofUploadError(false)
+            setError('Your payment is already waiting for admin confirmation. Please wait for the review notification.')
+            return
+          }
+        } catch {
+          // A delayed history request must not prevent a valid new upload.
+        }
+      }
       const detectedType = detectedUploadType(file)
       if (!detectedType || !detectedType.startsWith('image/')) {
         throw new Error('Use a JPEG, PNG, WebP, or phone photo up to 10 MB.')
@@ -301,14 +323,17 @@ export default function Billing() {
       // receipt is archived by the protected Telegram workflow; no device
       // cache or Supabase Storage copy is used.
       const proofPath = await uploadPaymentProof(business.id, file, progress => {
+        if (proofUploadAttempt.current !== attempt) return
         setUploadProgress(Math.min(99, 8 + Math.round(progress * 0.92)))
       }, uploadController.signal)
+      if (proofUploadAttempt.current !== attempt) return
       setProofPath(proofPath)
       setUploadProgress(100)
       setProofFile(file)
       setProofFileName(file.name)
       setProofUploadError(false)
     } catch (err) {
+      if (proofUploadAttempt.current !== attempt) return
       setUploadProgress(null)
       if (uploadController.signal.aborted) {
         setError(previousProofPath ? 'Upload canceled. Your previous receipt is still ready to submit.' : '')
@@ -325,8 +350,10 @@ export default function Billing() {
         setError(`${paymentUploadErrorMessage(err)} Please try again or submit the receipt via Telegram.`)
       }
     } finally {
-      if (proofUploadController.current === uploadController) proofUploadController.current = null
-      setSavingProof(false)
+      if (proofUploadAttempt.current === attempt) {
+        if (proofUploadController.current === uploadController) proofUploadController.current = null
+        setSavingProof(false)
+      }
     }
   }
 
@@ -620,6 +647,7 @@ export default function Billing() {
               aria-label="Browse payment proof"
               disabled={savingProof || submitting}
               style={fileInputStyle}
+              onClick={e => { e.currentTarget.value = '' }}
               onChange={e => void handleProofSelection(takeSelectedFile(e.currentTarget))}
             />
             <span style={{ fontSize: 11.5, color: '#D4A853', marginTop: 4, display: 'block' }}>{savingProof ? 'Uploading…' : proofReady ? 'Click to change' : 'Choose a file'}</span>
@@ -725,6 +753,7 @@ export default function Billing() {
                 aria-label="Choose payment proof photo"
                 disabled={savingProof || submitting}
                 style={fileInputStyle}
+                onClick={e => { e.currentTarget.value = '' }}
                 onChange={e => void handleProofSelection(takeSelectedFile(e.currentTarget))}
               />
               <span style={proofChooseText}>{savingProof ? 'Uploading…' : proofReady ? 'Choose another photo' : 'Choose receipt photo'}</span>

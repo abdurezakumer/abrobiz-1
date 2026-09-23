@@ -365,6 +365,17 @@ function ItemForm({
           rows={2}
           style={{ ...formInput, resize: 'vertical' }}
         />
+        {safeImageUrl(imageUrl) && (
+          <div style={itemImagePreview}>
+            <img
+              src={safeImageUrl(imageUrl) ?? undefined}
+              alt={`${translations[activeLang]?.name || itemLabel} photo preview`}
+              decoding="async"
+              style={itemImagePreviewImage}
+            />
+            <span style={itemImagePreviewLabel}>Photo preview</span>
+          </div>
+        )}
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
           <input type="number" step="0.01" value={price} onChange={e => setPrice(parseFloat(e.target.value) || 0)} style={{ ...formInput, width: 120 }} placeholder="Price" />
           <label style={{ fontSize: 12.5, color: '#0A0C10', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
@@ -373,7 +384,7 @@ function ItemForm({
               {!uploading && <motion.span animate={{ y: [0, -3, 0] }} transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }} style={{ display: 'inline-flex' }}><ArrowUp size={13} /></motion.span>}
               {uploading ? `Uploading… ${uploadProgress ?? 0}%` : imageUrl ? 'Change photo' : 'Add photo'}
             </span>
-            <input type="file" accept={IMAGE_UPLOAD_ACCEPT} style={fileInputStyle} disabled={uploading} onChange={e => { const file = takeSelectedFile(e.currentTarget); if (file) void handleImage(file) }} />
+            <input type="file" accept={IMAGE_UPLOAD_ACCEPT} style={fileInputStyle} disabled={uploading} onClick={e => { e.currentTarget.value = '' }} onChange={e => { const file = takeSelectedFile(e.currentTarget); if (file) void handleImage(file) }} />
           </label>
         </div>
         {uploading && <div role="progressbar" aria-label="Menu image upload progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={uploadProgress ?? 0} style={{ height: 5, borderRadius: 99, background: 'rgba(10,12,16,0.1)', overflow: 'hidden' }}><div style={{ width: `${uploadProgress ?? 0}%`, height: '100%', background: '#D4A853', transition: 'width 180ms ease' }} /></div>}
@@ -405,6 +416,9 @@ const addBtn: React.CSSProperties = {
 const formInput: React.CSSProperties = {
   border: '1px solid rgba(10,12,16,0.1)', borderRadius: 9, padding: '9px 11px', fontSize: 13.5, outline: 'none', fontFamily: 'inherit',
 }
+const itemImagePreview: React.CSSProperties = { position: 'relative', borderRadius: 12, overflow: 'hidden', background: '#F6F3EE', border: '1px solid rgba(10,12,16,0.08)', minHeight: 180, display: 'flex', alignItems: 'center', justifyContent: 'center' }
+const itemImagePreviewImage: React.CSSProperties = { display: 'block', width: '100%', maxHeight: 260, objectFit: 'contain', objectPosition: 'center', background: '#F6F3EE' }
+const itemImagePreviewLabel: React.CSSProperties = { position: 'absolute', left: 10, bottom: 10, padding: '5px 8px', borderRadius: 7, background: 'rgba(10,12,16,0.72)', color: '#fff', fontSize: 10.5, fontWeight: 700, letterSpacing: 0.2 }
 const catalogSkeleton: React.CSSProperties = { display: 'grid', gap: 14 }
 const skeletonLineWide: React.CSSProperties = { height: 28, width: '42%', borderRadius: 8, background: 'linear-gradient(100deg, #eeeae3 30%, #fff 50%, #eeeae3 70%)', backgroundSize: '200% 100%', animation: 'abrobiz-skeleton-shimmer 1.2s ease-in-out infinite' }
 const skeletonLine: React.CSSProperties = { height: 180, width: '100%', borderRadius: 16, background: 'linear-gradient(100deg, #eeeae3 30%, #fff 50%, #eeeae3 70%)', backgroundSize: '200% 100%', animation: 'abrobiz-skeleton-shimmer 1.2s ease-in-out infinite' }
