@@ -706,10 +706,26 @@ async function sendPaymentRecord(chatId: string, payment: any, owner: any, proof
       `Business: ${business.name ?? 'Business'}`,
       `Amount: ${payment.amount_etb} ETB`,
     ].join('\n')
-    await ctx.tg.sendPhoto(chatId, proof.telegram_file_id, { caption: mediaCaption, replyMarkup })
-    // Telegram captions are limited to 1024 characters. Send the complete
-    // audit record separately so admins receive all metadata and identifiers.
-    await ctx.tg.sendMessage(chatId, caption)
+    try {
+      await ctx.tg.sendPhoto(chatId, proof.telegram_file_id, { caption: mediaCaption, replyMarkup })
+      // Telegram captions are limited to 1024 characters. Send the complete
+      // audit record separately so admins receive all metadata and identifiers.
+      await ctx.tg.sendMessage(chatId, caption)
+    } catch (error) {
+      // A Telegram file ID can become unavailable even though the payment and
+      // its metadata remain valid. Do not let one stale archive photo abort
+      // the complete payment-history response.
+      logEvent('warn', {
+        service: 'abrobiz-edge',
+        function_name: 'telegram-webhook',
+        operation: 'send_payment_record',
+        error_category: 'TELEGRAM_PROOF_UNAVAILABLE',
+        error_code: error instanceof Error ? error.name : 'UnknownError',
+        provider: 'telegram',
+        outcome: 'fallback_text',
+      })
+      await ctx.tg.sendMessage(chatId, `${caption}\n\nThe archived proof image is not available for inline display. The payment record and archive identifiers are still preserved.`, { replyMarkup })
+    }
   } else {
     await ctx.tg.sendMessage(chatId, caption, { replyMarkup })
   }
@@ -773,7 +789,21 @@ async function handlePaymentHistory(chatId: string, args: string[], ctx: Ctx): P
   await ctx.tg.sendMessage(chatId, `Found ${payments.length} payment${payments.length === 1 ? '' : 's'}${filters.status ? ` with status ${filters.status}` : ''}.`)
   for (const payment of payments) {
     const ownerId = payment.businesses?.owner_id
-    await sendPaymentRecord(chatId, payment, context.owners.get(ownerId), context.proofs.get(payment.id), ctx)
+    try {
+      await sendPaymentRecord(chatId, payment, context.owners.get(ownerId), context.proofs.get(payment.id), ctx)
+    } catch (error) {
+      // Keep one malformed record from stopping the rest of the result set.
+      logEvent('warn', {
+        service: 'abrobiz-edge',
+        function_name: 'telegram-webhook',
+        operation: 'send_payment_history_record',
+        error_category: 'TELEGRAM_RECORD_DELIVERY',
+        error_code: error instanceof Error ? error.name : 'UnknownError',
+        provider: 'telegram',
+        outcome: 'skipped_record',
+      })
+      await ctx.tg.sendMessage(chatId, `Payment ${payment.id} could not be displayed. Use /payment ${payment.id} to retry this record.`).catch(() => {})
+    }
   }
 }
 
