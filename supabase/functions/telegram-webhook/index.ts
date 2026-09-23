@@ -459,6 +459,13 @@ async function handleSuperAdminPayments(chatId: string, ctx: Ctx): Promise<void>
   if (!adminId) return
   await saveSuperAdminSession(chatId, adminId, 'menu', ctx)
   await handlePaymentHistory(chatId, [], ctx)
+  await ctx.tg.sendMessage(chatId, 'Super Admin Console', { replyMarkup: superAdminKeyboard })
+}
+
+async function restoreSuperAdminKeyboard(chatId: string, ctx: Ctx): Promise<void> {
+  if (await linkedSuperAdminId(chatId, ctx)) {
+    await ctx.tg.sendMessage(chatId, 'Super Admin Console', { replyMarkup: superAdminKeyboard })
+  }
 }
 
 async function handleSuperAdminCallback(cb: TelegramCallbackQuery, ctx: Ctx): Promise<boolean> {
@@ -485,6 +492,8 @@ async function handleSuperAdminCallback(cb: TelegramCallbackQuery, ctx: Ctx): Pr
   } else if (data === 'super:exit') {
     await clearSuperAdminSession(chatId, ctx)
     await ctx.tg.sendMessage(chatId, 'Super-admin console closed. Send /superadmin to open it again.', { replyMarkup: adminKeyboard })
+  } else {
+    await ctx.tg.sendMessage(chatId, 'That Super Admin button is no longer available. Send /superadmin to refresh the console.', { replyMarkup: superAdminKeyboard })
   }
   return true
 }
@@ -1236,6 +1245,12 @@ async function handleCallback(cb: TelegramCallbackQuery, ctx: Ctx): Promise<void
   const chatId = String(cb.message?.chat.id ?? cb.from.id)
   const data = cb.data ?? ''
 
+  // A callback query must be acknowledged quickly. Waiting for Supabase or
+  // another Telegram request first leaves the Telegram spinner active and
+  // makes a working button look unresponsive when a downstream operation is
+  // slow or temporarily unavailable.
+  await ctx.tg.answerCallbackQuery(cb.id).catch(() => {})
+
   try {
     if (await handleSuperAdminCallback(cb, ctx)) {
       return
@@ -1246,10 +1261,13 @@ async function handleCallback(cb: TelegramCallbackQuery, ctx: Ctx): Promise<void
       await ctx.tg.sendMessage(chatId, 'Payment session cancelled.')
     } else if (data === 'admin:pending') {
       await handlePending(chatId, ctx)
+      await restoreSuperAdminKeyboard(chatId, ctx)
     } else if (data === 'admin:history') {
       await handlePaymentHistory(chatId, [], ctx)
+      await restoreSuperAdminKeyboard(chatId, ctx)
     } else if (data.startsWith('admin:history:')) {
       await handlePaymentHistory(chatId, [`status=${data.slice('admin:history:'.length)}`], ctx)
+      await restoreSuperAdminKeyboard(chatId, ctx)
     } else if (data === 'admin:info') {
       if (await isLinkedAdmin(chatId, ctx)) await handleInfoForChat(chatId, ctx)
       else await ctx.tg.sendMessage(chatId, 'This admin menu is no longer authorized.')
@@ -1281,8 +1299,23 @@ async function handleCallback(cb: TelegramCallbackQuery, ctx: Ctx): Promise<void
       const [, paymentId, reasonCode] = data.split(':')
       await handleRejectReason(chatId, cb, paymentId ?? '', reasonCode ?? '', ctx)
     }
-  } finally {
-    await ctx.tg.answerCallbackQuery(cb.id).catch(() => {})
+  } catch (error) {
+    logEvent('error', {
+      service: 'abrobiz-edge',
+      function_name: 'telegram-webhook',
+      operation: 'handle_callback',
+      error_category: 'CALLBACK_ERROR',
+      error_code: error instanceof Error ? error.name : 'UnknownError',
+      provider: 'telegram',
+      outcome: 'failed',
+    })
+    await ctx.tg.sendMessage(
+      chatId,
+      data.startsWith('super:')
+        ? 'The Super Admin action could not be completed. Send /superadmin to refresh the console and try again.'
+        : 'The action could not be completed. Please try again or use /support.',
+      data.startsWith('super:') ? { replyMarkup: superAdminKeyboard } : undefined,
+    ).catch(() => {})
   }
 }
 
