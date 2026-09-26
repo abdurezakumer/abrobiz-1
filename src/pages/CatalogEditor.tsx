@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowUp, Plus, Trash2, Eye, EyeOff, Image as ImageIcon, X, Pencil, AlertCircle, CheckCircle2 } from 'lucide-react'
+import { ArrowUp, Plus, Trash2, Eye, EyeOff, Image as ImageIcon, X, Pencil, AlertCircle, CheckCircle2, Images, Upload } from 'lucide-react'
 import DashboardLayout from '../components/DashboardLayout'
 import { useAuth } from '../lib/authContext'
 import { supabase } from '../lib/supabaseClient'
@@ -183,14 +183,30 @@ function ItemsGrid({
   currency: string
 }) {
   const [editingId, setEditingId] = useState<string | 'new' | null>(null)
+  const [batchOpen, setBatchOpen] = useState(false)
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
-        <button onClick={() => setEditingId('new')} style={addBtn}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+        <button type="button" onClick={() => setBatchOpen(true)} style={batchBtn}>
+          <Images size={15} /> Batch add
+        </button>
+        <button type="button" onClick={() => setEditingId('new')} style={addBtn}>
           <Plus size={15} /> Add {itemLabel.toLowerCase()}
         </button>
       </div>
+
+      <AnimatePresence>
+        {batchOpen && (
+          <BatchItemForm
+            businessId={businessId}
+            categoryId={categoryId}
+            itemLabel={itemLabel}
+            onCancel={() => setBatchOpen(false)}
+            onSaved={created => onChange([...allItems, ...created])}
+          />
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {editingId === 'new' && (
@@ -264,6 +280,205 @@ function ItemsGrid({
       )}
     </div>
   )
+}
+
+type BatchItemRow = {
+  id: string
+  file: File
+  previewUrl: string
+  name: string
+  description: string
+  price: number
+  imageUrl?: string
+  itemId?: string
+  progress: number
+  status: 'queued' | 'uploading' | 'saved' | 'error'
+  error?: string
+}
+
+function BatchItemForm({
+  businessId, categoryId, itemLabel, onCancel, onSaved,
+}: {
+  businessId: string
+  categoryId: string
+  itemLabel: string
+  onCancel: () => void
+  onSaved: (items: Item[]) => void
+}) {
+  const [rows, setRows] = useState<BatchItemRow[]>([])
+  const [isFeatured, setIsFeatured] = useState(false)
+  const [processing, setProcessing] = useState(false)
+  const [batchError, setBatchError] = useState('')
+  const [complete, setComplete] = useState(false)
+  const previewUrls = useRef(new Set<string>())
+
+  useEffect(() => () => {
+    previewUrls.current.forEach(url => URL.revokeObjectURL(url))
+    previewUrls.current.clear()
+  }, [])
+
+  function addFiles(files: File[]) {
+    setBatchError('')
+    setComplete(false)
+    const remaining = Math.max(0, 20 - rows.length)
+    const accepted = files.slice(0, remaining)
+    if (files.length > remaining) setBatchError('You can add up to 20 photos at a time.')
+    const nextRows = accepted.map((file, index) => {
+      const previewUrl = URL.createObjectURL(file)
+      previewUrls.current.add(previewUrl)
+      return {
+        id: `${Date.now()}-${index}-${Math.random().toString(36).slice(2)}`,
+        file,
+        previewUrl,
+        name: readableFileName(file.name),
+        description: '',
+        price: 0,
+        progress: 0,
+        status: 'queued' as const,
+      }
+    })
+    setRows(previous => [...previous, ...nextRows])
+  }
+
+  function removeRow(id: string) {
+    setRows(previous => {
+      const row = previous.find(item => item.id === id)
+      if (row) {
+        URL.revokeObjectURL(row.previewUrl)
+        previewUrls.current.delete(row.previewUrl)
+      }
+      return previous.filter(item => item.id !== id)
+    })
+  }
+
+  function updateRow(id: string, patch: Partial<BatchItemRow>) {
+    setRows(previous => previous.map(row => row.id === id ? { ...row, ...patch } : row))
+  }
+
+  async function saveBatch() {
+    const pendingRows = rows.filter(row => row.status !== 'saved')
+    if (pendingRows.length === 0) {
+      setComplete(true)
+      return
+    }
+    const invalid = pendingRows.find(row => !row.name.trim() || !Number.isFinite(row.price) || row.price < 0)
+    if (invalid) {
+      setBatchError('Add a name and a valid price for every photo before saving.')
+      return
+    }
+
+    setProcessing(true)
+    setBatchError('')
+    const created: Item[] = []
+    for (const row of pendingRows) {
+      updateRow(row.id, { status: 'uploading', progress: row.imageUrl ? 70 : 0, error: undefined })
+      try {
+        let imageUrl = row.imageUrl
+        if (!imageUrl) {
+          imageUrl = await uploadItemImage(businessId, row.file, progress => updateRow(row.id, { progress: Math.min(70, Math.round(progress * 0.7)) }))
+          updateRow(row.id, { imageUrl, progress: 72 })
+        }
+
+        const translations = { en: { name: row.name.trim(), description: row.description.trim() } }
+        let item: Item
+        if (row.itemId) {
+          await updateItem(row.itemId, { price: row.price, imageUrl, isFeatured, translations })
+          item = { id: row.itemId, businessId, categoryId, imageUrl, price: row.price, isAvailable: true, isFeatured, sortOrder: 0, translations }
+        } else {
+          item = await createItem({ businessId, categoryId, price: row.price, translations })
+          updateRow(row.id, { itemId: item.id, progress: 88 })
+          await updateItem(item.id, { imageUrl, isFeatured })
+          item = { ...item, imageUrl, isFeatured }
+        }
+        created.push(item)
+        updateRow(row.id, { status: 'saved', progress: 100 })
+      } catch (error) {
+        updateRow(row.id, { status: 'error', error: friendlyError(error), progress: 0 })
+      }
+    }
+    if (created.length > 0) onSaved(created)
+    setComplete(created.length === pendingRows.length)
+    setProcessing(false)
+  }
+
+  const savedCount = rows.filter(row => row.status === 'saved').length
+  const failedCount = rows.filter(row => row.status === 'error').length
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+      style={{ background: '#fff', borderRadius: 14, border: '1.5px solid #D4A853', padding: 16, marginBottom: 14, overflow: 'hidden' }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 8 }}>
+        <div>
+          <span style={{ fontSize: 14, fontWeight: 650 }}>Batch add {itemLabel.toLowerCase()}s</span>
+          <p style={{ margin: '5px 0 0', color: 'rgba(10,12,16,0.5)', fontSize: 12.5, lineHeight: 1.45 }}>Choose up to 20 photos. Each photo becomes a new item that you can name and price before saving.</p>
+        </div>
+        <button type="button" onClick={onCancel} disabled={processing} aria-label="Close batch uploader" style={{ background: 'none', border: 'none', cursor: processing ? 'not-allowed' : 'pointer' }}><X size={16} /></button>
+      </div>
+
+      <label style={batchDropzone}>
+        <Upload size={18} />
+        <span>{rows.length > 0 ? 'Add more photos' : 'Choose multiple photos'}</span>
+        <small>JPEG, PNG, WebP, or phone photo formats · max 20</small>
+        <input
+          type="file"
+          accept={IMAGE_UPLOAD_ACCEPT}
+          multiple
+          disabled={processing}
+          style={fileInputStyle}
+          onClick={event => { event.currentTarget.value = '' }}
+          onChange={event => { const files = Array.from(event.currentTarget.files ?? []); event.currentTarget.value = ''; addFiles(files) }}
+        />
+      </label>
+
+      {rows.length > 0 && (
+        <div style={{ display: 'grid', gap: 9, marginTop: 12 }}>
+          {rows.map(row => (
+            <div key={row.id} style={batchRow}>
+              <img src={row.previewUrl} alt="Selected item" style={batchPreview} />
+              <div style={{ flex: 1, minWidth: 0, display: 'grid', gap: 7 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 110px', gap: 7 }}>
+                  <input value={row.name} disabled={row.status === 'saved' || processing} onChange={event => updateRow(row.id, { name: event.target.value })} aria-label="Item name" placeholder={`${itemLabel} name`} style={formInput} />
+                  <input type="number" min="0" step="0.01" value={row.price} disabled={row.status === 'saved' || processing} onChange={event => updateRow(row.id, { price: parseFloat(event.target.value) || 0 })} aria-label="Item price" placeholder="Price" style={formInput} />
+                </div>
+                <input value={row.description} disabled={row.status === 'saved' || processing} onChange={event => updateRow(row.id, { description: event.target.value })} aria-label="Item description" placeholder="Description (optional)" style={formInput} />
+                {row.status === 'uploading' && <div role="progressbar" aria-label={`Uploading ${row.name}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={row.progress} style={batchProgressTrack}><div style={{ width: `${row.progress}%`, height: '100%', background: '#D4A853', transition: 'width 180ms ease' }} /></div>}
+                {row.status === 'saved' && <span style={batchSaved}><CheckCircle2 size={13} /> Saved</span>}
+                {row.error && <span style={batchFailed}><AlertCircle size={13} /> {row.error}</span>}
+              </div>
+              {row.status !== 'saved' && <button type="button" onClick={() => removeRow(row.id)} disabled={processing} aria-label={`Remove ${row.name || 'photo'}`} style={{ ...miniBtn, flexShrink: 0 }}><X size={13} /></button>}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {batchError && <div role="alert" style={{ color: '#B91C1C', fontSize: 12.5, marginTop: 10 }}>{batchError}</div>}
+      {rows.length > 0 && (
+        <>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 11, fontSize: 12.5, color: '#0A0C10', cursor: 'pointer' }}>
+            <input type="checkbox" checked={isFeatured} onChange={event => setIsFeatured(event.target.checked)} disabled={processing || savedCount > 0} style={{ width: 15, height: 15 }} />
+            Feature these items on the homepage
+          </label>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginTop: 13, flexWrap: 'wrap' }}>
+            <span style={{ color: 'rgba(10,12,16,0.48)', fontSize: 12 }}>{savedCount > 0 ? `${savedCount} saved` : `${rows.length} ready`}{failedCount > 0 ? ` · ${failedCount} failed — retry available` : ''}</span>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="button" onClick={onCancel} disabled={processing} style={{ ...miniBtn, width: 'auto', padding: '8px 14px', opacity: processing ? 0.5 : 1 }}>{complete ? 'Done' : 'Cancel'}</button>
+              <button type="button" onClick={() => void saveBatch()} disabled={processing || complete || rows.length === 0} style={{ ...addBtn, opacity: processing || complete ? 0.55 : 1 }}>
+                {processing ? 'Saving…' : complete ? 'Batch saved' : failedCount > 0 ? 'Retry failed' : 'Save all'}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+    </motion.div>
+  )
+}
+
+function readableFileName(fileName: string): string {
+  const withoutExtension = fileName.replace(/\.[^.]+$/, '')
+  const readable = withoutExtension.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim()
+  return readable ? readable.slice(0, 120) : 'New item'
 }
 
 function ItemForm({
@@ -409,6 +624,10 @@ const miniBtn: React.CSSProperties = {
   width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6,
   border: 'none', background: 'rgba(10,12,16,0.06)', cursor: 'pointer', color: '#0A0C10',
 }
+const batchBtn: React.CSSProperties = {
+  display: 'flex', alignItems: 'center', gap: 6, background: '#F6F3EE', color: '#0A0C10', border: '1px solid rgba(10,12,16,0.1)',
+  borderRadius: 9, padding: '9px 14px', fontSize: 13.5, fontWeight: 600, cursor: 'pointer',
+}
 const addBtn: React.CSSProperties = {
   display: 'flex', alignItems: 'center', gap: 6, background: '#D4A853', color: '#0A0C10', border: 'none',
   borderRadius: 9, padding: '9px 14px', fontSize: 13.5, fontWeight: 600, cursor: 'pointer',
@@ -419,6 +638,12 @@ const formInput: React.CSSProperties = {
 const itemImagePreview: React.CSSProperties = { position: 'relative', borderRadius: 12, overflow: 'hidden', background: '#F6F3EE', border: '1px solid rgba(10,12,16,0.08)', minHeight: 180, display: 'flex', alignItems: 'center', justifyContent: 'center' }
 const itemImagePreviewImage: React.CSSProperties = { display: 'block', width: '100%', maxHeight: 260, objectFit: 'contain', objectPosition: 'center', background: '#F6F3EE' }
 const itemImagePreviewLabel: React.CSSProperties = { position: 'absolute', left: 10, bottom: 10, padding: '5px 8px', borderRadius: 7, background: 'rgba(10,12,16,0.72)', color: '#fff', fontSize: 10.5, fontWeight: 700, letterSpacing: 0.2 }
+const batchDropzone: React.CSSProperties = { position: 'relative', display: 'grid', placeItems: 'center', gap: 5, minHeight: 92, padding: '14px 16px', border: '1px dashed rgba(162,122,34,0.55)', borderRadius: 12, background: '#FFFCF5', color: '#7C5B16', cursor: 'pointer', textAlign: 'center', fontSize: 13.5, fontWeight: 650 }
+const batchRow: React.CSSProperties = { display: 'flex', alignItems: 'flex-start', gap: 10, padding: 9, borderRadius: 11, border: '1px solid rgba(10,12,16,0.08)', background: '#FCFBF8' }
+const batchPreview: React.CSSProperties = { width: 72, height: 72, flexShrink: 0, borderRadius: 9, objectFit: 'cover', background: '#F6F3EE' }
+const batchProgressTrack: React.CSSProperties = { height: 5, borderRadius: 99, background: 'rgba(10,12,16,0.1)', overflow: 'hidden' }
+const batchSaved: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 5, color: '#166534', fontSize: 12 }
+const batchFailed: React.CSSProperties = { display: 'inline-flex', alignItems: 'flex-start', gap: 5, color: '#B91C1C', fontSize: 12, lineHeight: 1.35 }
 const catalogSkeleton: React.CSSProperties = { display: 'grid', gap: 14 }
 const skeletonLineWide: React.CSSProperties = { height: 28, width: '42%', borderRadius: 8, background: 'linear-gradient(100deg, #eeeae3 30%, #fff 50%, #eeeae3 70%)', backgroundSize: '200% 100%', animation: 'abrobiz-skeleton-shimmer 1.2s ease-in-out infinite' }
 const skeletonLine: React.CSSProperties = { height: 180, width: '100%', borderRadius: 16, background: 'linear-gradient(100deg, #eeeae3 30%, #fff 50%, #eeeae3 70%)', backgroundSize: '200% 100%', animation: 'abrobiz-skeleton-shimmer 1.2s ease-in-out infinite' }
