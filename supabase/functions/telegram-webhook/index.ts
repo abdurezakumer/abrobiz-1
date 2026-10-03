@@ -663,7 +663,7 @@ function addDateFilters(query: any, filters: PaymentHistoryFilters): any {
   return filtered
 }
 
-function formatPaymentRecord(payment: any, owner: any, proof: any, includeMetadata = true): string {
+function formatPaymentRecord(payment: any, owner: any, proof: any, reviewer: any, includeMetadata = true): string {
   const business = payment.businesses ?? {}
   const plan = payment.plans ?? {}
   const method = payment.payment_methods ?? {}
@@ -680,6 +680,9 @@ function formatPaymentRecord(payment: any, owner: any, proof: any, includeMetada
     payment.owner_note ? `Owner note: ${payment.owner_note}` : '',
     `Created: ${payment.created_at}`,
     payment.reviewed_at ? `Reviewed: ${payment.reviewed_at}` : '',
+    payment.reviewed_by ? `Reviewed by: ${reviewer?.name ?? reviewer?.email ?? 'Administrator'}${reviewer?.platform_id ? ` (${reviewer.platform_id})` : ''}` : '',
+    payment.reviewed_by ? `Reviewer ID: ${payment.reviewed_by}` : '',
+    reviewer?.email && reviewer.email !== reviewer?.name ? `Reviewer email: ${reviewer.email}` : '',
     payment.rejection_reason ? `Rejection: ${payment.rejection_reason}` : '',
     proof?.telegram_channel_id ? `Archive channel: ${proof.telegram_channel_id}` : '',
     proof?.telegram_message_id ? `Archive message: ${proof.telegram_message_id}` : '',
@@ -693,8 +696,8 @@ function formatPaymentRecord(payment: any, owner: any, proof: any, includeMetada
   return lines.filter(Boolean).join('\n').slice(0, 3900)
 }
 
-async function sendPaymentRecord(chatId: string, payment: any, owner: any, proof: any, ctx: Ctx): Promise<void> {
-  const caption = formatPaymentRecord(payment, owner, proof)
+async function sendPaymentRecord(chatId: string, payment: any, owner: any, proof: any, reviewer: any, ctx: Ctx): Promise<void> {
+  const caption = formatPaymentRecord(payment, owner, proof, reviewer)
   const replyMarkup = payment.status === 'pending'
     ? buildInlineKeyboard([[{ text: 'Approve', callback_data: `approve:${payment.id}` }, { text: 'Reject', callback_data: `reject:${payment.id}` }]])
     : undefined
@@ -731,19 +734,22 @@ async function sendPaymentRecord(chatId: string, payment: any, owner: any, proof
   }
 }
 
-async function loadPaymentContext(paymentIds: string[], ctx: Ctx): Promise<{ owners: Map<string, any>; proofs: Map<string, any> }> {
+async function loadPaymentContext(paymentIds: string[], ctx: Ctx): Promise<{ owners: Map<string, any>; proofs: Map<string, any>; reviewers: Map<string, any> }> {
   const paymentsWithOwners = paymentIds.length
-    ? await ctx.db.from('payments').select('id, businesses(owner_id)').in('id', paymentIds)
+    ? await ctx.db.from('payments').select('id, reviewed_by, businesses(owner_id)').in('id', paymentIds)
     : { data: [] }
   const ownerIds = [...new Set((paymentsWithOwners.data ?? []).map((row: any) => row.businesses?.owner_id).filter(Boolean))]
+  const reviewerIds = [...new Set((paymentsWithOwners.data ?? []).map((row: any) => row.reviewed_by).filter(Boolean))]
+  const profileIds = [...new Set([...ownerIds, ...reviewerIds])]
   const proofRows = paymentIds.length
     ? await ctx.db.from('telegram_payment_proofs').select('id, payment_id, telegram_channel_id, telegram_message_id, telegram_file_id, content_type, file_size, consumed_at, created_at, metadata').in('payment_id', paymentIds)
     : { data: [] }
-  const { data: ownerRows } = ownerIds.length
-    ? await ctx.db.from('profiles').select('id, name, email, phone, platform_id').in('id', ownerIds)
+  const { data: profileRows } = profileIds.length
+    ? await ctx.db.from('profiles').select('id, name, email, phone, platform_id, role, admin_role').in('id', profileIds)
     : { data: [] }
   return {
-    owners: new Map((ownerRows ?? []).map((row: any) => [row.id, row])),
+    owners: new Map((profileRows ?? []).filter((row: any) => ownerIds.includes(row.id)).map((row: any) => [row.id, row])),
+    reviewers: new Map((profileRows ?? []).filter((row: any) => reviewerIds.includes(row.id)).map((row: any) => [row.id, row])),
     proofs: new Map((proofRows ?? []).map((row: any) => [row.payment_id, row])),
   }
 }
@@ -770,7 +776,7 @@ async function handlePaymentHistory(chatId: string, args: string[], ctx: Ctx): P
   }
   let query = ctx.db
     .from('payments')
-    .select('id, business_id, plan_id, billing_cycle, amount_etb, payment_method_id, telegram_proof_id, owner_note, status, reviewed_at, rejection_reason, created_at, plans(name), payment_methods(name), businesses(id, name, slug, owner_id)')
+    .select('id, business_id, plan_id, billing_cycle, amount_etb, payment_method_id, telegram_proof_id, owner_note, status, reviewed_by, reviewed_at, rejection_reason, created_at, plans(name), payment_methods(name), businesses(id, name, slug, owner_id)')
     .order('created_at', { ascending: false })
     .limit(filters.limit)
   if (businessIds) query = query.in('business_id', businessIds)
@@ -790,7 +796,7 @@ async function handlePaymentHistory(chatId: string, args: string[], ctx: Ctx): P
   for (const payment of payments) {
     const ownerId = payment.businesses?.owner_id
     try {
-      await sendPaymentRecord(chatId, payment, context.owners.get(ownerId), context.proofs.get(payment.id), ctx)
+      await sendPaymentRecord(chatId, payment, context.owners.get(ownerId), context.proofs.get(payment.id), context.reviewers.get(payment.reviewed_by), ctx)
     } catch (error) {
       // Keep one malformed record from stopping the rest of the result set.
       logEvent('warn', {
@@ -816,13 +822,13 @@ async function handlePaymentDetails(chatId: string, paymentId: string | undefine
     await ctx.tg.sendMessage(chatId, 'Usage: /payment <payment-id>')
     return
   }
-  const { data: payment, error } = await ctx.db.from('payments').select('id, business_id, plan_id, billing_cycle, amount_etb, payment_method_id, telegram_proof_id, owner_note, status, reviewed_at, rejection_reason, created_at, plans(name), payment_methods(name), businesses(id, name, slug, owner_id)').eq('id', paymentId).maybeSingle()
+  const { data: payment, error } = await ctx.db.from('payments').select('id, business_id, plan_id, billing_cycle, amount_etb, payment_method_id, telegram_proof_id, owner_note, status, reviewed_by, reviewed_at, rejection_reason, created_at, plans(name), payment_methods(name), businesses(id, name, slug, owner_id)').eq('id', paymentId).maybeSingle()
   if (error || !payment) {
     await ctx.tg.sendMessage(chatId, 'Payment not found.')
     return
   }
   const context = await loadPaymentContext([payment.id], ctx)
-  await sendPaymentRecord(chatId, payment, context.owners.get(payment.businesses?.owner_id), context.proofs.get(payment.id), ctx)
+  await sendPaymentRecord(chatId, payment, context.owners.get(payment.businesses?.owner_id), context.proofs.get(payment.id), context.reviewers.get(payment.reviewed_by), ctx)
 }
 
 async function handleConnectCommand(chatId: string, username: string | undefined, token: string | undefined, ctx: Ctx): Promise<void> {

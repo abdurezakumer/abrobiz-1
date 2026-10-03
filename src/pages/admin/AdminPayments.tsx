@@ -78,7 +78,7 @@ export default function AdminPayments() {
 
   function exportCsv() {
     const rows = [...pending, ...history]
-    const csv = [['Payment ID', 'Business', 'Plan', 'Amount ETB', 'Status', 'Created'], ...rows.map(payment => [payment.id, payment.business?.name ?? 'Business', payment.plan?.name ?? '', String(payment.amountEtb), payment.status, payment.createdAt])]
+    const csv = [['Payment ID', 'Business', 'Plan', 'Amount ETB', 'Status', 'Created', 'Reviewed by', 'Reviewer ID'], ...rows.map(payment => [payment.id, payment.business?.name ?? 'Business', payment.plan?.name ?? '', String(payment.amountEtb), payment.status, payment.createdAt, reviewerName(payment), payment.reviewedBy ?? ''])]
       .map(row => row.map(value => `"${String(value).replaceAll('"', '""')}"`).join(','))
       .join('\n')
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
@@ -157,6 +157,7 @@ export default function AdminPayments() {
               <div>
                 <div style={{ fontSize: 13.5, fontWeight: 500 }}>{p.business?.name} — {p.plan?.name}, {p.amountEtb} ETB</div>
                 <div style={{ fontSize: 12, color: 'rgba(10,12,16,0.4)' }}>{new Date(p.createdAt).toLocaleDateString()}</div>
+                <div style={{ fontSize: 12, color: 'rgba(10,12,16,0.5)', marginTop: 3 }}>Reviewed by: {reviewerName(p)}</div>
               </div>
               <span style={{ fontSize: 12, fontWeight: 600, color: p.status === 'approved' ? '#16A34A' : '#DC2626', textTransform: 'capitalize' }}>{p.status}</span>
             </div>
@@ -179,4 +180,12 @@ function proofPreviewUrl(value: string | undefined): string | null {
   // Telegram proof images are returned as browser-local object URLs. Legacy
   // Storage receipts continue to use the normal HTTPS image allow-list.
   return value.startsWith('blob:') ? value : safeImageUrl(value)
+}
+
+function reviewerName(payment: Payment): string {
+  const reviewer = payment.reviewer
+  if (reviewer?.name && reviewer.platformId) return `${reviewer.name} (${reviewer.platformId})`
+  if (reviewer?.name) return reviewer.name
+  if (reviewer?.email) return reviewer.email
+  return payment.reviewedBy ?? 'Recorded administrator'
 }

@@ -22,6 +22,8 @@ export function buildTelegramProofCaption(metadata: TelegramProofMetadata, payme
   const payment = record(metadata.payment)
   const telegram = record(metadata.telegram)
   const archive = record(metadata.archive)
+  const review = record(metadata.review)
+  const reviewer = record(review.reviewed_by)
   const resolvedPaymentId = paymentId || text(payment.id)
   const planName = text(plan.name) || text(payment.plan_name)
   const methodName = text(payment.method_name)
@@ -42,6 +44,11 @@ export function buildTelegramProofCaption(metadata: TelegramProofMetadata, payme
     text(metadata.source) ? `Source: ${text(metadata.source)}` : '',
     text(telegram.chat_id) ? `Telegram chat: ${text(telegram.chat_id)}` : '',
     text(telegram.message_id) ? `User message: ${text(telegram.message_id)}` : '',
+    text(review.status) ? `Review: ${text(review.status)}` : '',
+    text(reviewer.name) ? `Reviewed by: ${text(reviewer.name)}${text(reviewer.platform_id) ? ` (${text(reviewer.platform_id)})` : ''}` : '',
+    text(reviewer.email) ? `Reviewer email: ${text(reviewer.email)}` : '',
+    text(review.reviewed_at) ? `Reviewed at: ${text(review.reviewed_at)}` : '',
+    text(review.rejection_reason) ? `Rejection: ${text(review.rejection_reason)}` : '',
     text(archive.channel_id) ? `Archive channel: ${text(archive.channel_id)}` : '',
     text(archive.message_id) ? `Archive message: ${text(archive.message_id)}` : '',
     text(archive.metadata_message_id) ? `Metadata message: ${text(archive.metadata_message_id)}` : '',

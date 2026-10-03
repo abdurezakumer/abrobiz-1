@@ -283,6 +283,15 @@ export interface ContactMessage {
 
 export type PaymentStatus = 'pending' | 'approved' | 'rejected'
 
+export interface PaymentReviewer {
+  id: string
+  name?: string
+  email?: string
+  platformId?: string
+  role?: string
+  adminRole?: string
+}
+
 export interface Payment {
   id: string
   businessId: string
@@ -296,6 +305,7 @@ export interface Payment {
   ownerNote: string
   status: PaymentStatus
   reviewedBy?: string
+  reviewer?: PaymentReviewer
   reviewedAt?: string
   rejectionReason?: string
   createdAt: string

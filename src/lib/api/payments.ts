@@ -44,6 +44,16 @@ function mapPayment(row: any): Payment {
     ownerNote: row.owner_note ?? '',
     status: row.status,
     reviewedBy: row.reviewed_by ?? undefined,
+    reviewer: row.reviewer
+      ? {
+          id: row.reviewer.id,
+          name: row.reviewer.name ?? undefined,
+          email: row.reviewer.email ?? undefined,
+          platformId: row.reviewer.platform_id ?? undefined,
+          role: row.reviewer.role ?? undefined,
+          adminRole: row.reviewer.admin_role ?? undefined,
+        }
+      : undefined,
     reviewedAt: row.reviewed_at ?? undefined,
     rejectionReason: row.rejection_reason ?? undefined,
     createdAt: row.created_at,
@@ -143,7 +153,7 @@ export async function listPaymentsForBusiness(businessId: string): Promise<Payme
 export async function adminListPendingPayments(): Promise<Payment[]> {
   const { data, error } = await supabase
     .from('payments')
-    .select('id, business_id, plan_id, billing_cycle, amount_etb, payment_method_id, proof_url, telegram_proof_id, owner_note, status, reviewed_by, reviewed_at, rejection_reason, created_at, plans(id, slug, name, price_etb, billing_interval, monthly_price_etb, annual_price_etb, discount_type, discount_value, discount_label, discount_starts_at, discount_ends_at, features, feature_flags, is_trial, trial_days, is_active, sort_order), businesses(name, slug)')
+    .select('id, business_id, plan_id, billing_cycle, amount_etb, payment_method_id, proof_url, telegram_proof_id, owner_note, status, reviewed_by, reviewed_at, rejection_reason, created_at, reviewer:profiles!payments_reviewed_by_fkey(id, name, email, platform_id, role, admin_role), plans(id, slug, name, price_etb, billing_interval, monthly_price_etb, annual_price_etb, discount_type, discount_value, discount_label, discount_starts_at, discount_ends_at, features, feature_flags, is_trial, trial_days, is_active, sort_order), businesses(name, slug)')
     .eq('status', 'pending')
     .order('created_at', { ascending: true })
     .limit(200)
@@ -154,7 +164,7 @@ export async function adminListPendingPayments(): Promise<Payment[]> {
 export async function adminListAllPayments(): Promise<Payment[]> {
   const { data, error } = await supabase
     .from('payments')
-    .select('id, business_id, plan_id, billing_cycle, amount_etb, payment_method_id, proof_url, telegram_proof_id, owner_note, status, reviewed_by, reviewed_at, rejection_reason, created_at, plans(id, slug, name, price_etb, billing_interval, monthly_price_etb, annual_price_etb, discount_type, discount_value, discount_label, discount_starts_at, discount_ends_at, features, feature_flags, is_trial, trial_days, is_active, sort_order), businesses(name, slug)')
+    .select('id, business_id, plan_id, billing_cycle, amount_etb, payment_method_id, proof_url, telegram_proof_id, owner_note, status, reviewed_by, reviewed_at, rejection_reason, created_at, reviewer:profiles!payments_reviewed_by_fkey(id, name, email, platform_id, role, admin_role), plans(id, slug, name, price_etb, billing_interval, monthly_price_etb, annual_price_etb, discount_type, discount_value, discount_label, discount_starts_at, discount_ends_at, features, feature_flags, is_trial, trial_days, is_active, sort_order), businesses(name, slug)')
     .order('created_at', { ascending: false })
     .limit(200)
   if (error) throw error

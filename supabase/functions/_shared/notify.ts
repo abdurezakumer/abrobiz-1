@@ -6,11 +6,16 @@ import { logEvent } from './observability.ts'
 export async function notifyAdminsOfPayment(db: SupabaseClient, tg: TelegramClient | null, paymentId: string): Promise<void> {
   const { data: payment } = await db
     .from('payments')
-    .select('id, amount_etb, owner_note, proof_url, telegram_proof_id, plans(name), businesses(name, slug)')
+    .select('id, amount_etb, owner_note, proof_url, telegram_proof_id, plans(name), businesses(id, name, slug, owner_id)')
     .eq('id', paymentId)
     .single()
 
   if (!payment) return
+
+  const ownerId = (payment as any).businesses?.owner_id
+  const { data: owner } = ownerId
+    ? await db.from('profiles').select('id, name, email, phone, platform_id').eq('id', ownerId).maybeSingle()
+    : { data: null }
 
   const { data: linkedAdmins } = await db
     .from('admin_telegram_links')
@@ -49,21 +54,27 @@ export async function notifyAdminsOfPayment(db: SupabaseClient, tg: TelegramClie
   }
 
   const businessName = (payment as any).businesses?.name ?? 'A business'
+  const businessSlug = (payment as any).businesses?.slug ?? ''
   const planName = (payment as any).plans?.name ?? 'Plan'
   const lines = [
     '\uD83D\uDCB3 New payment awaiting review',
     '',
+    `Payment ID: ${payment.id}`,
     businessName,
+    businessSlug ? `Subdomain: ${businessSlug}.abrobiz.com` : '',
+    `Subscriber: ${owner?.name ?? 'Owner'}${owner?.platform_id ? ` (${owner.platform_id})` : ''}`,
+    owner?.email ? `Email: ${owner.email}` : '',
+    owner?.phone ? `Phone: ${owner.phone}` : '',
     `Plan: ${planName}`,
     `Amount: ${payment.amount_etb} ETB`,
   ]
   if (payment.owner_note) lines.push(`Note: ${payment.owner_note}`)
-  const caption = lines.join('\n')
+  const caption = lines.filter(Boolean).join('\n')
 
   if (adminProfiles && adminProfiles.length > 0) {
     try {
       const sender = createSenderFromEnv(Deno.env)
-      const html = `<h2>New payment awaiting review</h2><p><strong>${escapeHtml(businessName)}</strong></p><p>Plan: ${escapeHtml(planName)}<br>Amount: ${escapeHtml(String(payment.amount_etb))} ETB</p><p>Open AbroBiz Admin &rarr; Payments to review the proof.</p>`
+      const html = `<h2>New payment awaiting review</h2><p><strong>${escapeHtml(businessName)}</strong>${businessSlug ? `<br>Subdomain: ${escapeHtml(businessSlug)}.abrobiz.com` : ''}</p><p>Subscriber: ${escapeHtml(owner?.name ?? 'Owner')}${owner?.platform_id ? ` (${escapeHtml(owner.platform_id)})` : ''}<br>Email: ${escapeHtml(owner?.email ?? 'Not provided')}<br>Phone: ${escapeHtml(owner?.phone ?? 'Not provided')}</p><p>Payment ID: ${escapeHtml(payment.id)}<br>Plan: ${escapeHtml(planName)}<br>Amount: ${escapeHtml(String(payment.amount_etb))} ETB</p><p>Open AbroBiz Admin &rarr; Payments to review the proof.</p>`
       for (const admin of adminProfiles.filter((profile: any) => paymentReviewerIds.has(profile.id))) {
         if (!admin.email) continue
         await sendEmail(sender.sendMail, {
@@ -72,7 +83,7 @@ export async function notifyAdminsOfPayment(db: SupabaseClient, tg: TelegramClie
           content: {
             subject: `Payment awaiting review · ${businessName}`,
             html,
-            text: `New payment awaiting review\n\n${businessName}\nPlan: ${planName}\nAmount: ${payment.amount_etb} ETB\n\nOpen AbroBiz Admin > Payments to review it.`,
+            text: `${caption}\n\nOpen AbroBiz Admin > Payments to review it.`,
           },
         })
       }
