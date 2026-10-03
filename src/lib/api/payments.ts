@@ -1,7 +1,7 @@
 import { supabase } from '../supabaseClient'
 import { edgeFunctionError } from '../errors'
 import type { Payment } from '../../types'
-import { createClientUuid, prepareImageForUpload, readFileAsArrayBuffer } from '../fileUpload'
+import { createClientUuid, prepareImageForUpload } from '../fileUpload'
 import { uploadBinaryToFunction } from '../uploadClient'
 
 function mapPayment(row: any): Payment {
@@ -53,7 +53,7 @@ function mapPayment(row: any): Payment {
 
 async function uploadPaymentBytes(
   businessId: string,
-  bytes: ArrayBuffer,
+  bytes: ArrayBuffer | Blob,
   contentType: string,
   onProgress?: (progress: number) => void,
   signal?: AbortSignal,
@@ -86,8 +86,10 @@ export async function uploadPaymentProof(businessId: string, file: File, onProgr
   if (uploadFile.size > 5 * 1024 * 1024 || !['image/jpeg', 'image/png', 'image/webp'].includes(uploadFile.type)) {
     throw new Error('Use a JPEG, PNG, or WebP photo up to 5 MB.')
   }
-  const uploadBytes = await readFileAsArrayBuffer(uploadFile)
-  return uploadPaymentBytes(businessId, uploadBytes, uploadFile.type, onProgress, signal) // returns an opaque Telegram proof record ID
+  // Keep the prepared File as a Blob. Reading it into an ArrayBuffer here
+  // duplicates the receipt in memory and is a common cause of mobile tab
+  // reloads after a gallery selection.
+  return uploadPaymentBytes(businessId, uploadFile, uploadFile.type, onProgress, signal) // returns an opaque Telegram proof record ID
 }
 
 export async function getPaymentProofUrl(path?: string, paymentId?: string): Promise<string> {

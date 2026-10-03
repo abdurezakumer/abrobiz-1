@@ -1,7 +1,7 @@
 import { supabase } from '../supabaseClient'
 import type { Business, WeeklyHours } from '../../types'
 import { isValidBusinessSlug } from '../slugify'
-import { createClientUuid, prepareImageForUpload, readFileAsArrayBuffer } from '../fileUpload'
+import { createClientUuid, prepareImageForUpload } from '../fileUpload'
 import { uploadBinaryToFunction } from '../uploadClient'
 
 const DEFAULT_HOURS: WeeklyHours = {
@@ -164,7 +164,9 @@ export async function uploadBusinessImage(
   const uploadFile = await prepareImageForUpload(file, 5 * 1024 * 1024)
   const data = await uploadBinaryToFunction({
     functionName: 'storage-upload',
-    bytes: await readFileAsArrayBuffer(uploadFile),
+    // Keep the File as a Blob so mobile browsers do not allocate a second
+    // full-size ArrayBuffer while the photo is being uploaded.
+    bytes: uploadFile,
     contentType: uploadFile.type,
     headers: {
       'X-Upload-Bucket': bucket,

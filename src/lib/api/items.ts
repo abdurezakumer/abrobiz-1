@@ -1,6 +1,6 @@
 import { supabase } from '../supabaseClient'
 import type { Item, ItemTranslations } from '../../types'
-import { createClientUuid, prepareImageForUpload, readFileAsArrayBuffer } from '../fileUpload'
+import { createClientUuid, prepareImageForUpload } from '../fileUpload'
 import { uploadBinaryToFunction } from '../uploadClient'
 
 function mapItem(row: any): Item {
@@ -81,7 +81,9 @@ export async function uploadItemImage(businessId: string, file: File, onProgress
   const uploadFile = await prepareImageForUpload(file, 5 * 1024 * 1024)
   const data = await uploadBinaryToFunction({
     functionName: 'storage-upload',
-    bytes: await readFileAsArrayBuffer(uploadFile),
+    // Send the prepared File directly to avoid a second full-size memory
+    // allocation on mobile Safari and Android WebViews.
+    bytes: uploadFile,
     contentType: uploadFile.type,
     headers: {
       'X-Upload-Bucket': 'item-images',

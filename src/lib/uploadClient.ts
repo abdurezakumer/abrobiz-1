@@ -5,7 +5,13 @@ type UploadFailure = Error & { status?: number; requestId?: string }
 
 interface BinaryUploadOptions {
   functionName: string
-  bytes: ArrayBuffer
+  /**
+   * Keep the original File/Blob when possible. Converting a phone photo to an
+   * ArrayBuffer first duplicates the entire payload in memory and can make
+   * mobile Safari/Android WebViews terminate the page before the request is
+   * sent. ArrayBuffer remains supported for callers that already have bytes.
+   */
+  bytes: ArrayBuffer | Blob
   contentType: string
   headers?: Record<string, string>
   onProgress?: (progress: number) => void
@@ -28,22 +34,28 @@ export async function uploadBinaryToFunction(options: BinaryUploadOptions): Prom
   let accessToken = sessionData.session.access_token
   let lastError: unknown
   const preferFetch = shouldPreferFetchUpload()
+  const canUseFetch = typeof fetch === 'function'
+  const canUseXhr = typeof XMLHttpRequest !== 'undefined'
+  const primaryTransport = preferFetch || !canUseXhr || !projectUrl || !anonKey ? 'fetch' : 'xhr'
+  const fallbackTransport = primaryTransport === 'fetch' ? 'xhr' : 'fetch'
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
       if (options.signal?.aborted) throw new Error('Upload canceled.')
-      if (preferFetch || typeof XMLHttpRequest === 'undefined' || !projectUrl || !anonKey) {
+      if (primaryTransport === 'fetch') {
         // Mobile Safari and Chrome can expose XHR but still fail binary XHR
         // uploads after the picker returns. Fetch uses the browser's native
         // request path and is more reliable for those devices. It cannot
         // expose upload byte progress, so show a steady in-progress state and
         // complete it when the server responds.
         options.onProgress?.(8)
+        if (!canUseFetch) throw new Error('This browser cannot start the upload. Please update your browser and try again.')
         const response = await sendWithFetch({ ...options, projectUrl, anonKey, accessToken })
         options.onProgress?.(100)
         return response
       }
 
+      if (!canUseXhr) throw new Error('This browser cannot start the upload. Please update your browser and try again.')
       const response = await sendWithXhr({ ...options, projectUrl, anonKey, accessToken })
       options.onProgress?.(100)
       return response
@@ -61,16 +73,30 @@ export async function uploadBinaryToFunction(options: BinaryUploadOptions): Prom
         if (!refreshed.error && refreshed.data.session) accessToken = refreshed.data.session.access_token
       }
       if (attempt === 2) {
-        // The same stable upload ID makes this fetch fallback safe after
-        // retries, even if the server committed the object before the client
-        // lost the response.
-        options.onProgress?.(8)
-        const response = await sendWithFetch({ ...options, projectUrl, anonKey, accessToken })
-        options.onProgress?.(100)
-        return response
+        // A mobile browser can fail one binary transport while the other
+        // still works (especially after returning from the photo picker).
+        // Try the alternate transport once before surfacing the error. The
+        // caller's stable upload ID makes this safe if the server committed
+        // the file but the first response was lost.
+        try {
+          if (fallbackTransport === 'fetch' && canUseFetch) {
+            options.onProgress?.(8)
+            const response = await sendWithFetch({ ...options, projectUrl, anonKey, accessToken })
+            options.onProgress?.(100)
+            return response
+          }
+          if (fallbackTransport === 'xhr' && canUseXhr) {
+            const response = await sendWithXhr({ ...options, projectUrl, anonKey, accessToken })
+            options.onProgress?.(100)
+            return response
+          }
+        } catch (fallbackError) {
+          if (options.signal?.aborted || /upload canceled/i.test(fallbackError instanceof Error ? fallbackError.message : '')) throw fallbackError
+          lastError = fallbackError
+        }
       }
       options.onProgress?.(0)
-      await new Promise(resolve => setTimeout(resolve, 700 * (attempt + 1)))
+      if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 700 * (attempt + 1)))
     }
   }
 
@@ -85,32 +111,55 @@ function shouldPreferFetchUpload(): boolean {
 }
 
 async function sendWithFetch(options: BinaryUploadOptions & { projectUrl: string; anonKey: string; accessToken: string }): Promise<UploadResponse> {
-  const response = await fetch(`${options.projectUrl}/functions/v1/${options.functionName}`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${options.accessToken}`,
-      apikey: options.anonKey,
-      'Content-Type': options.contentType,
-      ...options.headers,
-    },
-    body: options.bytes,
-    signal: options.signal,
-  })
-  const body = await parseFetchResponse(response)
-  const requestId = response.headers.get('X-Request-ID')?.trim() || undefined
-  if (!response.ok) {
-    const error = new Error(body?.error || body?.message || `Upload failed with status ${response.status}.`)
-    const failure = error as UploadFailure
-    failure.status = response.status
-    failure.requestId = requestId
-    throw error
+  const timeoutMs = 120000
+  const timeoutController = typeof AbortController !== 'undefined' ? new AbortController() : null
+  let timedOut = false
+  let timeoutId: ReturnType<typeof setTimeout> | undefined
+  const abortForCaller = () => timeoutController?.abort()
+  if (options.signal?.aborted) throw new Error('Upload canceled.')
+  if (timeoutController) {
+    timeoutId = setTimeout(() => {
+      timedOut = true
+      timeoutController.abort()
+    }, timeoutMs)
+    options.signal?.addEventListener('abort', abortForCaller, { once: true })
   }
-  if (!body || typeof body !== 'object') {
-    const error = new Error('Upload did not return a file reference.') as UploadFailure
-    error.requestId = requestId
+
+  try {
+    const response = await fetch(`${options.projectUrl}/functions/v1/${options.functionName}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${options.accessToken}`,
+        apikey: options.anonKey,
+        'Content-Type': options.contentType,
+        ...options.headers,
+      },
+      body: options.bytes,
+      signal: timeoutController?.signal ?? options.signal,
+    })
+    const body = await parseFetchResponse(response)
+    const requestId = response.headers.get('X-Request-ID')?.trim() || undefined
+    if (!response.ok) {
+      const error = new Error(body?.error || body?.message || `Upload failed with status ${response.status}.`)
+      const failure = error as UploadFailure
+      failure.status = response.status
+      failure.requestId = requestId
+      throw error
+    }
+    if (!body || typeof body !== 'object') {
+      const error = new Error('Upload did not return a file reference.') as UploadFailure
+      error.requestId = requestId
+      throw error
+    }
+    return body
+  } catch (error) {
+    if (options.signal?.aborted) throw new Error('Upload canceled.', { cause: error })
+    if (timedOut) throw new Error('Upload timed out while waiting for the server.', { cause: error })
     throw error
+  } finally {
+    if (timeoutId !== undefined) clearTimeout(timeoutId)
+    options.signal?.removeEventListener('abort', abortForCaller)
   }
-  return body
 }
 
 async function parseFetchResponse(response: Response): Promise<{ error?: string; message?: string; [key: string]: unknown } | null> {
