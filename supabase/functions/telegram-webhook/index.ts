@@ -734,23 +734,98 @@ async function sendPaymentRecord(chatId: string, payment: any, owner: any, proof
   }
 }
 
-async function loadPaymentContext(paymentIds: string[], ctx: Ctx): Promise<{ owners: Map<string, any>; proofs: Map<string, any>; reviewers: Map<string, any> }> {
-  const paymentsWithOwners = paymentIds.length
-    ? await ctx.db.from('payments').select('id, reviewed_by, businesses(owner_id)').in('id', paymentIds)
-    : { data: [] }
-  const ownerIds = [...new Set((paymentsWithOwners.data ?? []).map((row: any) => row.businesses?.owner_id).filter(Boolean))]
-  const reviewerIds = [...new Set((paymentsWithOwners.data ?? []).map((row: any) => row.reviewed_by).filter(Boolean))]
+type PaymentHistoryContext = {
+  owners: Map<string, any>
+  reviewers: Map<string, any>
+  proofs: Map<string, any>
+  businesses: Map<string, any>
+  plans: Map<string, any>
+  methods: Map<string, any>
+}
+
+function emptyPaymentHistoryContext(): PaymentHistoryContext {
+  return {
+    owners: new Map(),
+    reviewers: new Map(),
+    proofs: new Map(),
+    businesses: new Map(),
+    plans: new Map(),
+    methods: new Map(),
+  }
+}
+
+/**
+ * Load payment-history context with explicit table queries rather than
+ * relying on PostgREST's inferred nested relationships. This keeps the
+ * super-admin Telegram history working across projects whose relationship
+ * cache has not refreshed yet, and makes each sensitive lookup bounded.
+ */
+async function loadPaymentContext(paymentIds: string[], ctx: Ctx): Promise<PaymentHistoryContext> {
+  const context = emptyPaymentHistoryContext()
+  if (paymentIds.length === 0) return context
+
+  const { data: paymentRefs, error: paymentRefsError } = await ctx.db
+    .from('payments')
+    .select('id, business_id, plan_id, payment_method_id, reviewed_by')
+    .in('id', paymentIds)
+  if (paymentRefsError) {
+    logEvent('error', {
+      service: 'abrobiz-edge',
+      function_name: 'telegram-webhook',
+      operation: 'load_payment_context',
+      error_category: 'DATABASE_ERROR',
+      error_code: 'PAYMENT_REFERENCE_LOOKUP_FAILED',
+      provider: 'supabase',
+      outcome: 'context_unavailable',
+    })
+    return context
+  }
+
+  const businessIds = [...new Set((paymentRefs ?? []).map((row: any) => row.business_id).filter(Boolean))]
+  const planIds = [...new Set((paymentRefs ?? []).map((row: any) => row.plan_id).filter(Boolean))]
+  const methodIds = [...new Set((paymentRefs ?? []).map((row: any) => row.payment_method_id).filter(Boolean))]
+
+  const [{ data: businesses }, { data: plans }, { data: methods }] = await Promise.all([
+    businessIds.length ? ctx.db.from('businesses').select('id, name, slug, owner_id').in('id', businessIds) : Promise.resolve({ data: [] }),
+    planIds.length ? ctx.db.from('plans').select('id, name').in('id', planIds) : Promise.resolve({ data: [] }),
+    methodIds.length ? ctx.db.from('payment_methods').select('id, name').in('id', methodIds) : Promise.resolve({ data: [] }),
+  ])
+  context.businesses = new Map((businesses ?? []).map((row: any) => [row.id, row]))
+  context.plans = new Map((plans ?? []).map((row: any) => [row.id, row]))
+  context.methods = new Map((methods ?? []).map((row: any) => [row.id, row]))
+
+  const ownerIds = [...new Set((businesses ?? []).map((row: any) => row.owner_id).filter(Boolean))]
+  const reviewerIds = [...new Set((paymentRefs ?? []).map((row: any) => row.reviewed_by).filter(Boolean))]
   const profileIds = [...new Set([...ownerIds, ...reviewerIds])]
-  const proofRows = paymentIds.length
-    ? await ctx.db.from('telegram_payment_proofs').select('id, payment_id, telegram_channel_id, telegram_message_id, telegram_file_id, content_type, file_size, consumed_at, created_at, metadata').in('payment_id', paymentIds)
-    : { data: [] }
   const { data: profileRows } = profileIds.length
     ? await ctx.db.from('profiles').select('id, name, email, phone, platform_id, role, admin_role').in('id', profileIds)
     : { data: [] }
+  context.owners = new Map((profileRows ?? []).filter((row: any) => ownerIds.includes(row.id)).map((row: any) => [row.id, row]))
+  context.reviewers = new Map((profileRows ?? []).filter((row: any) => reviewerIds.includes(row.id)).map((row: any) => [row.id, row]))
+
+  let proofResult = await ctx.db
+    .from('telegram_payment_proofs')
+    .select('id, payment_id, telegram_channel_id, telegram_message_id, telegram_file_id, content_type, file_size, consumed_at, created_at, metadata')
+    .in('payment_id', paymentIds)
+  // Metadata was introduced after the initial Telegram proof migration. A
+  // partially migrated production project must still be able to show payment
+  // history; the proof identifiers remain available through this fallback.
+  if (proofResult.error && /metadata|column|schema cache/i.test(proofResult.error.message ?? '')) {
+    proofResult = await ctx.db
+      .from('telegram_payment_proofs')
+      .select('id, payment_id, telegram_channel_id, telegram_message_id, telegram_file_id, content_type, file_size, consumed_at, created_at')
+      .in('payment_id', paymentIds)
+  }
+  context.proofs = new Map((proofResult.data ?? []).map((row: any) => [row.payment_id, row]))
+  return context
+}
+
+function hydratePaymentHistoryRow(payment: any, context: PaymentHistoryContext): any {
   return {
-    owners: new Map((profileRows ?? []).filter((row: any) => ownerIds.includes(row.id)).map((row: any) => [row.id, row])),
-    reviewers: new Map((profileRows ?? []).filter((row: any) => reviewerIds.includes(row.id)).map((row: any) => [row.id, row])),
-    proofs: new Map((proofRows ?? []).map((row: any) => [row.payment_id, row])),
+    ...payment,
+    businesses: context.businesses.get(payment.business_id),
+    plans: context.plans.get(payment.plan_id),
+    payment_methods: context.methods.get(payment.payment_method_id),
   }
 }
 
@@ -776,7 +851,10 @@ async function handlePaymentHistory(chatId: string, args: string[], ctx: Ctx): P
   }
   let query = ctx.db
     .from('payments')
-    .select('id, business_id, plan_id, billing_cycle, amount_etb, payment_method_id, telegram_proof_id, owner_note, status, reviewed_by, reviewed_at, rejection_reason, created_at, plans(name), payment_methods(name), businesses(id, name, slug, owner_id)')
+    // Keep the main history query to a single table. Related display data is
+    // loaded explicitly below so a stale PostgREST relationship cache cannot
+    // break the entire Super Admin history action.
+    .select('id, business_id, plan_id, billing_cycle, amount_etb, payment_method_id, telegram_proof_id, owner_note, status, reviewed_by, reviewed_at, rejection_reason, created_at')
     .order('created_at', { ascending: false })
     .limit(filters.limit)
   if (businessIds) query = query.in('business_id', businessIds)
@@ -792,8 +870,9 @@ async function handlePaymentHistory(chatId: string, args: string[], ctx: Ctx): P
   }
   const paymentIds = payments.map((payment: any) => payment.id)
   const context = await loadPaymentContext(paymentIds, ctx)
+  const historyPayments = payments.map((payment: any) => hydratePaymentHistoryRow(payment, context))
   await ctx.tg.sendMessage(chatId, `Found ${payments.length} payment${payments.length === 1 ? '' : 's'}${filters.status ? ` with status ${filters.status}` : ''}.`)
-  for (const payment of payments) {
+  for (const payment of historyPayments) {
     const ownerId = payment.businesses?.owner_id
     try {
       await sendPaymentRecord(chatId, payment, context.owners.get(ownerId), context.proofs.get(payment.id), context.reviewers.get(payment.reviewed_by), ctx)
@@ -822,13 +901,14 @@ async function handlePaymentDetails(chatId: string, paymentId: string | undefine
     await ctx.tg.sendMessage(chatId, 'Usage: /payment <payment-id>')
     return
   }
-  const { data: payment, error } = await ctx.db.from('payments').select('id, business_id, plan_id, billing_cycle, amount_etb, payment_method_id, telegram_proof_id, owner_note, status, reviewed_by, reviewed_at, rejection_reason, created_at, plans(name), payment_methods(name), businesses(id, name, slug, owner_id)').eq('id', paymentId).maybeSingle()
+  const { data: payment, error } = await ctx.db.from('payments').select('id, business_id, plan_id, billing_cycle, amount_etb, payment_method_id, telegram_proof_id, owner_note, status, reviewed_by, reviewed_at, rejection_reason, created_at').eq('id', paymentId).maybeSingle()
   if (error || !payment) {
     await ctx.tg.sendMessage(chatId, 'Payment not found.')
     return
   }
   const context = await loadPaymentContext([payment.id], ctx)
-  await sendPaymentRecord(chatId, payment, context.owners.get(payment.businesses?.owner_id), context.proofs.get(payment.id), context.reviewers.get(payment.reviewed_by), ctx)
+  const historyPayment = hydratePaymentHistoryRow(payment, context)
+  await sendPaymentRecord(chatId, historyPayment, context.owners.get(historyPayment.businesses?.owner_id), context.proofs.get(payment.id), context.reviewers.get(payment.reviewed_by), ctx)
 }
 
 async function handleConnectCommand(chatId: string, username: string | undefined, token: string | undefined, ctx: Ctx): Promise<void> {
