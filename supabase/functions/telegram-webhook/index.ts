@@ -459,7 +459,6 @@ async function handleSuperAdminPayments(chatId: string, ctx: Ctx): Promise<void>
   if (!adminId) return
   await saveSuperAdminSession(chatId, adminId, 'menu', ctx)
   await handlePaymentHistory(chatId, [], ctx)
-  await ctx.tg.sendMessage(chatId, 'Super Admin Console', { replyMarkup: superAdminKeyboard })
 }
 
 async function restoreSuperAdminKeyboard(chatId: string, ctx: Ctx): Promise<void> {
@@ -1482,17 +1481,14 @@ async function handleCallback(cb: TelegramCallbackQuery, ctx: Ctx): Promise<void
       await restoreSuperAdminKeyboard(chatId, ctx)
     } else if (data === 'admin:history') {
       await handlePaymentHistory(chatId, [], ctx)
-      await restoreSuperAdminKeyboard(chatId, ctx)
     } else if (/^admin:history:page:\d+$/.test(data)) {
       await handlePaymentHistory(chatId, [`page=${data.slice('admin:history:page:'.length)}`], ctx, { restoreSavedFilters: true })
-      await restoreSuperAdminKeyboard(chatId, ctx)
     } else if (data === 'admin:history:noop') {
       return
     } else if (data.startsWith('admin:history:item:')) {
       await handlePaymentDetails(chatId, data.slice('admin:history:item:'.length), ctx)
     } else if (data.startsWith('admin:history:')) {
       await handlePaymentHistory(chatId, [`status=${data.slice('admin:history:'.length)}`], ctx)
-      await restoreSuperAdminKeyboard(chatId, ctx)
     } else if (data === 'admin:info') {
       if (await isLinkedAdmin(chatId, ctx)) await handleInfoForChat(chatId, ctx)
       else await ctx.tg.sendMessage(chatId, 'This admin menu is no longer authorized.')
