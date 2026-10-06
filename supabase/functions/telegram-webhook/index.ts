@@ -570,6 +570,7 @@ type PaymentHistoryFilters = {
   from?: string
   to?: string
   limit: number
+  page: number
 }
 
 function unquoteFilter(value: string): string {
@@ -577,14 +578,14 @@ function unquoteFilter(value: string): string {
 }
 
 function parsePaymentHistoryFilters(args: string[]): { filters?: PaymentHistoryFilters; error?: string } {
-  const filters: PaymentHistoryFilters = { limit: 10 }
+  const filters: PaymentHistoryFilters = { limit: 10, page: 1 }
   const tokens = args.join(' ').match(/(?:[^\s"]+|"[^"]*"|'[^']*')+/g) ?? []
   for (const token of tokens) {
     const separator = token.indexOf('=') >= 0 ? token.indexOf('=') : token.indexOf(':')
     if (separator < 0) {
       const status = token.toLowerCase()
       if (['pending', 'approved', 'rejected'].includes(status)) filters.status = status as PaymentHistoryFilters['status']
-      else if (status !== 'all' && status !== 'help') return { error: `Unknown filter "${token}". Use status, business, owner, from, to, or limit.` }
+      else if (status !== 'all' && status !== 'help') return { error: `Unknown filter "${token}". Use status, business, owner, from, to, limit, or page.` }
       continue
     }
     const key = token.slice(0, separator).toLowerCase()
@@ -602,8 +603,12 @@ function parsePaymentHistoryFilters(args: string[]): { filters?: PaymentHistoryF
       const limit = Number(value)
       if (!Number.isInteger(limit) || limit < 1 || limit > 20) return { error: 'Limit must be a whole number from 1 to 20.' }
       filters.limit = limit
+    } else if (key === 'page') {
+      const page = Number(value)
+      if (!Number.isInteger(page) || page < 1 || page > 1000) return { error: 'Page must be a whole number from 1 to 1000.' }
+      filters.page = page
     } else {
-      return { error: `Unknown filter "${key}". Use status, business, owner, from, to, or limit.` }
+      return { error: `Unknown filter "${key}". Use status, business, owner, from, to, limit, or page.` }
     }
   }
   if (filters.from && filters.to && filters.from > filters.to) return { error: 'The from date cannot be after the to date.' }
@@ -618,6 +623,7 @@ function paymentHistoryHelp(): string {
     '/payments status=approved from=2026-01-01 to=2026-12-31',
     '/payments business="Cafe Name" limit=20',
     '/payments owner=john@example.com',
+    '/payments page=2 limit=10',
     '/payment <payment-id>',
     '',
     'Statuses: pending, approved, rejected. Results include owner contact, plan, billing cycle, payment metadata, and Telegram archive IDs.',
@@ -667,6 +673,12 @@ function formatPaymentRecord(payment: any, owner: any, proof: any, reviewer: any
   const business = payment.businesses ?? {}
   const plan = payment.plans ?? {}
   const method = payment.payment_methods ?? {}
+  const description = String(
+    payment.owner_note
+      || proof?.metadata?.payment?.description
+      || proof?.metadata?.payment?.owner_note
+      || '',
+  ).trim().slice(0, 500)
   const lines = [
     `Payment: ${payment.id}`,
     `Status: ${payment.status}`,
@@ -677,7 +689,7 @@ function formatPaymentRecord(payment: any, owner: any, proof: any, reviewer: any
     `Plan: ${plan.name ?? 'Plan'} · ${payment.billing_cycle ?? '—'}`,
     `Payment method: ${method.name ?? proof?.metadata?.payment?.method_name ?? '—'}`,
     `Amount: ${payment.amount_etb} ETB`,
-    payment.owner_note ? `Owner note: ${payment.owner_note}` : '',
+    `Description: ${description || 'No description provided'}`,
     `Created: ${payment.created_at}`,
     payment.reviewed_at ? `Reviewed: ${payment.reviewed_at}` : '',
     payment.reviewed_by ? `Reviewed by: ${reviewer?.name ?? reviewer?.email ?? 'Administrator'}${reviewer?.platform_id ? ` (${reviewer.platform_id})` : ''}` : '',
@@ -694,6 +706,44 @@ function formatPaymentRecord(payment: any, owner: any, proof: any, reviewer: any
     includeMetadata && proof?.metadata ? `Metadata: ${JSON.stringify(proof.metadata).slice(0, 1800)}` : '',
   ]
   return lines.filter(Boolean).join('\n').slice(0, 3900)
+}
+
+function paymentHistoryFilterSummary(filters: PaymentHistoryFilters): string {
+  const active = [
+    filters.status ? `status=${filters.status}` : '',
+    filters.business ? `business=${filters.business}` : '',
+    filters.owner ? `owner=${filters.owner}` : '',
+    filters.from ? `from=${filters.from}` : '',
+    filters.to ? `to=${filters.to}` : '',
+  ].filter(Boolean)
+  return active.length ? `Filters: ${active.join(' · ')}` : 'Filters: all payments'
+}
+
+function paymentHistoryNavigation(page: number, totalPages: number): unknown {
+  if (totalPages <= 1) return undefined
+  const rows: Array<Array<{ text: string; callback_data: string }>> = []
+  const pageButton = (target: number) => ({ text: `Page ${target}/${totalPages}`, callback_data: `admin:history:page:${target}` })
+  if (page > 1) rows.push([{ text: '← Previous', callback_data: `admin:history:page:${page - 1}` }, pageButton(page)])
+  else rows.push([pageButton(page)])
+  if (page < totalPages) rows[0].push({ text: 'Next →', callback_data: `admin:history:page:${page + 1}` })
+  return buildInlineKeyboard(rows)
+}
+
+async function storedSuperAdminPaymentHistoryFilters(chatId: string, ctx: Ctx): Promise<PaymentHistoryFilters | null> {
+  const state = await getSuperAdminSession(chatId, ctx)
+  const stored = state?.session.payload?.payment_history
+  if (!stored || typeof stored !== 'object' || Array.isArray(stored)) return null
+  const value = stored as Partial<PaymentHistoryFilters>
+  if (!Number.isInteger(value.limit) || !Number.isInteger(value.page)) return null
+  return {
+    status: value.status,
+    business: typeof value.business === 'string' ? value.business : undefined,
+    owner: typeof value.owner === 'string' ? value.owner : undefined,
+    from: typeof value.from === 'string' ? value.from : undefined,
+    to: typeof value.to === 'string' ? value.to : undefined,
+    limit: value.limit,
+    page: value.page,
+  }
 }
 
 async function sendPaymentRecord(chatId: string, payment: any, owner: any, proof: any, reviewer: any, ctx: Ctx): Promise<void> {
@@ -829,7 +879,7 @@ function hydratePaymentHistoryRow(payment: any, context: PaymentHistoryContext):
   }
 }
 
-async function handlePaymentHistory(chatId: string, args: string[], ctx: Ctx): Promise<void> {
+async function handlePaymentHistory(chatId: string, args: string[], ctx: Ctx, options: { restoreSavedFilters?: boolean } = {}): Promise<void> {
   if (!await isLinkedAdmin(chatId, ctx)) {
     await ctx.tg.sendMessage(chatId, 'Admin commands are available only to an authorized AbroBiz administrator.')
     return
@@ -839,7 +889,11 @@ async function handlePaymentHistory(chatId: string, args: string[], ctx: Ctx): P
     await ctx.tg.sendMessage(chatId, `${parsed.error}\n\n${paymentHistoryHelp()}`)
     return
   }
-  const filters = parsed.filters!
+  let filters = parsed.filters!
+  if (options.restoreSavedFilters && filters.page > 1) {
+    const saved = await storedSuperAdminPaymentHistoryFilters(chatId, ctx)
+    if (saved) filters = { ...saved, page: filters.page }
+  }
   if (args.some(arg => arg.toLowerCase() === 'help')) {
     await ctx.tg.sendMessage(chatId, paymentHistoryHelp())
     return
@@ -854,24 +908,43 @@ async function handlePaymentHistory(chatId: string, args: string[], ctx: Ctx): P
     // Keep the main history query to a single table. Related display data is
     // loaded explicitly below so a stale PostgREST relationship cache cannot
     // break the entire Super Admin history action.
-    .select('id, business_id, plan_id, billing_cycle, amount_etb, payment_method_id, telegram_proof_id, owner_note, status, reviewed_by, reviewed_at, rejection_reason, created_at')
+    .select('id, business_id, plan_id, billing_cycle, amount_etb, payment_method_id, telegram_proof_id, owner_note, status, reviewed_by, reviewed_at, rejection_reason, created_at', { count: 'exact' })
     .order('created_at', { ascending: false })
-    .limit(filters.limit)
   if (businessIds) query = query.in('business_id', businessIds)
   query = addDateFilters(query, filters)
-  const { data: payments, error } = await query
+  const offset = (filters.page - 1) * filters.limit
+  const { data: payments, count, error } = await query.range(offset, offset + filters.limit - 1)
   if (error) {
     await ctx.tg.sendMessage(chatId, 'Payment history is temporarily unavailable. Please try again.')
     return
   }
   if (!payments?.length) {
-    await ctx.tg.sendMessage(chatId, 'No payments matched those filters.')
+    if (filters.page > 1 && typeof count === 'number' && count > 0) {
+      await ctx.tg.sendMessage(chatId, `No payments are available on page ${filters.page}. The last page is ${Math.ceil(count / filters.limit)}.`)
+    } else {
+      await ctx.tg.sendMessage(chatId, 'No payments matched those filters.')
+    }
     return
   }
+  const totalPages = typeof count === 'number' ? Math.max(1, Math.ceil(count / filters.limit)) : filters.page + (payments.length === filters.limit ? 1 : 0)
+  const firstResult = offset + 1
+  const lastResult = offset + payments.length
   const paymentIds = payments.map((payment: any) => payment.id)
   const context = await loadPaymentContext(paymentIds, ctx)
   const historyPayments = payments.map((payment: any) => hydratePaymentHistoryRow(payment, context))
-  await ctx.tg.sendMessage(chatId, `Found ${payments.length} payment${payments.length === 1 ? '' : 's'}${filters.status ? ` with status ${filters.status}` : ''}.`)
+  const superAdminId = await linkedSuperAdminId(chatId, ctx)
+  if (superAdminId) {
+    await saveSuperAdminSession(chatId, superAdminId, 'menu', ctx, { payment_history: filters })
+  }
+  const hasComplexFilters = Boolean(filters.business || filters.owner || filters.from || filters.to)
+  const navigation = !hasComplexFilters || Boolean(superAdminId)
+    ? paymentHistoryNavigation(filters.page, totalPages)
+    : undefined
+  await ctx.tg.sendMessage(
+    chatId,
+    `Payment history · page ${filters.page}/${totalPages}\nShowing ${firstResult}-${lastResult}${typeof count === 'number' ? ` of ${count}` : ''} payment${count === 1 ? '' : 's'}\n${paymentHistoryFilterSummary(filters)}`,
+    { replyMarkup: navigation },
+  )
   for (const payment of historyPayments) {
     const ownerId = payment.businesses?.owner_id
     try {
@@ -1380,6 +1453,9 @@ async function handleCallback(cb: TelegramCallbackQuery, ctx: Ctx): Promise<void
       await restoreSuperAdminKeyboard(chatId, ctx)
     } else if (data === 'admin:history') {
       await handlePaymentHistory(chatId, [], ctx)
+      await restoreSuperAdminKeyboard(chatId, ctx)
+    } else if (/^admin:history:page:\d+$/.test(data)) {
+      await handlePaymentHistory(chatId, [`page=${data.slice('admin:history:page:'.length)}`], ctx, { restoreSavedFilters: true })
       await restoreSuperAdminKeyboard(chatId, ctx)
     } else if (data.startsWith('admin:history:')) {
       await handlePaymentHistory(chatId, [`status=${data.slice('admin:history:'.length)}`], ctx)
