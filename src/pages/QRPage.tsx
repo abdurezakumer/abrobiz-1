@@ -3,6 +3,7 @@ import QRCode from 'qrcode'
 import { Copy, Download, ExternalLink, Image as ImageIcon, QrCode as QrCodeIcon, Sparkles } from 'lucide-react'
 import DashboardLayout from '../components/DashboardLayout'
 import { useAuth } from '../lib/authContext'
+import { safeImageUrl } from '../lib/safeUrl'
 import { publicStorefrontUrl } from '../lib/storefrontUrl'
 
 export default function QRPage() {
@@ -27,7 +28,13 @@ export default function QRPage() {
         ])
         if (!active) return
         setQrDataUrl(rawQr)
-        setPosterDataUrl(await createBrandedPoster(posterQr, business.name, business.accentColor || '#D4A853', siteUrl))
+        setPosterDataUrl(await createBrandedPoster(
+          posterQr,
+          business.name,
+          business.accentColor || '#D4A853',
+          siteUrl,
+          safeImageUrl(business.logoUrl),
+        ))
         if (canvasRef.current) {
           await QRCode.toCanvas(canvasRef.current, siteUrl, { width: 280, margin: 2, color: { dark: business.accentColor || '#0A0C10', light: '#FFFFFF' } })
         }
@@ -93,13 +100,18 @@ export default function QRPage() {
             <button type="button" onClick={() => downloadFile(posterDataUrl, `${business.slug}-branded-qr-poster.png`)} disabled={!posterDataUrl} style={primaryDownload}><Download size={15} /> Download branded PNG</button>
             <button type="button" onClick={() => void downloadSvg()} disabled={!qrDataUrl} style={secondaryDownload}><Download size={15} /> SVG</button>
           </div>
-          <p style={smallHint}>The branded PNG includes your business name, a scan prompt, accent color, and your live website address. It is sized for easy sharing and printing.</p>
+          <p style={smallHint}>The branded PNG includes your logo, business name, scan prompt, accent color, live website address, and AbroBiz footer branding. Print it for tables, counters, windows, receipts, or entrance signs.</p>
         </section>
 
         <section style={qrPanel}>
           <div style={panelLabel}><QrCodeIcon size={15} /> Scan-only QR</div>
           <div style={rawQrFrame}><canvas ref={canvasRef} aria-label={`QR code linking to ${siteUrl}`} /></div>
-          <div style={businessMark}><span style={{ ...businessMarkIcon, background: business.accentColor || '#D4A853' }}>{business.name.slice(0, 1).toUpperCase()}</span><strong>{business.name}</strong></div>
+          <div style={businessMark}>
+            {safeImageUrl(business.logoUrl)
+              ? <img src={safeImageUrl(business.logoUrl) ?? undefined} alt={`${business.name} logo`} width={30} height={30} style={businessMarkImage} />
+              : <span style={{ ...businessMarkIcon, background: business.accentColor || '#D4A853' }}>{business.name.slice(0, 1).toUpperCase()}</span>}
+            <strong>{business.name}</strong>
+          </div>
           <p style={urlText}>{siteUrl}</p>
           <div style={downloadRow}>
             <button type="button" onClick={() => downloadFile(qrDataUrl, `${business.slug}-qr-code.png`)} disabled={!qrDataUrl} style={primaryDownload}><Download size={15} /> Download QR PNG</button>
@@ -111,11 +123,12 @@ export default function QRPage() {
   )
 }
 
-async function createBrandedPoster(qrDataUrl: string, businessName: string, accent: string, siteUrl: string): Promise<string> {
+async function createBrandedPoster(qrDataUrl: string, businessName: string, accent: string, siteUrl: string, logoUrl: string | null): Promise<string> {
   const qrImage = await loadImage(qrDataUrl)
+  const logoImage = logoUrl ? await loadImage(logoUrl).catch(() => null) : null
   const canvas = document.createElement('canvas')
   canvas.width = 1200
-  canvas.height = 1500
+  canvas.height = 1600
   const context = canvas.getContext('2d')
   if (!context) throw new Error('Canvas is unavailable.')
 
@@ -127,31 +140,58 @@ async function createBrandedPoster(qrDataUrl: string, businessName: string, acce
   context.fillStyle = accent
   context.fillRect(0, 0, canvas.width, 18)
 
+  if (logoImage) {
+    drawRoundedImage(context, logoImage, 510, 66, 180, 180, 44)
+  } else {
+    context.fillStyle = accent
+    roundRect(context, 510, 66, 180, 180, 44)
+    context.fill()
+    context.fillStyle = '#11151D'
+    context.font = '800 92px Arial, sans-serif'
+    context.textAlign = 'center'
+    context.fillText(businessName.slice(0, 1).toUpperCase(), 600, 190)
+  }
+
   context.fillStyle = '#F0EDE7'
   context.textAlign = 'center'
   context.font = '700 68px Georgia, serif'
-  context.fillText(businessName.slice(0, 30), 600, 190)
+  context.fillText(businessName.slice(0, 30), 600, 330)
   context.fillStyle = 'rgba(240,237,231,0.72)'
   context.font = '500 30px Arial, sans-serif'
-  context.fillText('Scan to explore our website', 600, 255)
+  context.fillText('Scan to explore our website', 600, 388)
 
   context.fillStyle = '#FFFFFF'
-  roundRect(context, 120, 335, 960, 960, 30)
+  roundRect(context, 120, 455, 960, 960, 30)
   context.fill()
-  context.drawImage(qrImage, 235, 450, 730, 730)
+  context.drawImage(qrImage, 235, 570, 730, 730)
 
   context.fillStyle = '#11151D'
   context.font = '700 34px Arial, sans-serif'
-  context.fillText('Discover more', 600, 1380)
+  context.fillText('Discover more', 600, 1500)
   context.fillStyle = '#626A70'
   context.font = '500 22px Arial, sans-serif'
-  context.fillText(siteUrl.replace(/^https?:\/\//, ''), 600, 1425)
+  context.fillText(siteUrl.replace(/^https?:\/\//, ''), 600, 1545)
+  context.fillStyle = 'rgba(240,237,231,0.52)'
+  context.font = '600 18px Arial, sans-serif'
+  context.fillText('Powered by AbroBiz  ·  abrobiz.com', 600, 1578)
   return canvas.toDataURL('image/png')
+}
+
+function drawRoundedImage(context: CanvasRenderingContext2D, image: HTMLImageElement, x: number, y: number, width: number, height: number, radius: number) {
+  context.save()
+  roundRect(context, x, y, width, height, radius)
+  context.clip()
+  const scale = Math.max(width / image.width, height / image.height)
+  const drawWidth = image.width * scale
+  const drawHeight = image.height * scale
+  context.drawImage(image, x + (width - drawWidth) / 2, y + (height - drawHeight) / 2, drawWidth, drawHeight)
+  context.restore()
 }
 
 function loadImage(source: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const image = new Image()
+    if (/^https?:\/\//i.test(source)) image.crossOrigin = 'anonymous'
     image.onload = () => resolve(image)
     image.onerror = () => reject(new Error('QR image could not be loaded.'))
     image.src = source
@@ -180,6 +220,7 @@ const posterLoading: React.CSSProperties = { display: 'flex', alignItems: 'cente
 const rawQrFrame: React.CSSProperties = { display: 'grid', placeItems: 'center', minHeight: 310, padding: 15, borderRadius: 16, background: '#F6F3EE' }
 const businessMark: React.CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 15, color: '#0A0C10', fontSize: 15 }
 const businessMarkIcon: React.CSSProperties = { width: 25, height: 25, display: 'grid', placeItems: 'center', borderRadius: 8, color: '#0A0C10', fontSize: 13, fontWeight: 800 }
+const businessMarkImage: React.CSSProperties = { width: 30, height: 30, borderRadius: 9, objectFit: 'cover' }
 const urlText: React.CSSProperties = { margin: '7px auto 16px', maxWidth: 320, color: 'rgba(10,12,16,0.48)', fontSize: 12, wordBreak: 'break-all' }
 const downloadRow: React.CSSProperties = { display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 16 }
 const primaryDownload: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, flex: '1 1 180px', border: 'none', borderRadius: 10, padding: '11px 13px', background: '#D4A853', color: '#0A0C10', fontSize: 12.5, fontWeight: 750, cursor: 'pointer' }
