@@ -810,7 +810,7 @@ function emptyPaymentHistoryContext(): PaymentHistoryContext {
  * super-admin Telegram history working across projects whose relationship
  * cache has not refreshed yet, and makes each sensitive lookup bounded.
  */
-async function loadPaymentContext(paymentIds: string[], ctx: Ctx): Promise<PaymentHistoryContext> {
+async function loadPaymentContext(paymentIds: string[], ctx: Ctx, options: { includeProofs?: boolean } = {}): Promise<PaymentHistoryContext> {
   const context = emptyPaymentHistoryContext()
   if (paymentIds.length === 0) return context
 
@@ -853,6 +853,8 @@ async function loadPaymentContext(paymentIds: string[], ctx: Ctx): Promise<Payme
   context.owners = new Map((profileRows ?? []).filter((row: any) => ownerIds.includes(row.id)).map((row: any) => [row.id, row]))
   context.reviewers = new Map((profileRows ?? []).filter((row: any) => reviewerIds.includes(row.id)).map((row: any) => [row.id, row]))
 
+  if (options.includeProofs === false) return context
+
   let proofResult = await ctx.db
     .from('telegram_payment_proofs')
     .select('id, payment_id, telegram_channel_id, telegram_message_id, telegram_file_id, content_type, file_size, consumed_at, created_at, metadata')
@@ -877,6 +879,25 @@ function hydratePaymentHistoryRow(payment: any, context: PaymentHistoryContext):
     plans: context.plans.get(payment.plan_id),
     payment_methods: context.methods.get(payment.payment_method_id),
   }
+}
+
+function formatPaymentHistoryReport(payment: any, owner: any, reviewer: any, number: number): string {
+  const business = payment.businesses ?? {}
+  const plan = payment.plans ?? {}
+  const method = payment.payment_methods ?? {}
+  const description = String(payment.owner_note ?? '').trim().slice(0, 240)
+  return [
+    `${number}. ${business.name ?? 'Business'} · ${payment.status}`,
+    `Payment ID: ${payment.id}`,
+    `Owner: ${owner?.name ?? 'Owner'} · ${owner?.email ?? '—'} · ${owner?.phone ?? '—'}`,
+    `Plan: ${plan.name ?? 'Plan'} · ${payment.billing_cycle ?? '—'} · ${payment.amount_etb} ETB`,
+    `Method: ${method.name ?? '—'} · Created: ${payment.created_at}`,
+    `Description: ${description || 'No description provided'}`,
+    payment.reviewed_by
+      ? `Reviewed by: ${reviewer?.name ?? reviewer?.email ?? 'Administrator'}${payment.reviewed_at ? ` · ${payment.reviewed_at}` : ''}`
+      : 'Reviewed by: —',
+    payment.telegram_proof_id ? 'Proof: archived in Telegram' : 'Proof: not attached',
+  ].join('\n')
 }
 
 async function handlePaymentHistory(chatId: string, args: string[], ctx: Ctx, options: { restoreSavedFilters?: boolean } = {}): Promise<void> {
@@ -930,7 +951,10 @@ async function handlePaymentHistory(chatId: string, args: string[], ctx: Ctx, op
   const firstResult = offset + 1
   const lastResult = offset + payments.length
   const paymentIds = payments.map((payment: any) => payment.id)
-  const context = await loadPaymentContext(paymentIds, ctx)
+  // History is a report view. Do not fetch or send proof images/metadata for
+  // every row; the single-payment detail command remains available when the
+  // administrator needs the complete proof record.
+  const context = await loadPaymentContext(paymentIds, ctx, { includeProofs: false })
   const historyPayments = payments.map((payment: any) => hydratePaymentHistoryRow(payment, context))
   const superAdminId = await linkedSuperAdminId(chatId, ctx)
   if (superAdminId) {
@@ -940,29 +964,19 @@ async function handlePaymentHistory(chatId: string, args: string[], ctx: Ctx, op
   const navigation = !hasComplexFilters || Boolean(superAdminId)
     ? paymentHistoryNavigation(filters.page, totalPages)
     : undefined
-  await ctx.tg.sendMessage(
+  const report = historyPayments.map((payment: any, index: number) => formatPaymentHistoryReport(
+    payment,
+    context.owners.get(payment.businesses?.owner_id),
+    context.reviewers.get(payment.reviewed_by),
+    firstResult + index,
+  )).join('\n\n')
+  const reportKeyboard = navigation ?? (superAdminId ? superAdminKeyboard : adminKeyboard)
+  await sendSuperAdminText(
     chatId,
-    `Payment history · page ${filters.page}/${totalPages}\nShowing ${firstResult}-${lastResult}${typeof count === 'number' ? ` of ${count}` : ''} payment${count === 1 ? '' : 's'}\n${paymentHistoryFilterSummary(filters)}`,
-    { replyMarkup: navigation },
+    `Payment report · page ${filters.page}/${totalPages}\nShowing ${firstResult}-${lastResult}${typeof count === 'number' ? ` of ${count}` : ''} payment${count === 1 ? '' : 's'}\n${paymentHistoryFilterSummary(filters)}\n\n${report}`,
+    ctx,
+    reportKeyboard,
   )
-  for (const payment of historyPayments) {
-    const ownerId = payment.businesses?.owner_id
-    try {
-      await sendPaymentRecord(chatId, payment, context.owners.get(ownerId), context.proofs.get(payment.id), context.reviewers.get(payment.reviewed_by), ctx)
-    } catch (error) {
-      // Keep one malformed record from stopping the rest of the result set.
-      logEvent('warn', {
-        service: 'abrobiz-edge',
-        function_name: 'telegram-webhook',
-        operation: 'send_payment_history_record',
-        error_category: 'TELEGRAM_RECORD_DELIVERY',
-        error_code: error instanceof Error ? error.name : 'UnknownError',
-        provider: 'telegram',
-        outcome: 'skipped_record',
-      })
-      await ctx.tg.sendMessage(chatId, `Payment ${payment.id} could not be displayed. Use /payment ${payment.id} to retry this record.`).catch(() => {})
-    }
-  }
 }
 
 async function handlePaymentDetails(chatId: string, paymentId: string | undefined, ctx: Ctx): Promise<void> {
