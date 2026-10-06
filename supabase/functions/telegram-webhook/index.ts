@@ -884,19 +884,13 @@ function hydratePaymentHistoryRow(payment: any, context: PaymentHistoryContext):
 function formatPaymentHistoryReport(payment: any, owner: any, reviewer: any, number: number): string {
   const business = payment.businesses ?? {}
   const plan = payment.plans ?? {}
-  const method = payment.payment_methods ?? {}
-  const description = String(payment.owner_note ?? '').trim().slice(0, 240)
+  const ownerContact = [owner?.email, owner?.phone].filter(Boolean).join(' · ') || 'No contact'
+  const reviewerName = payment.reviewed_by
+    ? reviewer?.name ?? reviewer?.email ?? 'Administrator'
+    : 'Pending review'
   return [
-    `${number}. ${business.name ?? 'Business'} · ${payment.status}`,
-    `Payment ID: ${payment.id}`,
-    `Owner: ${owner?.name ?? 'Owner'} · ${owner?.email ?? '—'} · ${owner?.phone ?? '—'}`,
-    `Plan: ${plan.name ?? 'Plan'} · ${payment.billing_cycle ?? '—'} · ${payment.amount_etb} ETB`,
-    `Method: ${method.name ?? '—'} · Created: ${payment.created_at}`,
-    `Description: ${description || 'No description provided'}`,
-    payment.reviewed_by
-      ? `Reviewed by: ${reviewer?.name ?? reviewer?.email ?? 'Administrator'}${payment.reviewed_at ? ` · ${payment.reviewed_at}` : ''}`
-      : 'Reviewed by: —',
-    payment.telegram_proof_id ? 'Proof: archived in Telegram' : 'Proof: not attached',
+    `${number}. ${payment.status} | ${business.name ?? 'Business'} | ${plan.name ?? 'Plan'} | ${payment.amount_etb} ETB`,
+    `ID: ${payment.id} | Owner: ${ownerContact} | ${payment.billing_cycle ?? '—'} | ${payment.created_at} | Reviewer: ${reviewerName}`,
   ].join('\n')
 }
 
