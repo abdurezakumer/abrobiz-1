@@ -719,13 +719,57 @@ function paymentHistoryFilterSummary(filters: PaymentHistoryFilters): string {
   return active.length ? `Filters: ${active.join(' · ')}` : 'Filters: all payments'
 }
 
-function paymentHistoryNavigation(page: number, totalPages: number): unknown {
-  if (totalPages <= 1) return undefined
-  const rows: Array<Array<{ text: string; callback_data: string }>> = []
+type PaymentHistoryButton = { text: string; callback_data: string }
+
+function paymentHistoryNavigationRows(page: number, totalPages: number): PaymentHistoryButton[][] {
+  if (totalPages <= 1) return []
+  const rows: PaymentHistoryButton[][] = []
   const pageButton = (target: number) => ({ text: `Page ${target}/${totalPages}`, callback_data: `admin:history:page:${target}` })
   if (page > 1) rows.push([{ text: '← Previous', callback_data: `admin:history:page:${page - 1}` }, pageButton(page)])
   else rows.push([pageButton(page)])
   if (page < totalPages) rows[0].push({ text: 'Next →', callback_data: `admin:history:page:${page + 1}` })
+  return rows
+}
+
+function paymentHistoryDateLabel(value: string): string {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 'Unknown date'
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Africa/Addis_Ababa',
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(date)
+}
+
+function paymentHistoryButtonLabel(payment: any): string {
+  const status = String(payment.status ?? 'unknown').toUpperCase()
+  const date = paymentHistoryDateLabel(payment.created_at)
+  const business = String(payment.businesses?.name ?? 'Business').replace(/[\r\n|]/g, ' ').trim()
+  return `${date} | ${status} | ${business}`.slice(0, 64)
+}
+
+function paymentHistoryKeyboard(
+  payments: Array<{ payment: any; number: number }>,
+  page: number,
+  totalPages: number,
+): unknown {
+  const rows: PaymentHistoryButton[][] = []
+  const statuses: Array<PaymentHistoryFilters['status']> = ['pending', 'approved', 'rejected']
+  for (const status of statuses) {
+    const group = payments.filter(({ payment }) => payment.status === status)
+    if (!group.length) continue
+    rows.push([{ text: `${status.toUpperCase()} PAYMENTS`, callback_data: 'admin:history:noop' }])
+    for (const { payment } of group) {
+      rows.push([{
+        text: paymentHistoryButtonLabel(payment),
+        callback_data: `admin:history:item:${payment.id}`,
+      }])
+    }
+  }
+  rows.push(...paymentHistoryNavigationRows(page, totalPages))
   return buildInlineKeyboard(rows)
 }
 
@@ -954,17 +998,24 @@ async function handlePaymentHistory(chatId: string, args: string[], ctx: Ctx, op
   if (superAdminId) {
     await saveSuperAdminSession(chatId, superAdminId, 'menu', ctx, { payment_history: filters })
   }
-  const hasComplexFilters = Boolean(filters.business || filters.owner || filters.from || filters.to)
-  const navigation = !hasComplexFilters || Boolean(superAdminId)
-    ? paymentHistoryNavigation(filters.page, totalPages)
-    : undefined
-  const report = historyPayments.map((payment: any, index: number) => formatPaymentHistoryReport(
+  const indexedPayments = historyPayments.map((payment: any, index: number) => ({
     payment,
-    context.owners.get(payment.businesses?.owner_id),
-    context.reviewers.get(payment.reviewed_by),
-    firstResult + index,
-  )).join('\n\n')
-  const reportKeyboard = navigation ?? (superAdminId ? superAdminKeyboard : adminKeyboard)
+    number: firstResult + index,
+  }))
+  const report = (['pending', 'approved', 'rejected'] as const).map(status => {
+    const group = indexedPayments.filter(({ payment }) => payment.status === status)
+    if (!group.length) return ''
+    return [
+      `${status.toUpperCase()} PAYMENTS`,
+      ...group.map(({ payment, number }) => formatPaymentHistoryReport(
+        payment,
+        context.owners.get(payment.businesses?.owner_id),
+        context.reviewers.get(payment.reviewed_by),
+        number,
+      )),
+    ].join('\n')
+  }).filter(Boolean).join('\n\n')
+  const reportKeyboard = paymentHistoryKeyboard(indexedPayments, filters.page, totalPages)
   await sendSuperAdminText(
     chatId,
     `Payment report · page ${filters.page}/${totalPages}\nShowing ${firstResult}-${lastResult}${typeof count === 'number' ? ` of ${count}` : ''} payment${count === 1 ? '' : 's'}\n${paymentHistoryFilterSummary(filters)}\n\n${report}`,
@@ -1465,6 +1516,10 @@ async function handleCallback(cb: TelegramCallbackQuery, ctx: Ctx): Promise<void
     } else if (/^admin:history:page:\d+$/.test(data)) {
       await handlePaymentHistory(chatId, [`page=${data.slice('admin:history:page:'.length)}`], ctx, { restoreSavedFilters: true })
       await restoreSuperAdminKeyboard(chatId, ctx)
+    } else if (data === 'admin:history:noop') {
+      return
+    } else if (data.startsWith('admin:history:item:')) {
+      await handlePaymentDetails(chatId, data.slice('admin:history:item:'.length), ctx)
     } else if (data.startsWith('admin:history:')) {
       await handlePaymentHistory(chatId, [`status=${data.slice('admin:history:'.length)}`], ctx)
       await restoreSuperAdminKeyboard(chatId, ctx)
