@@ -698,7 +698,7 @@ function formatPaymentRecord(payment: any, owner: any, proof: any, reviewer: any
     payment.rejection_reason ? `Rejection: ${payment.rejection_reason}` : '',
     proof?.telegram_channel_id ? `Archive channel: ${proof.telegram_channel_id}` : '',
     proof?.telegram_message_id ? `Archive message: ${proof.telegram_message_id}` : '',
-    proof?.telegram_file_id ? `Archive file ID: ${proof.telegram_file_id}` : '',
+    proof?.id || payment.telegram_proof_id ? `Proof database record: ${proof?.id ?? payment.telegram_proof_id}` : '',
     proof?.content_type ? `Proof type: ${proof.content_type}` : '',
     proof?.file_size ? `Proof size: ${proof.file_size} bytes` : '',
     proof?.created_at ? `Proof archived: ${proof.created_at}` : '',
@@ -795,37 +795,7 @@ async function sendPaymentRecord(chatId: string, payment: any, owner: any, proof
   const replyMarkup = payment.status === 'pending'
     ? buildInlineKeyboard([[{ text: 'Approve', callback_data: `approve:${payment.id}` }, { text: 'Reject', callback_data: `reject:${payment.id}` }]])
     : undefined
-  if (proof?.telegram_file_id) {
-    const business = payment.businesses ?? {}
-    const mediaCaption = [
-      `Payment: ${payment.id}`,
-      `Status: ${payment.status}`,
-      `Business: ${business.name ?? 'Business'}`,
-      `Amount: ${payment.amount_etb} ETB`,
-    ].join('\n')
-    try {
-      await ctx.tg.sendPhoto(chatId, proof.telegram_file_id, { caption: mediaCaption, replyMarkup })
-      // Telegram captions are limited to 1024 characters. Send the complete
-      // audit record separately so admins receive all metadata and identifiers.
-      await ctx.tg.sendMessage(chatId, caption)
-    } catch (error) {
-      // A Telegram file ID can become unavailable even though the payment and
-      // its metadata remain valid. Do not let one stale archive photo abort
-      // the complete payment-history response.
-      logEvent('warn', {
-        service: 'abrobiz-edge',
-        function_name: 'telegram-webhook',
-        operation: 'send_payment_record',
-        error_category: 'TELEGRAM_PROOF_UNAVAILABLE',
-        error_code: error instanceof Error ? error.name : 'UnknownError',
-        provider: 'telegram',
-        outcome: 'fallback_text',
-      })
-      await ctx.tg.sendMessage(chatId, `${caption}\n\nThe archived proof image is not available for inline display. The payment record and archive identifiers are still preserved.`, { replyMarkup })
-    }
-  } else {
-    await ctx.tg.sendMessage(chatId, caption, { replyMarkup })
-  }
+  await ctx.tg.sendMessage(chatId, caption, { replyMarkup })
 }
 
 type PaymentHistoryContext = {
@@ -901,7 +871,7 @@ async function loadPaymentContext(paymentIds: string[], ctx: Ctx, options: { inc
 
   let proofResult = await ctx.db
     .from('telegram_payment_proofs')
-    .select('id, payment_id, telegram_channel_id, telegram_message_id, telegram_file_id, content_type, file_size, consumed_at, created_at, metadata')
+    .select('id, payment_id, telegram_channel_id, telegram_message_id, content_type, file_size, consumed_at, created_at, metadata')
     .in('payment_id', paymentIds)
   // Metadata was introduced after the initial Telegram proof migration. A
   // partially migrated production project must still be able to show payment
@@ -909,7 +879,7 @@ async function loadPaymentContext(paymentIds: string[], ctx: Ctx, options: { inc
   if (proofResult.error && /metadata|column|schema cache/i.test(proofResult.error.message ?? '')) {
     proofResult = await ctx.db
       .from('telegram_payment_proofs')
-      .select('id, payment_id, telegram_channel_id, telegram_message_id, telegram_file_id, content_type, file_size, consumed_at, created_at')
+      .select('id, payment_id, telegram_channel_id, telegram_message_id, content_type, file_size, consumed_at, created_at')
       .in('payment_id', paymentIds)
   }
   context.proofs = new Map((proofResult.data ?? []).map((row: any) => [row.payment_id, row]))
