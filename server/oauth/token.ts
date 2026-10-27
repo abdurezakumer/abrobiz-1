@@ -1,7 +1,7 @@
 /* OAuth 2.1 authorization-code + rotating refresh-token exchange. */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { enforceOAuthRateLimit, newOpaqueToken, oauthAdminClient, oauthResource, preflight, readRequestBody, requestHostAllowed, sendJson, sha256, verifyPkce } from '../_mcpOAuth'
+import { enforceOAuthRateLimit, newOpaqueToken, oauthAdminClient, oauthResource, preflight, readRequestBody, requestHostAllowed, sendJson, sha256, verifyPkce } from '../../api/_mcpOAuth'
 
 const ACCESS_SECONDS = 60 * 60
 const REFRESH_SECONDS = 90 * 24 * 60 * 60

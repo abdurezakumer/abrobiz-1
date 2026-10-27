@@ -17,7 +17,7 @@ import {
   sha256,
   userIdFromJwtPayload,
   appendAuthorizationResult,
-} from '../_mcpOAuth'
+} from '../../api/_mcpOAuth'
 
 function bearer(req: any): string | null {
   const value = req.headers?.authorization
