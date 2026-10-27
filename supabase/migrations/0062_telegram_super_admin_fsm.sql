@@ -1,3 +1,4 @@
+-- 0062_telegram_super_admin_fsm.sql
 -- Persist the small amount of state needed by the private super-admin bot
 -- console. All reads and writes are performed by the service-role webhook.
 
