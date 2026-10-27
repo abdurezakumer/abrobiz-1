@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { ArrowUp, Check, Upload, Clock, CheckCircle2, XCircle, RefreshCw, Copy, CheckCheck, Sparkles, BadgePercent } from 'lucide-react'
 import DashboardLayout from '../components/DashboardLayout'
@@ -12,6 +12,7 @@ import { getOrCreateBusinessTelegramLink, disconnectTelegram, telegramPaymentDee
 import { friendlyError } from '../lib/errors'
 import type { BillingInterval, Plan, PaymentMethod, Payment } from '../types'
 import { formatEtb, getPlanPrice } from '../lib/planPricing'
+import { toPaymentCurrency } from '../lib/paymentCurrency'
 import { fileInputStyle, PAYMENT_UPLOAD_ACCEPT, createClientUuid, detectedUploadType, takeSelectedFile } from '../lib/fileUpload'
 
 interface PaymentDraft {
@@ -64,6 +65,7 @@ function paymentUploadErrorMessage(error: unknown): string {
 
 export default function Billing() {
   const { business, subscription, refreshBusiness } = useAuth()
+  const paymentCurrency = toPaymentCurrency(business?.currency)
   const [plans, setPlans] = useState<Plan[]>([])
   const [methods, setMethods] = useState<PaymentMethod[]>([])
   const [plansLoading, setPlansLoading] = useState(true)
@@ -97,7 +99,7 @@ export default function Billing() {
   const draftHydrated = useRef(false)
   const optionsRequestId = useRef(0)
 
-  async function loadBillingOptions(businessId: string, restoreDraft: boolean, showOverlay = false) {
+  const loadBillingOptions = useCallback(async (businessId: string, restoreDraft: boolean, showOverlay = false) => {
     const requestId = ++optionsRequestId.current
     const draft = restoreDraft ? readPaymentDraft(businessId) : null
     draftHydrated.current = false
@@ -138,7 +140,7 @@ export default function Billing() {
         finish()
       })
 
-    const methodsRequest = listPaymentMethods()
+    const methodsRequest = listPaymentMethods(true, paymentCurrency)
       .then(availableMethods => {
         if (requestId !== optionsRequestId.current) return
         setMethods(availableMethods)
@@ -159,7 +161,7 @@ export default function Billing() {
       })
 
     await Promise.allSettled([plansRequest, methodsRequest])
-  }
+  }, [paymentCurrency])
 
   useEffect(() => {
     if (!business?.id) return
@@ -167,7 +169,7 @@ export default function Billing() {
     void loadBillingOptions(businessId, true, true)
     void listPaymentsForBusiness(businessId).then(setHistory).catch(() => {})
     getOrCreateBusinessTelegramLink(businessId).then(setTelegramLink).catch(() => {})
-  }, [business?.id])
+  }, [business?.id, business?.currency, loadBillingOptions])
 
   // Keep only non-sensitive payment form choices in sessionStorage. The
   // Telegram proof reference is deliberately memory-only and is never cached.
@@ -569,7 +571,7 @@ export default function Billing() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
             <span style={stepNumber}>1</span>
             <span style={{ fontSize: 13, fontWeight: 650, color: '#0A0C10' }}>Send payment to</span>
-            <span style={{ fontSize: 11.5, color: 'rgba(10,12,16,0.4)' }}>Choose a method below</span>
+            <span style={{ fontSize: 11.5, color: 'rgba(10,12,16,0.4)' }}>Showing {paymentCurrency} accounts based on your business currency</span>
           </div>
           {methodsLoading ? (
             <div style={{ color: 'rgba(10,12,16,0.5)', fontSize: 13, marginBottom: 16 }}>Loading payment methods…</div>
@@ -588,13 +590,14 @@ export default function Billing() {
             </div>
           ) : (
             <div style={{ color: '#B45309', fontSize: 13, marginBottom: 16 }}>
-              No active payment method is available yet. Please contact AbroBiz support.
+              No active {paymentCurrency} payment account is configured yet. Please contact AbroBiz support before submitting payment.
             </div>
           )}
           {selectedMethod && (
             <div style={{ background: '#F6F3EE', borderRadius: 12, padding: '12px 16px', marginBottom: 20, fontSize: 13.5 }}>
               <div><strong>{selectedMethod.accountName}</strong> — {selectedMethod.accountNumber}</div>
               <div style={{ color: 'rgba(10,12,16,0.55)', marginTop: 4 }}>{selectedMethod.instructions}</div>
+              {selectedMethod.currency !== 'ETB' && <div style={{ color: '#79540B', background: 'rgba(212,168,83,0.12)', borderRadius: 8, padding: '8px 10px', marginTop: 10, fontSize: 12 }}>Plan prices are recorded in ETB. For {selectedMethod.currency} transfers, use the foreign-currency amount agreed with AbroBiz and include it in your receipt note.</div>}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', marginTop: 12 }}>
                 <span style={secureBadge}>Full plan payment required</span>
                 <button type="button" onClick={() => void copyAccountNumber(selectedMethod)} style={copyBtn} aria-label={`Copy ${selectedMethod.name} account number`}>

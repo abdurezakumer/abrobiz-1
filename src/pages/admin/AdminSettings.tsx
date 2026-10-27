@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Plus, Check, X, Github, ExternalLink, Pencil, Save, Sparkles } from 'lucide-react'
 import AdminLayout from '../../components/AdminLayout'
 import { useAuth } from '../../lib/authContext'
@@ -8,25 +8,27 @@ import { listPaymentMethods, createPaymentMethod, updatePaymentMethod } from '..
 import { listBusinessCategories, createBusinessCategory, updateBusinessCategory } from '../../lib/api/businessCategories'
 import { categoryIcon, CATEGORY_ICONS } from '../../lib/icons'
 import { adminListTemplates, importTemplate, setTemplateActive } from '../../lib/api/templates'
-import type { Plan, PaymentMethod, BusinessCategory, Template } from '../../types'
+import type { Plan, PaymentCurrency, PaymentMethod, BusinessCategory, Template } from '../../types'
 import { safeHttpsUrl, safeImageUrl } from '../../lib/safeUrl'
 import { friendlyError } from '../../lib/errors'
 import { formatEtb } from '../../lib/planPricing'
+import { PAYMENT_CURRENCIES } from '../../lib/paymentCurrency'
 
 type Tab = 'plans' | 'methods' | 'categories' | 'templates'
 
-export default function AdminSettings({ initialTab = 'plans', pricingOnly = false }: { initialTab?: Tab; pricingOnly?: boolean }) {
+export default function AdminSettings({ initialTab = 'plans', pricingOnly = false, paymentMethodsOnly = false }: { initialTab?: Tab; pricingOnly?: boolean; paymentMethodsOnly?: boolean }) {
   const { profile } = useAuth()
   const canManagePlans = hasAdminPermission(profile, 'plans.manage')
-  const availableTabs: Tab[] = pricingOnly ? ['plans'] : [ ...(canManagePlans ? ['plans' as const] : []), 'methods', 'categories', 'templates' ]
+  const canManagePaymentMethods = hasAdminPermission(profile, 'payment_methods.manage')
+  const availableTabs: Tab[] = paymentMethodsOnly ? ['methods'] : pricingOnly ? ['plans'] : [ ...(canManagePlans ? ['plans' as const] : []), ...(canManagePaymentMethods ? ['methods' as const] : []), 'categories', 'templates' ]
   const [tab, setTab] = useState<Tab>(availableTabs.includes(initialTab) ? initialTab : availableTabs[0] ?? 'templates')
 
   return (
     <AdminLayout>
-      <h1 style={{ fontFamily: 'Outfit, sans-serif', fontSize: 24, fontWeight: 600, color: '#0A0C10', marginBottom: 4 }}>Settings</h1>
-      <p style={{ color: 'rgba(10,12,16,0.5)', fontSize: 14, marginBottom: 20 }}>{pricingOnly ? 'Manage live monthly, annual, and promotional pricing from one secure control surface.' : 'Configure pricing, payment methods, business verticals, and storefront templates.'}</p>
+      <h1 style={{ fontFamily: 'Outfit, sans-serif', fontSize: 24, fontWeight: 600, color: '#0A0C10', marginBottom: 4 }}>{paymentMethodsOnly ? 'Payment accounts' : 'Settings'}</h1>
+      <p style={{ color: 'rgba(10,12,16,0.5)', fontSize: 14, marginBottom: 20 }}>{paymentMethodsOnly ? 'Manage transfer accounts by currency. Owners see the account category matching their business currency.' : pricingOnly ? 'Manage live monthly, annual, and promotional pricing from one secure control surface.' : 'Configure pricing, business verticals, and storefront templates.'}</p>
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+      {!paymentMethodsOnly && <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
         {availableTabs.map(t => (
           <button
             key={t}
@@ -40,10 +42,10 @@ export default function AdminSettings({ initialTab = 'plans', pricingOnly = fals
             {t === 'methods' ? 'Payment methods' : t}
           </button>
         ))}
-      </div>
+      </div>}
 
       {tab === 'plans' && canManagePlans && <PlansTabV2 />}
-      {tab === 'methods' && <MethodsTab />}
+      {tab === 'methods' && canManagePaymentMethods && <MethodsTab />}
       {tab === 'categories' && <CategoriesTab />}
       {tab === 'templates' && <TemplatesTab />}
     </AdminLayout>
@@ -276,50 +278,134 @@ function PlansTabV2() {
 
 function MethodsTab() {
   const [methods, setMethods] = useState<PaymentMethod[]>([])
-  const [form, setForm] = useState({ name: '', accountName: '', accountNumber: '', instructions: '' })
+  const [form, setForm] = useState<PaymentMethodForm>(blankPaymentMethodForm())
   const [showForm, setShowForm] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
 
-  function load() { listPaymentMethods(false).then(setMethods) }
-  useEffect(load, [])
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      setMethods(await listPaymentMethods(false))
+      setError('')
+    } catch (err) {
+      setError(paymentMethodError(err))
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+  useEffect(() => { void load() }, [load])
 
-  async function handleCreate() {
-    if (!form.name || !form.accountNumber) return
-    await createPaymentMethod(form)
-    setForm({ name: '', accountName: '', accountNumber: '', instructions: '' })
-    setShowForm(false)
-    load()
+  function startNew() {
+    setEditingId(null)
+    setForm(blankPaymentMethodForm())
+    setError('')
+    setShowForm(true)
+  }
+
+  function startEdit(method: PaymentMethod) {
+    setEditingId(method.id)
+    setForm({ name: method.name, currency: method.currency, accountName: method.accountName, accountNumber: method.accountNumber, instructions: method.instructions })
+    setError('')
+    setShowForm(true)
+  }
+
+  async function handleSave() {
+    if (!form.name.trim() || !form.accountNumber.trim()) {
+      setError('Add a method name and account number before saving.')
+      return
+    }
+    setSaving(true)
+    setError('')
+    try {
+      const cleanForm = { ...form, name: form.name.trim(), accountName: form.accountName.trim(), accountNumber: form.accountNumber.trim(), instructions: form.instructions.trim() }
+      if (editingId) await updatePaymentMethod(editingId, cleanForm)
+      else await createPaymentMethod(cleanForm)
+      setShowForm(false)
+      setEditingId(null)
+      setForm(blankPaymentMethodForm())
+      await load()
+    } catch (err) {
+      setError(paymentMethodError(err))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function toggleActive(method: PaymentMethod) {
+    setError('')
+    try {
+      await updatePaymentMethod(method.id, { isActive: !method.isActive })
+      await load()
+    } catch (err) {
+      setError(paymentMethodError(err))
+    }
   }
 
   return (
     <div style={{ background: '#fff', borderRadius: 16, border: '1px solid rgba(10,12,16,0.06)', padding: 20 }}>
-      {methods.map(m => (
-        <div key={m.id} style={rowStyle}>
-          <div>
-            <div style={{ fontSize: 13.5, fontWeight: 600 }}>{m.name}</div>
-            <div style={{ fontSize: 12, color: 'rgba(10,12,16,0.45)' }}>{m.accountName} — {m.accountNumber}</div>
-          </div>
-          <ToggleActive active={m.isActive} onToggle={async () => { await updatePaymentMethod(m.id, { isActive: !m.isActive }); load() }} />
-        </div>
-      ))}
+      <div style={{ borderRadius: 11, padding: 12, background: '#F6F3EE', color: 'rgba(10,12,16,0.62)', fontSize: 12.5, lineHeight: 1.55, marginBottom: 14 }}>
+        Accounts are categorized by ETB, EUR, or USD. Owners see only the category selected in their business settings. Plan prices remain configured in ETB; foreign-currency transfers are reconciled during manual review.
+      </div>
+      {error && <div role="alert" style={adminError}>{error}</div>}
+      {loading ? <div style={{ color: 'rgba(10,12,16,0.5)', fontSize: 13 }}>Loading payment accounts…</div> : PAYMENT_CURRENCIES.map(currency => {
+        const currencyMethods = methods.filter(method => method.currency === currency)
+        return <section key={currency} style={{ marginTop: 16 }}>
+          <h2 style={{ fontSize: 14, margin: '0 0 4px', fontWeight: 700 }}>{currency} accounts</h2>
+          <div style={{ color: 'rgba(10,12,16,0.43)', fontSize: 11.5, marginBottom: 4 }}>{currencyMethods.length} configured</div>
+          {currencyMethods.length === 0 ? <div style={{ padding: '12px 4px', fontSize: 12.5, color: 'rgba(10,12,16,0.42)' }}>No {currency} accounts added yet.</div> : currencyMethods.map(method => (
+            <div key={method.id} style={rowStyle}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 600 }}>{method.name} <span style={{ fontSize: 10.5, marginLeft: 5, padding: '2px 6px', borderRadius: 99, background: 'rgba(212,168,83,0.16)', color: '#74530E' }}>{method.currency}</span></div>
+                <div style={{ fontSize: 12, color: 'rgba(10,12,16,0.45)', overflowWrap: 'anywhere' }}>{method.accountName} — {method.accountNumber}</div>
+                {method.instructions && <div style={{ fontSize: 11.5, color: 'rgba(10,12,16,0.42)', marginTop: 3 }}>{method.instructions}</div>}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0 }}>
+                <button type="button" onClick={() => startEdit(method)} style={iconButton} aria-label={`Edit ${method.name}`}><Pencil size={14} /></button>
+                <ToggleActive active={method.isActive} onToggle={() => void toggleActive(method)} />
+              </div>
+            </div>
+          ))}
+        </section>
+      })}
 
       {showForm ? (
         <div style={{ marginTop: 14, padding: 14, background: '#F6F3EE', borderRadius: 12 }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8, marginBottom: 8 }}>
             <input placeholder="Method name (e.g. Telebirr)" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} style={formInput} />
+            <select aria-label="Payment account currency" value={form.currency} onChange={e => setForm({ ...form, currency: e.target.value as PaymentCurrency })} style={formInput}>
+              <option value="ETB">ETB — Ethiopian birr</option>
+              <option value="EUR">EUR — Euro</option>
+              <option value="USD">USD — US dollar</option>
+            </select>
             <input placeholder="Account name" value={form.accountName} onChange={e => setForm({ ...form, accountName: e.target.value })} style={formInput} />
             <input placeholder="Account number" value={form.accountNumber} onChange={e => setForm({ ...form, accountNumber: e.target.value })} style={formInput} />
           </div>
           <input placeholder="Instructions for owners" value={form.instructions} onChange={e => setForm({ ...form, instructions: e.target.value })} style={{ ...formInput, width: '100%', marginBottom: 8 }} />
           <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={handleCreate} style={saveBtn}>Add method</button>
-            <button onClick={() => setShowForm(false)} style={cancelBtn}>Cancel</button>
+            <button type="button" onClick={() => void handleSave()} disabled={saving} style={{ ...saveBtn, opacity: saving ? 0.65 : 1 }}>{saving ? 'Saving…' : editingId ? 'Save changes' : 'Add payment method'}</button>
+            <button type="button" onClick={() => { setShowForm(false); setEditingId(null); setError('') }} disabled={saving} style={cancelBtn}>Cancel</button>
           </div>
         </div>
       ) : (
-        <button onClick={() => setShowForm(true)} style={addRowBtn}><Plus size={14} /> Add payment method</button>
+        <button type="button" onClick={startNew} style={addRowBtn}><Plus size={14} /> Add payment account</button>
       )}
     </div>
   )
+}
+
+type PaymentMethodForm = { name: string; currency: PaymentCurrency; accountName: string; accountNumber: string; instructions: string }
+
+function blankPaymentMethodForm(): PaymentMethodForm {
+  return { name: '', currency: 'ETB', accountName: '', accountNumber: '', instructions: '' }
+}
+
+function paymentMethodError(error: unknown): string {
+  const message = error && typeof error === 'object' && 'message' in error ? String(error.message) : ''
+  if (/column .*currency|currency.*(does not exist|schema cache)|could not find .*currency.*column/i.test(message)) return 'Currency categories need database migration 0064. Apply the migration, then reload this page.'
+  return friendlyError(error)
 }
 
 function CategoriesTab() {

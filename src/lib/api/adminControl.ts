@@ -4,7 +4,7 @@ import type { AdminRole, Profile } from '../../types'
 export const ADMIN_ROLES: Array<{ value: AdminRole; label: string; description: string }> = [
   { value: 'none', label: 'Business owner', description: 'Regular owner account with no admin access.' },
   { value: 'operations', label: 'Operations admin', description: 'Businesses, subscriptions, and payment review.' },
-  { value: 'finance', label: 'Finance admin', description: 'Payment review and billing visibility.' },
+  { value: 'finance', label: 'Finance admin', description: 'Payment review, pricing, and payment-account management.' },
   { value: 'support', label: 'Support admin', description: 'User support and platform assistance.' },
   { value: 'content', label: 'Content admin', description: 'Templates, categories, and announcements.' },
   { value: 'marketing_admin', label: 'Marketing admin', description: 'Marketing team, attributed customers, reminders, and commissions.' },
@@ -12,14 +12,14 @@ export const ADMIN_ROLES: Array<{ value: AdminRole; label: string; description: 
   { value: 'super_admin', label: 'Super administrator', description: 'Full platform control and audit access.' },
 ]
 
-export type AdminPermission = 'dashboard.read' | 'businesses.read' | 'businesses.manage' | 'payments.read' | 'payments.review' | 'plans.manage' | 'users.read' | 'templates.manage' | 'announcements.send' | 'support.read' | 'support.manage' | 'marketing.read' | 'marketing.manage' | 'marketing.referrals' | 'marketing.commissions' | 'marketing.reminders'
+export type AdminPermission = 'dashboard.read' | 'businesses.read' | 'businesses.manage' | 'payments.read' | 'payments.review' | 'payment_methods.manage' | 'plans.manage' | 'users.read' | 'templates.manage' | 'announcements.send' | 'support.read' | 'support.manage' | 'marketing.read' | 'marketing.manage' | 'marketing.referrals' | 'marketing.commissions' | 'marketing.reminders'
 
 export function hasAdminPermission(profile: Profile | null, permission: AdminPermission): boolean {
   if (!profile || (profile.role !== 'admin' && profile.role !== 'super_admin')) return false
   if (profile.role === 'super_admin' || profile.adminRole === 'super_admin') return true
   const matrix: Record<string, AdminPermission[]> = {
     operations: ['dashboard.read', 'businesses.read', 'businesses.manage', 'payments.read', 'payments.review', 'support.read', 'support.manage'],
-    finance: ['dashboard.read', 'payments.read', 'payments.review', 'plans.manage'],
+    finance: ['dashboard.read', 'payments.read', 'payments.review', 'payment_methods.manage', 'plans.manage'],
     support: ['dashboard.read', 'users.read', 'support.read', 'support.manage'],
     content: ['dashboard.read', 'templates.manage', 'announcements.send'],
     marketing_admin: ['dashboard.read', 'marketing.read', 'marketing.manage', 'marketing.referrals', 'marketing.commissions', 'marketing.reminders'],

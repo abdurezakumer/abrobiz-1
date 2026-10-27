@@ -1,4 +1,5 @@
 export type Language = 'en' | 'am' | 'or'
+export type PaymentCurrency = 'ETB' | 'EUR' | 'USD'
 export type TemplateSlug = string
 export type Role = 'admin' | 'super_admin' | 'owner'
 export type AdminRole = 'none' | 'super_admin' | 'operations' | 'support' | 'finance' | 'content' | 'marketing_admin' | 'sales_person'
@@ -193,6 +194,7 @@ export interface Plan {
 export interface PaymentMethod {
   id: string
   name: string
+  currency: PaymentCurrency
   accountName: string
   accountNumber: string
   instructions: string

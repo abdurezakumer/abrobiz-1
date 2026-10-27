@@ -1242,6 +1242,11 @@ async function handlePayCommand(chatId: string, ctx: Ctx): Promise<void> {
 
 // ── Callback (inline button) queries ────────────────────────────────────
 
+function normalizePaymentCurrency(value: unknown): 'ETB' | 'EUR' | 'USD' {
+  const currency = typeof value === 'string' ? value.trim().toUpperCase() : ''
+  return currency === 'EUR' || currency === 'USD' ? currency : 'ETB'
+}
+
 async function handlePhoto(chatId: string, msg: TelegramMessage, ctx: Ctx): Promise<void> {
   const photos = msg.photo ?? []
   const { data: pending } = await ctx.db.from('telegram_pending_actions').select('*').eq('telegram_chat_id', chatId).maybeSingle()
@@ -1256,8 +1261,8 @@ async function handlePhoto(chatId: string, msg: TelegramMessage, ctx: Ctx): Prom
     return
   }
   const { data: plan } = await ctx.db.from('plans').select('id, name').eq('id', pending.plan_id).eq('is_active', true).eq('is_trial', false).single()
-  const { data: method } = await ctx.db.from('payment_methods').select('id, name').eq('id', pending.payment_method_id).eq('is_active', true).maybeSingle()
-  const { data: business } = await ctx.db.from('businesses').select('id, name, slug, owner_id').eq('id', pending.business_id).maybeSingle()
+  const { data: method } = await ctx.db.from('payment_methods').select('id, name, currency').eq('id', pending.payment_method_id).eq('is_active', true).maybeSingle()
+  const { data: business } = await ctx.db.from('businesses').select('id, name, slug, owner_id, currency').eq('id', pending.business_id).maybeSingle()
   const { data: owner } = business?.owner_id
     ? await ctx.db.from('profiles').select('id, name, email, phone, platform_id').eq('id', business.owner_id).maybeSingle()
     : { data: null }
@@ -1265,6 +1270,11 @@ async function handlePhoto(chatId: string, msg: TelegramMessage, ctx: Ctx): Prom
   const amountEtb = Number(calculatedAmount)
   if (!plan || !method || !business || !owner || !Number.isFinite(amountEtb)) {
     await ctx.tg.sendMessage(chatId, "That plan isn't available anymore — send /pay to start over.")
+    return
+  }
+  if (normalizePaymentCurrency(method.currency) !== normalizePaymentCurrency(business.currency)) {
+    await ctx.db.from('telegram_pending_actions').delete().eq('telegram_chat_id', chatId)
+    await ctx.tg.sendMessage(chatId, 'Your business payment currency has changed. Send /pay to restart and choose the matching payment account.')
     return
   }
   const { data: existingPending } = await ctx.db.from('payments').select('id').eq('business_id', pending.business_id).eq('status', 'pending').maybeSingle()
@@ -1411,13 +1421,15 @@ async function handleCycleSelected(chatId: string, planId: string, cycle: string
     await ctx.tg.sendMessage(chatId, 'That plan is no longer available. Send /pay to choose another plan.')
     return
   }
-  await ctx.db.from('telegram_pending_actions').update({ billing_cycle: cycle, state: 'awaiting_method', updated_at: new Date().toISOString() }).eq('telegram_chat_id', chatId)
-  const { data: methods } = await ctx.db.from('payment_methods').select('id, name').eq('is_active', true).order('sort_order', { ascending: true })
+  const { data: business } = await ctx.db.from('businesses').select('currency').eq('id', pending.business_id).maybeSingle()
+  const currency = normalizePaymentCurrency(business?.currency)
+  const { data: methods } = await ctx.db.from('payment_methods').select('id, name, currency').eq('is_active', true).eq('currency', currency).order('sort_order', { ascending: true })
   if (!methods || methods.length === 0) {
-    await ctx.tg.sendMessage(chatId, 'No payment methods are configured yet — please contact /support.')
+    await ctx.tg.sendMessage(chatId, `No ${currency} payment accounts are configured yet — please contact /support.`)
     return
   }
-  await ctx.tg.sendMessage(chatId, `Plan selected: ${plan.name} — ${Number(calculatedAmount)} ETB/${cycle}. How are you paying?`, {
+  await ctx.db.from('telegram_pending_actions').update({ billing_cycle: cycle, state: 'awaiting_method', updated_at: new Date().toISOString() }).eq('telegram_chat_id', chatId)
+  await ctx.tg.sendMessage(chatId, `Plan selected: ${plan.name} — ${Number(calculatedAmount)} ETB/${cycle}. Choose a ${currency} payment account:`, {
     replyMarkup: buildInlineKeyboard(methods.map(method => [{ text: method.name, callback_data: `pay_method:${method.id}` }])),
   })
 }
@@ -1428,7 +1440,9 @@ async function handleMethodSelected(chatId: string, methodId: string, ctx: Ctx):
     await ctx.tg.sendMessage(chatId, 'This payment session has expired. Send /pay to start again.')
     return
   }
-  const { data: method } = await ctx.db.from('payment_methods').select('id, name, account_name, account_number, instructions').eq('id', methodId).eq('is_active', true).maybeSingle()
+  const { data: business } = await ctx.db.from('businesses').select('currency').eq('id', pending.business_id).maybeSingle()
+  const currency = normalizePaymentCurrency(business?.currency)
+  const { data: method } = await ctx.db.from('payment_methods').select('id, name, currency, account_name, account_number, instructions').eq('id', methodId).eq('currency', currency).eq('is_active', true).maybeSingle()
   const { data: plan } = await ctx.db.from('plans').select('name, price_etb, billing_interval').eq('id', pending.plan_id).eq('is_active', true).eq('is_trial', false).maybeSingle()
   const { data: calculatedAmount } = plan ? await ctx.db.rpc('plan_price_for_cycle', { p_plan_id: pending.plan_id, p_billing_cycle: pending.billing_cycle }) : { data: null }
   if (!method || !plan || !Number.isFinite(Number(calculatedAmount))) {
@@ -1440,6 +1454,7 @@ async function handleMethodSelected(chatId: string, methodId: string, ctx: Ctx):
     `Send payment via ${method.name}:`,
     `${method.account_name} — ${method.account_number}`,
     `Full payment required: ${Number(calculatedAmount)} ETB/${pending.billing_cycle}`,
+    currency !== 'ETB' ? `Plan prices are recorded in ETB. Confirm the ${currency} equivalent with AbroBiz before paying.` : '',
     method.instructions,
     '',
     'Then send one clear photo of your receipt here. Use /cancel to stop.',
