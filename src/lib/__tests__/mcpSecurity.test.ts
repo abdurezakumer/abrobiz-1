@@ -11,6 +11,7 @@ describe('AbroBiz MCP security primitives', () => {
 
   it('keeps MCP write access separate from read access', () => {
     expect(hasMcpScope({ scopes: ['mcp:read'] }, 'mcp:read')).toBe(true)
+    expect(hasMcpScope({ scopes: ['mcp:tools'] }, 'mcp:read')).toBe(true)
     expect(hasMcpScope({ scopes: ['mcp:read'] }, 'mcp:drafts:write')).toBe(false)
     expect(hasMcpScope({ scopes: ['mcp:read', 'mcp:drafts:write'] }, 'mcp:drafts:write')).toBe(true)
   })

@@ -20,7 +20,8 @@ export default function MarketingPolicy() {
     try {
       await recordMarketingPolicyAcceptance()
       await refreshProfile()
-      const from = safeInternalPath((location.state as { from?: { pathname?: string } } | null)?.from?.pathname, '/admin/marketing')
+      const requested = (location.state as { from?: { pathname?: string; search?: string; hash?: string } } | null)?.from
+      const from = safeInternalPath(requested ? `${requested.pathname ?? ''}${requested.search ?? ''}${requested.hash ?? ''}` : null, '/admin/marketing')
       navigate(from, { replace: true })
     } catch { setError('We could not save your policy acceptance. Please try again.') } finally { setLoading(false) }
   }

@@ -24,7 +24,8 @@ export default function LegalAcceptance() {
     setLoading(true)
     try {
       await recordLegalAcceptance()
-      const from = safeInternalPath((location.state as { from?: { pathname?: string } } | null)?.from?.pathname, '/setup')
+      const requested = (location.state as { from?: { pathname?: string; search?: string; hash?: string } } | null)?.from
+      const from = safeInternalPath(requested ? `${requested.pathname ?? ''}${requested.search ?? ''}${requested.hash ?? ''}` : null, '/setup')
       // Guards read consent from AuthProvider. Refresh only the profile before
       // navigating. If that follow-up read is temporarily unavailable, a
       // reload still starts with the committed database value and avoids

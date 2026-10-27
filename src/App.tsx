@@ -15,6 +15,7 @@ import { isBusinessSubdomain } from './lib/storefrontUrl'
 
 const Register = lazy(() => import('./pages/Register'))
 const Login = lazy(() => import('./pages/Login'))
+const OAuthConsent = lazy(() => import('./pages/OAuthConsent'))
 const VerifyEmail = lazy(() => import('./pages/VerifyEmail'))
 const ResetPassword = lazy(() => import('./pages/ResetPassword'))
 const LegalAcceptance = lazy(() => import('./pages/LegalAcceptance'))
@@ -101,6 +102,7 @@ export default function App() {
         <Route path="/security/mfa" element={<RequireAuth><MfaSetup /></RequireAuth>} />
         <Route path="/security/account" element={<RequireAuth><AccountSecurity /></RequireAuth>} />
         <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/oauth/consent" element={<OAuthConsent />} />
         <Route path="/terms" element={<Terms />} />
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/demo/restaurant-cafe" element={<TemplateDemo />} />

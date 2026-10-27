@@ -35,7 +35,8 @@ export default function Login() {
       return
     }
     setLoading(true)
-    const from = safeInternalPath((location.state as { from?: { pathname?: string } })?.from?.pathname, '/dashboard')
+    const stateFrom = (location.state as { from?: { pathname?: string; search?: string; hash?: string } })?.from
+    const from = safeInternalPath(stateFrom ? `${stateFrom.pathname ?? ''}${stateFrom.search ?? ''}${stateFrom.hash ?? ''}` : null, '/dashboard')
     try {
       await signIn(email, password, turnstileToken)
       navigate(from, { replace: true })
@@ -47,6 +48,9 @@ export default function Login() {
       setLoading(false)
     }
   }
+
+  const googleSuccessFrom = (location.state as { from?: { pathname?: string; search?: string; hash?: string } })?.from
+  const googleSuccessPath = safeInternalPath(googleSuccessFrom ? `${googleSuccessFrom.pathname ?? ''}${googleSuccessFrom.search ?? ''}${googleSuccessFrom.hash ?? ''}` : null, '/dashboard')
 
   async function handleForgotPassword() {
     if (!email) {
@@ -141,7 +145,7 @@ export default function Login() {
             <span style={{ fontSize: 12, color: 'rgba(240,237,231,0.35)' }}>or</span>
             <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.08)' }} />
           </div>
-          <GoogleSignInButton onError={setError} />
+          <GoogleSignInButton onError={setError} onSuccess={() => navigate(googleSuccessPath, { replace: true })} />
 
           <p style={{ textAlign: 'center', color: 'rgba(240,237,231,0.45)', fontSize: 13.5, marginTop: 22 }}>
             Don't have an account?{' '}

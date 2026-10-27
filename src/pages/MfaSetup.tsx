@@ -1,15 +1,19 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { ArrowLeft, ShieldCheck } from 'lucide-react'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../lib/authContext'
+import { safeInternalPath } from '../lib/safeUrl'
 
 type Factor = { id: string; status?: string; factor_type?: string; friendly_name?: string }
 type Enrollment = { id: string; totp?: { qr_code?: string; secret?: string; uri?: string } }
 
 export default function MfaSetup() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { profile, signOut } = useAuth()
+  const requested = (location.state as { from?: { pathname?: string; search?: string; hash?: string } } | null)?.from
+  const continuePath = safeInternalPath(requested ? `${requested.pathname ?? ''}${requested.search ?? ''}${requested.hash ?? ''}` : null, '/admin')
   const [factor, setFactor] = useState<Factor | null>(null)
   const [enrollment, setEnrollment] = useState<Enrollment | null>(null)
   const [challengeId, setChallengeId] = useState('')
@@ -57,7 +61,7 @@ export default function MfaSetup() {
     }
     const { error: verifyError } = await supabase.auth.mfa.verify({ factorId: target.id, challengeId: activeChallenge, code })
     if (verifyError) setError('That authenticator code is invalid or expired.')
-    else navigate('/admin', { replace: true })
+    else navigate(continuePath, { replace: true })
     setBusy(false)
   }
 

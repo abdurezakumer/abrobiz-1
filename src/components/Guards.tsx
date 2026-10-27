@@ -45,8 +45,11 @@ export function RequireGuest({ children }: { children: ReactNode }) {
   const location = useLocation()
   if (loading) return <FullScreenSpinner />
   if (session && profile) {
-    if (!profile.emailVerifiedAt) return <Navigate to={'/verify-email?email=' + encodeURIComponent(session.user.email ?? '')} state={{ from: { pathname: safeInternalPath(location.pathname) } }} replace />
-    if (!profile.termsAcceptedAt || !profile.privacyAcceptedAt || profile.legalVersion !== '2026-01') return <Navigate to="/legal-acceptance" replace />
+    const requested = (location.state as { from?: { pathname?: string; search?: string; hash?: string } })?.from
+    const returnTo = requested ? safeInternalPath(`${requested.pathname ?? ''}${requested.search ?? ''}${requested.hash ?? ''}`, '') : ''
+    if (!profile.emailVerifiedAt) return <Navigate to={'/verify-email?email=' + encodeURIComponent(session.user.email ?? '')} state={{ from: requested ?? { pathname: safeInternalPath(location.pathname) } }} replace />
+    if (!profile.termsAcceptedAt || !profile.privacyAcceptedAt || profile.legalVersion !== '2026-01') return <Navigate to="/legal-acceptance" state={{ from: requested }} replace />
+    if (returnTo) return <Navigate to={returnTo} replace />
     if (profile.role === 'admin' || profile.role === 'super_admin') return <Navigate to="/admin" replace />
     if (business) return <Navigate to="/dashboard" replace />
     return <Navigate to="/setup" replace />

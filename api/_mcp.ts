@@ -57,7 +57,7 @@ export function isUuid(value: unknown): value is string {
 }
 
 export function hasMcpScope(principal: Pick<McpPrincipal, 'scopes'>, scope: string): boolean {
-  return principal.scopes.includes(scope)
+  return principal.scopes.includes(scope) || (scope === 'mcp:read' && principal.scopes.includes('mcp:tools'))
 }
 
 export function hasMcpPermission(principal: Pick<McpPrincipal, 'role' | 'adminRole'>, permission: string): boolean {

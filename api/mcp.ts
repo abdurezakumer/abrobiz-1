@@ -301,7 +301,9 @@ export default async function handler(req: any, res: any) {
   try {
     principal = await withMcpTimeout(authenticateMcpRequest(request))
     if (!principal) {
-      json(res, 401, { error: 'Authentication required' }, { 'WWW-Authenticate': 'Bearer realm="AbroBiz MCP"' })
+      json(res, 401, { error: 'Authentication required' }, {
+        'WWW-Authenticate': 'Bearer realm="AbroBiz MCP", resource_metadata="https://abrobiz.com/.well-known/oauth-protected-resource/api/mcp"',
+      })
       return
     }
     await withMcpTimeout(consumeMcpRateLimit(principal))

@@ -146,10 +146,20 @@ export default function AccountSecurity() {
         <div style={mcpPanel}>
           <div style={mcpTitleRow}><span style={mcpIcon}><Bot size={20} /></span><div><h2 style={subheading}>Claude via AbroBiz MCP</h2><p style={copy}>Connect Claude to authorized AbroBiz data and marketing drafts without exposing your Supabase credentials.</p></div></div>
           <div role="note" style={mcpNotice}>Connections are read-scoped with draft-only writing. Publishing, approval, billing, deletion, and external messages still require the existing AbroBiz human workflow.</div>
+          <div style={tokenBox}>
+            <strong>Recommended: secure AbroBiz sign-in</strong>
+            <p style={copy}>In Claude, add a custom connector with this MCP URL. Choose <strong>Sign in now</strong> and OAuth client <strong>Register automatically</strong>. Claude will open AbroBiz so you can sign in and approve the exact permissions.</p>
+            <div style={tokenRow}><code style={tokenCode}>{`${SITE_URL}/api/mcp`}</code><button type="button" onClick={() => void copyValue(`${SITE_URL}/api/mcp`)} style={copyButton} aria-label="Copy AbroBiz MCP URL"><Copy size={15} /> Copy URL</button></div>
+            <p style={copy}>No bearer header or Supabase project URL is needed. You can revoke Claude’s access from this page at any time.</p>
+          </div>
           {mcpLoading ? <p style={copy}>Loading Claude connections…</p> : mcpError && !mcpTokens.length ? <p role="status" style={mutedError}>{mcpError}</p> : <>
-            <label style={label}>Connection name<input value={mcpName} onChange={event => setMcpName(event.target.value)} maxLength={80} style={input} disabled={mcpBusy || needsMfaStepUp} /></label>
-            <button type="button" onClick={() => void createConnectionToken()} disabled={mcpBusy || needsMfaStepUp} style={primary}>{mcpBusy ? 'Creating…' : 'Create Claude connection'}</button>
-            {mcpToken && <div style={tokenBox}><strong>Copy the token now</strong><p style={copy}>This is the only time the plaintext token is displayed.</p><div style={tokenRow}><code style={tokenCode}>{mcpToken.token}</code><button type="button" onClick={() => void copyValue(mcpToken.token)} style={copyButton} aria-label="Copy MCP token"><Copy size={15} /> Copy</button></div><p style={copy}>Endpoint: <code>{`${SITE_URL}/api/mcp`}</code></p><p style={copy}>In Claude: Settings → Connectors → Add custom connector → use the endpoint and request header <code>Authorization: Bearer {mcpToken.token}</code>.</p></div>}
+            <details style={{ marginTop: 18 }}>
+              <summary style={{ cursor: 'pointer', color: '#C7B990', fontSize: 13 }}>Advanced: create a manual bearer token (legacy clients)</summary>
+              <p style={copy}>Use this only for MCP clients that do not support OAuth. Treat the token like a password; it is shown once and can be revoked below.</p>
+              <label style={label}>Connection name<input value={mcpName} onChange={event => setMcpName(event.target.value)} maxLength={80} style={input} disabled={mcpBusy || needsMfaStepUp} /></label>
+              <button type="button" onClick={() => void createConnectionToken()} disabled={mcpBusy || needsMfaStepUp} style={primary}>{mcpBusy ? 'Creating…' : 'Create manual token'}</button>
+              {mcpToken && <div style={tokenBox}><strong>Copy the token now</strong><p style={copy}>This is the only time the plaintext token is displayed.</p><div style={tokenRow}><code style={tokenCode}>{mcpToken.token}</code><button type="button" onClick={() => void copyValue(mcpToken.token)} style={copyButton} aria-label="Copy MCP token"><Copy size={15} /> Copy</button></div><p style={copy}>Endpoint: <code>{`${SITE_URL}/api/mcp`}</code></p><p style={copy}>Legacy request header: <code>Authorization: Bearer {mcpToken.token}</code>.</p></div>}
+            </details>
             <div style={tokenList}>{mcpTokens.map(token => { const expired = new Date(token.expires_at).getTime() <= now; return <div key={token.id} style={tokenItem}><div style={{ flex: 1 }}><strong>{token.name}</strong><div style={tokenMeta}><code>{token.token_prefix}…</code> · expires {new Date(token.expires_at).toLocaleDateString()}</div></div><span style={{ ...status, color: token.revoked_at || expired ? '#8A3A3A' : '#217346', background: token.revoked_at || expired ? '#FBECEC' : '#EAF7EF' }}>{token.revoked_at ? 'Revoked' : expired ? 'Expired' : 'Active'}</span>{!token.revoked_at && <button type="button" onClick={() => void revokeConnection(token.id)} disabled={mcpBusy || needsMfaStepUp} style={revokeButton}><Ban size={14} /> Revoke</button>}</div> })}</div>
           </>}
           {mcpMessage && <p role="status" style={success}><Check size={15} /> {mcpMessage}</p>}

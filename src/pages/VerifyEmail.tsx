@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { ArrowLeft, CheckCircle2, Loader2 } from 'lucide-react'
 import { resendVerificationOtp, verifySignupOtp } from '../lib/api/emailVerification'
@@ -8,10 +8,12 @@ import { friendlyAuthError } from '../lib/authActions'
 import TurnstileWidget from '../components/TurnstileWidget'
 import { turnstileEnabled } from '../lib/turnstile'
 import { useAuth } from '../lib/authContext'
+import { safeInternalPath } from '../lib/safeUrl'
 
 export default function VerifyEmail() {
   const [params] = useSearchParams()
   const navigate = useNavigate()
+  const location = useLocation()
   const otpLength = 6
   const [email, setEmail] = useState(params.get('email') ?? '')
   const [code, setCode] = useState(() => Array.from({ length: otpLength }, () => ''))
@@ -24,6 +26,8 @@ export default function VerifyEmail() {
   const [turnstileResetKey, setTurnstileResetKey] = useState(0)
   const inputs = useRef<Array<HTMLInputElement | null>>([])
   const { refreshProfile } = useAuth()
+  const requested = (location.state as { from?: { pathname?: string; search?: string; hash?: string } } | null)?.from
+  const continuePath = safeInternalPath(requested ? `${requested.pathname ?? ''}${requested.search ?? ''}${requested.hash ?? ''}` : null, '/setup')
 
   useEffect(() => {
     if (cooldown <= 0) return
@@ -74,7 +78,7 @@ export default function VerifyEmail() {
         // session in place and let the legal page retry the acceptance RPC
         // instead of making the user enter a now-consumed OTP again.
         await refreshProfile().catch(() => undefined)
-        navigate('/legal-acceptance', { replace: true })
+        navigate('/legal-acceptance', { replace: true, state: { from: requested } })
         return
       }
       await refreshProfile()
@@ -116,7 +120,7 @@ export default function VerifyEmail() {
             <h1 style={headingStyle}>Email verified</h1>
             <p style={mutedStyle}>Your AbroBiz account is ready. After verification, connect one Telegram account from Billing (business owners) or the Admin Telegram workspace to receive secure updates and support messages.</p>
             <div style={telegramPrompt}>Telegram is optional, protected by a one-account connection limit, and can be disconnected anytime.</div>
-            <button onClick={() => navigate('/setup', { replace: true })} style={submitStyle}>Continue to setup</button>
+            <button onClick={() => navigate(continuePath, { replace: true })} style={submitStyle}>Continue to AbroBiz</button>
           </div>
         ) : (
           <>
