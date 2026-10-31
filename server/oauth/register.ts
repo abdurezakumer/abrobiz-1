@@ -1,7 +1,7 @@
 /* OAuth 2.1 Dynamic Client Registration endpoint for MCP clients. */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { enforceOAuthRateLimit, oauthAdminClient, preflight, readRequestBody, requestHostAllowed, sendJson, validRedirectUri } from '../../api/_mcpOAuth'
+import { enforceOAuthRateLimit, oauthAdminClient, preflight, readRequestBody, requestHostAllowed, sendJson, validRedirectUri } from '../../api/_mcpOAuth.js'
 
 export default async function handler(req: any, res: any) {
   if (!requestHostAllowed(req)) return sendJson(res, 400, { error: 'invalid_request' })

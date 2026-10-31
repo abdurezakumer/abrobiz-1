@@ -25,7 +25,7 @@ import {
   type McpPrincipal,
   type McpRequest,
   validateDraftContent,
-} from './_mcp'
+} from './_mcp.js'
 
 const MAX_BODY = 64 * 1024
 const serverInfo = { name: 'AbroBiz MCP', version: '1.0.0' }

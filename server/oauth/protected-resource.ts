@@ -1,6 +1,6 @@
 /* RFC 9728 protected-resource metadata for the AbroBiz MCP endpoint. */
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { appOrigin, oauthResource, preflight, requestHostAllowed, sendJson } from '../../api/_mcpOAuth'
+import { appOrigin, oauthResource, preflight, requestHostAllowed, sendJson } from '../../api/_mcpOAuth.js'
 
 export default function handler(req: any, res: any) {
   if (!requestHostAllowed(req)) return sendJson(res, 400, { error: 'invalid_request' })

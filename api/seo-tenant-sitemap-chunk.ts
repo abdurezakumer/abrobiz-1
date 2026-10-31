@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { PLATFORM_DOMAIN, send, supabaseRpc, xmlEscape } from './_seo'
+import { PLATFORM_DOMAIN, send, supabaseRpc, xmlEscape } from './_seo.js'
 
 const CHUNK_SIZE = 1000
 

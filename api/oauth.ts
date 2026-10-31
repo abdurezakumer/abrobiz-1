@@ -1,13 +1,13 @@
 /* Dispatch the AbroBiz MCP OAuth endpoints through one Vercel function. */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import authorizationServer from '../server/oauth/authorization-server'
-import protectedResource from '../server/oauth/protected-resource'
-import authorizeResource from '../server/oauth/authorize-resource'
-import authorizeInfo from '../server/oauth/authorize-info'
-import register from '../server/oauth/register'
-import authorize from '../server/oauth/authorize'
-import token from '../server/oauth/token'
+import authorizationServer from '../server/oauth/authorization-server.js'
+import protectedResource from '../server/oauth/protected-resource.js'
+import authorizeResource from '../server/oauth/authorize-resource.js'
+import authorizeInfo from '../server/oauth/authorize-info.js'
+import register from '../server/oauth/register.js'
+import authorize from '../server/oauth/authorize.js'
+import token from '../server/oauth/token.js'
 
 const routes: Record<string, (req: any, res: any) => unknown> = {
   'authorization-server': authorizationServer,

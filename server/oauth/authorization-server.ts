@@ -1,6 +1,6 @@
 /* RFC 8414 authorization-server metadata used by MCP OAuth discovery. */
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { appOrigin, preflight, requestHostAllowed, sendJson } from '../../api/_mcpOAuth'
+import { appOrigin, preflight, requestHostAllowed, sendJson } from '../../api/_mcpOAuth.js'
 
 export default function handler(req: any, res: any) {
   if (!requestHostAllowed(req)) return sendJson(res, 400, { error: 'invalid_request' })

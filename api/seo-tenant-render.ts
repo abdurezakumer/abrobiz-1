@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { canonical, descriptionFor, htmlEscape, imageFor, jsonForHtml, publicBusinessForRequest, schemaFor, send, tenantSlugOf, titleFor } from './_seo'
+import { canonical, descriptionFor, htmlEscape, imageFor, jsonForHtml, publicBusinessForRequest, schemaFor, send, tenantSlugOf, titleFor } from './_seo.js'
 
 export default async function handler(req: any, res: any) {
   const slug = tenantSlugOf(req)

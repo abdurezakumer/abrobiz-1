@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { canonical, publicBusinessForRequest, send, tenantSlugOf } from './_seo'
+import { canonical, publicBusinessForRequest, send, tenantSlugOf } from './_seo.js'
 
 export default async function handler(req: any, res: any) {
   if (!tenantSlugOf(req)) return send(res, 404, 'text/plain; charset=utf-8', 'User-agent: *\nDisallow: /\n')

@@ -1,7 +1,7 @@
 /* Consent-screen validation endpoint. Does not issue credentials. */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { oauthAdminClient, preflight, requestHostAllowed, requestUrl, sendJson, resolveAuthorizationRequest } from '../../api/_mcpOAuth'
+import { oauthAdminClient, preflight, requestHostAllowed, requestUrl, sendJson, resolveAuthorizationRequest } from '../../api/_mcpOAuth.js'
 
 export default async function handler(req: any, res: any) {
   if (!requestHostAllowed(req)) return sendJson(res, 400, { error: 'invalid_request' })

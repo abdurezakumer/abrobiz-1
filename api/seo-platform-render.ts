@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { PLATFORM_DOMAIN, SITE_URL, htmlEscape, send } from './_seo'
+import { PLATFORM_DOMAIN, SITE_URL, htmlEscape, send } from './_seo.js'
 
 const pages: Record<string, { title: string; description: string }> = {
   '/about': { title: 'About AbroBiz — Bring your business online', description: 'Learn how AbroBiz helps businesses create, customize, and publish digital storefronts.' },
