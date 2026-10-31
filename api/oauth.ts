@@ -1,13 +1,13 @@
-/* One Vercel function dispatches the OAuth protocol's existing endpoint handlers. */
+/* Dispatch the AbroBiz MCP OAuth endpoints through one Vercel function. */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import authorizationServer from '../../server/oauth/authorization-server'
-import protectedResource from '../../server/oauth/protected-resource'
-import authorizeResource from '../../server/oauth/authorize-resource'
-import authorizeInfo from '../../server/oauth/authorize-info'
-import register from '../../server/oauth/register'
-import authorize from '../../server/oauth/authorize'
-import token from '../../server/oauth/token'
+import authorizationServer from '../server/oauth/authorization-server'
+import protectedResource from '../server/oauth/protected-resource'
+import authorizeResource from '../server/oauth/authorize-resource'
+import authorizeInfo from '../server/oauth/authorize-info'
+import register from '../server/oauth/register'
+import authorize from '../server/oauth/authorize'
+import token from '../server/oauth/token'
 
 const routes: Record<string, (req: any, res: any) => unknown> = {
   'authorization-server': authorizationServer,
@@ -20,8 +20,7 @@ const routes: Record<string, (req: any, res: any) => unknown> = {
 }
 
 export default function handler(req: any, res: any) {
-  const routeParam = req.query?.action
-  const route = Array.isArray(routeParam) ? routeParam.join('/') : routeParam
+  const route = req.query?.action
   const endpoint = typeof route === 'string' ? routes[route] : undefined
   if (endpoint) return endpoint(req, res)
 

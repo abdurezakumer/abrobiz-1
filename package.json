@@ -2,6 +2,9 @@
   "name": "restaurantdigi",
   "private": true,
   "version": "1.0.0",
+  "engines": {
+    "node": "22.x"
+  },
   "type": "module",
   "overrides": {
     "source-map-js": "^1.2.2",
