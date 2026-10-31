@@ -22,8 +22,10 @@ Registration, short-lived access tokens, and rotating refresh tokens.
    review the requested permissions, and approve them.
 6. Verify with `get_integration_status`, then `list_my_businesses`.
 
-No Supabase URL, project ID, API key, or request header is needed. Discovery
-documents are available at:
+No Supabase URL, project ID, API key, or request header is needed. Vercel
+reserves `/.well-known/` and does not allow rewrites there, so discovery
+metadata is published as static JSON assets under `public/.well-known/`.
+The required discovery URLs are:
 
 - `https://abrobiz.com/.well-known/oauth-authorization-server`
 - `https://abrobiz.com/.well-known/oauth-protected-resource/api/mcp`
@@ -66,7 +68,6 @@ SUPABASE_URL=https://YOUR_PROJECT.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=YOUR_SERVER_ONLY_SERVICE_ROLE_KEY
 APP_ENV=production
 SITE_URL=https://abrobiz.com
-MCP_BASE_URL=https://abrobiz.com/api/mcp
 MCP_ALLOWED_HOSTS=abrobiz.com,www.abrobiz.com
 ```
 
