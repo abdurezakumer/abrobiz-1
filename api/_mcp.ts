@@ -28,6 +28,7 @@ export type McpPrincipal = {
 export class McpConfigurationError extends Error {}
 export class McpRateLimitError extends Error {}
 export class McpAuthorizationError extends Error {}
+export class McpApprovalRequiredError extends Error {}
 export const MCP_REQUEST_TIMEOUT_MS = 15_000
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -63,6 +64,14 @@ export function hasMcpScope(principal: Pick<McpPrincipal, 'scopes'>, scope: stri
 export function hasMcpPermission(principal: Pick<McpPrincipal, 'role' | 'adminRole'>, permission: string): boolean {
   if (principal.role === 'super_admin' || principal.adminRole === 'super_admin') return true
   return principal.role === 'admin' && (MCP_PERMISSIONS[principal.adminRole] ?? []).includes(permission)
+}
+
+export function isSuperAdmin(principal: Pick<McpPrincipal, 'role' | 'adminRole'>): boolean {
+  return principal.role === 'super_admin' || principal.adminRole === 'super_admin'
+}
+
+export function isSalesPerson(principal: Pick<McpPrincipal, 'role' | 'adminRole'>): boolean {
+  return principal.role === 'admin' && principal.adminRole === 'sales_person'
 }
 
 export async function withMcpTimeout<T>(promise: Promise<T>, timeoutMs = MCP_REQUEST_TIMEOUT_MS): Promise<T> {
@@ -144,6 +153,17 @@ export async function authenticateMcpRequest(req: McpRequest): Promise<McpPrinci
   if (profileError) throw new McpConfigurationError('MCP authentication is unavailable')
   if (!profile) return null
 
+  const superAdmin = profile.role === 'super_admin' || profile.admin_role === 'super_admin'
+  if (!superAdmin) {
+    const { data: approval, error: approvalError } = await db
+      .from('mcp_access_approvals')
+      .select('status')
+      .eq('user_id', profile.id)
+      .maybeSingle()
+    if (approvalError) throw new McpConfigurationError('MCP approval status is unavailable')
+    if (approval?.status !== 'approved') throw new McpApprovalRequiredError('Super administrator approval is required')
+  }
+
   const lastUsed = tokenRow.last_used_at ? Date.parse(tokenRow.last_used_at) : 0
   if (!lastUsed || Date.now() - lastUsed > 5 * 60 * 1000) {
     void db.from('mcp_access_tokens').update({ last_used_at: new Date().toISOString() }).eq('id', tokenRow.id)
@@ -215,6 +235,7 @@ export async function getAuthorizedBusiness(
   principal: McpPrincipal,
   businessId: string,
 ): Promise<any | null> {
+  if (isSalesPerson(principal)) return null
   if (!isUuid(businessId)) return null
   const { data: business, error } = await principal.db
     .from('businesses')
@@ -247,6 +268,7 @@ export async function getAuthorizedBusiness(
 }
 
 export async function listAuthorizedBusinesses(principal: McpPrincipal, limit = 100): Promise<any[]> {
+  if (isSalesPerson(principal)) return []
   const cappedLimit = Math.min(Math.max(limit, 1), 100)
   if (principal.role === 'owner' || principal.adminRole === 'none') {
     const { data } = await principal.db

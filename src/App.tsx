@@ -41,6 +41,7 @@ const AdminUsers = lazy(() => import('./pages/admin/AdminUsers'))
 const AdminTelegram = lazy(() => import('./pages/admin/AdminTelegram'))
 const AdminMarketing = lazy(() => import('./pages/admin/AdminMarketing'))
 const AdminManagement = lazy(() => import('./pages/admin/AdminManagement'))
+const AdminMcpAccess = lazy(() => import('./pages/admin/AdminMcpAccess'))
 const AdminAudit = lazy(() => import('./pages/admin/AdminAudit'))
 const MfaSetup = lazy(() => import('./pages/MfaSetup'))
 const AccountSecurity = lazy(() => import('./pages/AccountSecurity'))
@@ -142,6 +143,7 @@ export default function App() {
         <Route path="/admin/announcements" element={<RequireAdminPermission permission="announcements.send"><AdminAnnouncements /></RequireAdminPermission>} />
         <Route path="/admin/support" element={<RequireAdminPermission permission="support.manage"><AdminSupport /></RequireAdminPermission>} />
         <Route path="/admin/management" element={<RequireSuperAdmin><AdminManagement /></RequireSuperAdmin>} />
+        <Route path="/admin/mcp-access" element={<RequireSuperAdmin><AdminMcpAccess /></RequireSuperAdmin>} />
         <Route path="/admin/audit" element={<RequireSuperAdmin><AdminAudit /></RequireSuperAdmin>} />
 
         <Route path="*" element={<HostNotFound />} />

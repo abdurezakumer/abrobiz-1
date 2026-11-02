@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../lib/authContext'
 import { validatePassword } from '../lib/passwordPolicy'
-import { createMcpToken, listMcpTokens, revokeMcpToken, type CreatedMcpToken, type McpToken } from '../lib/api/mcp'
+import { createMcpToken, getMcpAccessStatus, listMcpTokens, requestMcpAccess, revokeMcpToken, type CreatedMcpToken, type McpAccessStatus, type McpToken } from '../lib/api/mcp'
 
 type Identity = { provider?: string }
 
@@ -21,6 +21,7 @@ export default function AccountSecurity() {
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [mcpTokens, setMcpTokens] = useState<McpToken[]>([])
+  const [mcpAccessStatus, setMcpAccessStatus] = useState<McpAccessStatus | null>(null)
   const [mcpToken, setMcpToken] = useState<CreatedMcpToken | null>(null)
   const [mcpName, setMcpName] = useState('Claude AbroBiz connection')
   const [mcpLoading, setMcpLoading] = useState(true)
@@ -38,7 +39,9 @@ export default function AccountSecurity() {
 
   async function loadMcpTokens() {
     try {
-      setMcpTokens(await listMcpTokens())
+      const [status, tokens] = await Promise.all([getMcpAccessStatus(), listMcpTokens()])
+      setMcpAccessStatus(status)
+      setMcpTokens(tokens)
       setMcpError('')
     } catch {
       // The panel remains non-blocking while migration 0063 is being rolled
@@ -47,6 +50,17 @@ export default function AccountSecurity() {
     } finally {
       setMcpLoading(false)
     }
+  }
+
+  async function requestConnectionApproval() {
+    setMcpBusy(true); setMcpMessage(''); setMcpError('')
+    try {
+      const status = await requestMcpAccess()
+      setMcpAccessStatus(status)
+      setMcpMessage(status === 'approved' ? 'MCP access is approved.' : 'Your request was sent to the AbroBiz super administrator for review.')
+    } catch {
+      setMcpError('We could not send your MCP access request. Please try again.')
+    } finally { setMcpBusy(false) }
   }
 
   useEffect(() => { void loadIdentities(); void loadMcpTokens() }, [])
@@ -85,6 +99,7 @@ export default function AccountSecurity() {
 
   async function createConnectionToken() {
     setMcpMessage(''); setMcpError(''); setMcpToken(null)
+    if (mcpAccessStatus !== 'approved') { setMcpError('A super administrator must approve MCP access before creating a connection.'); return }
     if (mcpName.trim().length < 1 || mcpName.trim().length > 80) { setMcpError('Give this connection a name between 1 and 80 characters.'); return }
     setMcpBusy(true)
     try {
@@ -116,6 +131,7 @@ export default function AccountSecurity() {
   const hasEmail = identities.some(identity => identity.provider === 'email')
   const privileged = profile?.role === 'admin' || profile?.role === 'super_admin' || profile?.adminRole === 'super_admin'
   const needsMfaStepUp = privileged && mfa.required && mfa.currentLevel !== 'aal2'
+  const mcpApproved = mcpAccessStatus === 'approved'
 
   return (
     <main style={page}>
@@ -145,19 +161,26 @@ export default function AccountSecurity() {
 
         <div style={mcpPanel}>
           <div style={mcpTitleRow}><span style={mcpIcon}><Bot size={20} /></span><div><h2 style={subheading}>Claude via AbroBiz MCP</h2><p style={copy}>Connect Claude to authorized AbroBiz data and marketing drafts without exposing your Supabase credentials.</p></div></div>
-          <div role="note" style={mcpNotice}>Connections are read-scoped with draft-only writing. Publishing, approval, billing, deletion, and external messages still require the existing AbroBiz human workflow.</div>
-          <div style={tokenBox}>
+          <div role="note" style={mcpNotice}>Every non-super-admin account requires explicit super-admin approval before any MCP connection can read data or create tokens. Approval does not expand your existing AbroBiz role permissions.</div>
+          {!mcpLoading && mcpAccessStatus && <div role="status" style={mcpAccessCard}>
+            <strong>MCP access: {mcpAccessStatus === 'not_requested' ? 'Not requested' : mcpAccessStatus === 'pending' ? 'Pending super-admin review' : mcpAccessStatus[0].toUpperCase() + mcpAccessStatus.slice(1)}</strong>
+            {!mcpApproved && mcpAccessStatus !== 'pending' && <><p style={copy}>Request approval before adding AbroBiz to Claude. Your connection remains locked until a super administrator approves it.</p><button type="button" onClick={() => void requestConnectionApproval()} disabled={mcpBusy} style={primary}>{mcpBusy ? 'Sending request…' : mcpAccessStatus === 'revoked' || mcpAccessStatus === 'rejected' ? 'Request access again' : 'Request super-admin approval'}</button></>}
+            {mcpAccessStatus === 'pending' && <p style={copy}>Your request is queued. Claude access and token creation stay disabled until it is approved.</p>}
+            {mcpApproved && <p style={copy}>Approved. Your account’s existing role and data boundaries still apply.</p>}
+          </div>}
+          {mcpApproved && <div style={tokenBox}>
             <strong>Recommended: secure AbroBiz sign-in</strong>
             <p style={copy}>In Claude, add a custom connector with this MCP URL. Choose <strong>Sign in now</strong> and OAuth client <strong>Register automatically</strong>. Claude will open AbroBiz so you can sign in and approve the exact permissions.</p>
             <div style={tokenRow}><code style={tokenCode}>{`${SITE_URL}/api/mcp`}</code><button type="button" onClick={() => void copyValue(`${SITE_URL}/api/mcp`)} style={copyButton} aria-label="Copy AbroBiz MCP URL"><Copy size={15} /> Copy URL</button></div>
             <p style={copy}>No bearer header or Supabase project URL is needed. You can revoke Claude’s access from this page at any time.</p>
           </div>
+          }
           {mcpLoading ? <p style={copy}>Loading Claude connections…</p> : mcpError && !mcpTokens.length ? <p role="status" style={mutedError}>{mcpError}</p> : <>
             <details style={{ marginTop: 18 }}>
               <summary style={{ cursor: 'pointer', color: '#C7B990', fontSize: 13 }}>Advanced: create a manual bearer token (legacy clients)</summary>
-              <p style={copy}>Use this only for MCP clients that do not support OAuth. Treat the token like a password; it is shown once and can be revoked below.</p>
+              <p style={copy}>{mcpApproved ? 'Use this only for MCP clients that do not support OAuth. Treat the token like a password; it is shown once and can be revoked below.' : 'Manual tokens are locked until a super administrator approves MCP access.'}</p>
               <label style={label}>Connection name<input value={mcpName} onChange={event => setMcpName(event.target.value)} maxLength={80} style={input} disabled={mcpBusy || needsMfaStepUp} /></label>
-              <button type="button" onClick={() => void createConnectionToken()} disabled={mcpBusy || needsMfaStepUp} style={primary}>{mcpBusy ? 'Creating…' : 'Create manual token'}</button>
+              <button type="button" onClick={() => void createConnectionToken()} disabled={mcpBusy || needsMfaStepUp || !mcpApproved} style={primary}>{mcpBusy ? 'Creating…' : 'Create manual token'}</button>
               {mcpToken && <div style={tokenBox}><strong>Copy the token now</strong><p style={copy}>This is the only time the plaintext token is displayed.</p><div style={tokenRow}><code style={tokenCode}>{mcpToken.token}</code><button type="button" onClick={() => void copyValue(mcpToken.token)} style={copyButton} aria-label="Copy MCP token"><Copy size={15} /> Copy</button></div><p style={copy}>Endpoint: <code>{`${SITE_URL}/api/mcp`}</code></p><p style={copy}>Legacy request header: <code>Authorization: Bearer {mcpToken.token}</code>.</p></div>}
             </details>
             <div style={tokenList}>{mcpTokens.map(token => { const expired = new Date(token.expires_at).getTime() <= now; return <div key={token.id} style={tokenItem}><div style={{ flex: 1 }}><strong>{token.name}</strong><div style={tokenMeta}><code>{token.token_prefix}…</code> · expires {new Date(token.expires_at).toLocaleDateString()}</div></div><span style={{ ...status, color: token.revoked_at || expired ? '#8A3A3A' : '#217346', background: token.revoked_at || expired ? '#FBECEC' : '#EAF7EF' }}>{token.revoked_at ? 'Revoked' : expired ? 'Expired' : 'Active'}</span>{!token.revoked_at && <button type="button" onClick={() => void revokeConnection(token.id)} disabled={mcpBusy || needsMfaStepUp} style={revokeButton}><Ban size={14} /> Revoke</button>}</div> })}</div>
@@ -197,6 +220,7 @@ const mcpPanel = { marginTop: 28, paddingTop: 24, borderTop: '1px solid rgba(255
 const mcpTitleRow = { display: 'flex', alignItems: 'flex-start', gap: 12 }
 const mcpIcon = { width: 40, height: 40, flex: '0 0 auto', borderRadius: 12, display: 'grid', placeItems: 'center', background: 'rgba(212,168,83,.14)', color: '#D4A853' }
 const mcpNotice = { marginTop: 14, padding: '11px 12px', borderRadius: 10, background: 'rgba(91,141,239,.1)', color: '#C6D8F7', fontSize: 12.5, lineHeight: 1.5 }
+const mcpAccessCard = { marginTop: 14, padding: '13px 14px', borderRadius: 11, background: '#0F1218', border: '1px solid rgba(212,168,83,.24)', color: '#F0EDE7', fontSize: 13 }
 const tokenBox = { marginTop: 16, padding: 14, borderRadius: 12, background: '#0F1218', border: '1px solid rgba(212,168,83,.35)' }
 const tokenRow = { display: 'flex', alignItems: 'stretch', gap: 8, marginTop: 8 }
 const tokenCode = { flex: 1, minWidth: 0, overflowWrap: 'anywhere' as const, padding: '10px 11px', borderRadius: 8, background: '#090B0F', color: '#F0EDE7', fontSize: 12 }

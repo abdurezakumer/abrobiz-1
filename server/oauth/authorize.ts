@@ -68,6 +68,13 @@ export default async function handler(req: any, res: any) {
     if (profileError || !profile || !profile.email_verified_at || !profile.terms_accepted_at || !profile.privacy_accepted_at || !profile.legal_version) {
       return sendJson(res, 403, { error: 'account_setup_required' })
     }
+    const superAdmin = profile.role === 'super_admin' || profile.admin_role === 'super_admin'
+    if (!superAdmin) {
+      const { data: approval, error: approvalError } = await db.from('mcp_access_approvals')
+        .select('status').eq('user_id', authData.user.id).maybeSingle()
+      if (approvalError) return sendJson(res, 503, { error: 'server_error' })
+      if (approval?.status !== 'approved') return sendJson(res, 403, { error: 'mcp_access_not_approved' })
+    }
     const admin = profile.role === 'admin' || profile.role === 'super_admin' || profile.admin_role === 'super_admin'
     if (admin && assuranceLevelFromJwtPayload(accessToken) !== 'aal2') return sendJson(res, 403, { error: 'mfa_required' })
     if (['marketing_admin', 'sales_person'].includes(profile.admin_role) && !profile.marketing_policy_version) {

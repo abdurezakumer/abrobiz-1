@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { hasMcpPermission, hasMcpScope, isAllowedMcpOrigin, isUuid, parseBearerToken, validateBusinessProfilePatch, withMcpTimeout } from '../../../api/_mcp'
+import { hasMcpPermission, hasMcpScope, isAllowedMcpOrigin, isSalesPerson, isSuperAdmin, isUuid, parseBearerToken, validateBusinessProfilePatch, withMcpTimeout } from '../../../api/_mcp'
 
 describe('AbroBiz MCP security primitives', () => {
   it('accepts only the bounded AbroBiz bearer-token format', () => {
@@ -21,6 +21,14 @@ describe('AbroBiz MCP security primitives', () => {
     expect(hasMcpPermission({ role: 'admin', adminRole: 'marketing_admin' }, 'marketing.read')).toBe(true)
     expect(hasMcpPermission({ role: 'admin', adminRole: 'marketing_admin' }, 'payments.review')).toBe(false)
     expect(hasMcpPermission({ role: 'owner', adminRole: 'none' }, 'dashboard.read')).toBe(false)
+  })
+
+  it('keeps Sales Person MCP identity separate from customer and platform access', () => {
+    expect(isSalesPerson({ role: 'admin', adminRole: 'sales_person' })).toBe(true)
+    expect(isSalesPerson({ role: 'owner', adminRole: 'none' })).toBe(false)
+    expect(isSalesPerson({ role: 'admin', adminRole: 'marketing_admin' })).toBe(false)
+    expect(isSuperAdmin({ role: 'super_admin', adminRole: 'super_admin' })).toBe(true)
+    expect(isSuperAdmin({ role: 'admin', adminRole: 'sales_person' })).toBe(false)
   })
 
   it('validates UUIDs and rejects untrusted origins', () => {

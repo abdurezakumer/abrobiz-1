@@ -11,11 +11,14 @@ import {
   hasMcpPermission,
   hasMcpScope,
   isAdmin,
+  isSalesPerson,
+  isSuperAdmin,
   isAllowedMcpHost,
   isAllowedMcpOrigin,
   isUuid,
   listAuthorizedBusinesses,
   McpAuthorizationError,
+  McpApprovalRequiredError,
   McpConfigurationError,
   McpRateLimitError,
   recordMcpAudit,
@@ -56,6 +59,9 @@ async function audited<T>(
   action: () => Promise<T>,
 ): Promise<any> {
   try {
+    if (toolName !== 'get_integration_status' && !hasMcpScope(principal, 'mcp:read')) {
+      throw new McpAuthorizationError('MCP read scope is required')
+    }
     const result = await withMcpTimeout(action())
     await recordMcpAudit(principal, toolName, 'success', req, businessId)
     return textResult(result)
@@ -77,6 +83,7 @@ function requirePermission(principal: McpPrincipal, permission: string) {
 }
 
 function requireDraftWrite(principal: McpPrincipal) {
+  if (isSalesPerson(principal)) throw new McpAuthorizationError('Sales accounts cannot access business content through MCP')
   if (!hasMcpScope(principal, 'mcp:drafts:write')) throw new McpAuthorizationError('Draft write scope is required')
 }
 
@@ -102,12 +109,22 @@ function createMcpServer(principal: McpPrincipal, req: McpRequest): McpServer {
     approvalBoundary: 'AbroBiz MCP can read authorized data, edit limited owner profile fields, and manage marketing drafts. Publishing, approval, billing, deletion, and external sends remain in the AbroBiz human workflow.',
   })))
 
+  server.registerTool('get_my_sales_summary', {
+    title: 'Get my sales summary',
+    description: 'For an approved Sales Person only: return the count of business websites registered through this Sales Person’s own referral attribution. No customer identities, business details, team data, or AbroBiz-wide statistics are returned.',
+  }, async () => audited(principal, req, 'get_my_sales_summary', undefined, async () => {
+    if (!isSalesPerson(principal)) throw new McpAuthorizationError('This summary is available only to a Sales Person')
+    const { data, error } = await principal.db.rpc('mcp_sales_registered_business_count', { p_user_id: principal.userId })
+    if (error || data === null || data === undefined) throw new Error('Sales summary unavailable')
+    return { registeredBusinesses: Number(data) || 0 }
+  }))
+
   server.registerTool('get_platform_overview', {
     title: 'Get platform overview',
     description: 'Return bounded platform counts and recent approved revenue for authorized AbroBiz administrators. Owners cannot use this platform-wide tool.',
   }, async () => audited(principal, req, 'get_platform_overview', undefined, async () => {
     requirePermission(principal, 'dashboard.read')
-    if (!isAdmin(principal) || (principal.role !== 'super_admin' && principal.adminRole !== 'super_admin')) throw new McpAuthorizationError('Super administrator access is required')
+    if (!isAdmin(principal) || !isSuperAdmin(principal)) throw new McpAuthorizationError('Super administrator access is required')
     const [users, businesses, admins, active, trial, pending, revenue] = await Promise.all([
       principal.db.from('profiles').select('id', { count: 'exact', head: true }),
       principal.db.from('businesses').select('id', { count: 'exact', head: true }),
@@ -136,6 +153,7 @@ function createMcpServer(principal: McpPrincipal, req: McpRequest): McpServer {
     description: 'List only businesses the connected AbroBiz account owns or is authorized to manage through its existing administrator or marketing attribution permissions.',
     inputSchema: z.object({ limit: z.number().int().min(1).max(100).optional() }),
   }, async ({ limit }) => audited(principal, req, 'list_my_businesses', undefined, async () => {
+    if (isSalesPerson(principal)) throw new McpAuthorizationError('Sales accounts can access only their registered-business count through MCP')
     const rows = await listAuthorizedBusinesses(principal, limit ?? 50)
     return { businesses: rows.map(row => ({ id: row.id, ownerId: row.owner_id, name: row.name, slug: row.slug, categoryId: row.category_id, description: row.description, logoUrl: row.logo_url, coverUrl: row.cover_url, phone: row.phone, email: row.email, address: row.address, templateSlug: row.template_slug, isPublished: row.is_published, isBlocked: row.is_blocked, createdAt: row.created_at, updatedAt: row.updated_at })) }
   }))
@@ -196,6 +214,7 @@ function createMcpServer(principal: McpPrincipal, req: McpRequest): McpServer {
     description: 'Return bounded referral, payment, conversion, and commission aggregates for one authorized business or all businesses visible to the connected marketing account.',
     inputSchema: z.object({ business_id: z.string().uuid().optional(), from: dateText, to: dateText }),
   }, async ({ business_id, from, to }) => audited(principal, req, 'get_marketing_analytics', business_id, async () => {
+    if (isSalesPerson(principal)) throw new McpAuthorizationError('Sales accounts cannot access customer or platform analytics through MCP')
     const end = parseDate(to, new Date())
     const startDate = new Date(); startDate.setDate(startDate.getDate() - 90)
     const start = parseDate(from, startDate)
@@ -222,6 +241,7 @@ function createMcpServer(principal: McpPrincipal, req: McpRequest): McpServer {
     description: 'Read recent contact-form leads only for an authorized business. Owner, support, and authorized marketing accounts may use this tool; results are bounded and exclude internal secrets.',
     inputSchema: z.object({ business_id: z.string().uuid(), limit: z.number().int().min(1).max(50).optional() }),
   }, async ({ business_id, limit }) => audited(principal, req, 'get_recent_leads', business_id, async () => {
+    if (isSalesPerson(principal)) throw new McpAuthorizationError('Sales accounts cannot access customer records through MCP')
     await requireBusiness(principal, business_id)
     const canRead = principal.role === 'owner' || hasMcpPermission(principal, 'support.read') || principal.adminRole === 'marketing_admin' || principal.adminRole === 'sales_person'
     if (!canRead) throw new McpAuthorizationError('Lead access is not enabled for this role')
@@ -308,6 +328,10 @@ export default async function handler(req: any, res: any) {
     }
     await withMcpTimeout(consumeMcpRateLimit(principal))
   } catch (error) {
+    if (error instanceof McpApprovalRequiredError) {
+      json(res, 403, { error: 'MCP access requires super administrator approval', code: 'mcp_access_not_approved' })
+      return
+    }
     if (error instanceof McpRateLimitError) {
       json(res, 429, { error: 'Request limit reached' }, { 'Retry-After': '60' })
       return

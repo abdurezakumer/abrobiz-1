@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { LayoutDashboard, Building2, CreditCard, SlidersHorizontal, LogOut, Menu as MenuIcon, ShieldCheck, Megaphone, Users, ClipboardList, Copy, Send, TrendingUp, Lock, LifeBuoy } from 'lucide-react'
+import { LayoutDashboard, Building2, CreditCard, SlidersHorizontal, LogOut, Menu as MenuIcon, ShieldCheck, Megaphone, Users, ClipboardList, Copy, Send, TrendingUp, Lock, LifeBuoy, Bot } from 'lucide-react'
 import { useAuth } from '../lib/authContext'
 import { hasAdminPermission } from '../lib/api/adminControl'
 
@@ -18,6 +18,7 @@ const navItems = [
   { to: '/admin/support', label: 'Support requests', icon: LifeBuoy, permission: 'support.manage' as const },
   { to: '/admin/settings', label: 'Settings', icon: SlidersHorizontal, permission: 'templates.manage' as const },
   { to: '/admin/management', label: 'Admin management', icon: Users, superOnly: true },
+  { to: '/admin/mcp-access', label: 'MCP access', icon: Bot, superOnly: true },
   { to: '/admin/audit', label: 'Audit trail', icon: ClipboardList, superOnly: true },
   { to: '/security/account', label: 'Account security', icon: Lock, permission: 'dashboard.read' as const },
 ]
@@ -27,6 +28,9 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const location = useLocation()
   const navigate = useNavigate()
   const [mobileOpen, setMobileOpen] = useState(false)
+  const adminLabel = profile?.adminRole === 'sales_person'
+    ? profile.name?.trim() || 'Sales Person'
+    : profile?.role === 'super_admin' ? 'Super Admin' : 'Admin'
 
   const Sidebar = (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: '24px 16px' }}>
@@ -40,7 +44,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           <ShieldCheck size={17} color="#D4A853" />
         </div>
         <span style={{ fontFamily: 'Outfit, sans-serif', fontWeight: 600, color: '#F0EDE7', fontSize: 17 }}>
-          {profile?.role === 'super_admin' ? 'Super Admin' : 'Admin'}
+          {adminLabel}
         </span>
       </div>
       <div style={{ fontSize: 11, color: 'rgba(240,237,231,0.35)', padding: '0 8px 16px' }}>Platform control · {profile?.adminRole ?? 'administrator'}</div>
@@ -104,7 +108,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         <button onClick={() => setMobileOpen(true)} style={{ background: 'none', border: 'none', color: '#F0EDE7' }}>
           <MenuIcon size={22} />
         </button>
-        <span style={{ color: '#F0EDE7', fontFamily: 'Outfit, sans-serif', fontWeight: 600 }}>{profile?.role === 'super_admin' ? 'Super Admin' : 'Admin'}</span>
+        <span style={{ color: '#F0EDE7', fontFamily: 'Outfit, sans-serif', fontWeight: 600 }}>{adminLabel}</span>
         <div style={{ width: 22 }} />
       </div>
 

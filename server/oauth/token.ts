@@ -46,6 +46,15 @@ export default async function handler(req: any, res: any) {
       if (error || !stored || stored.redirect_uri !== redirectUri || stored.resource !== oauthResource() || !verifyPkce(verifier, stored.code_challenge)) {
         return oauthError(res, 400, 'invalid_grant')
       }
+      const { data: profile, error: profileError } = await db.from('profiles')
+        .select('id, role, admin_role').eq('id', stored.user_id).maybeSingle()
+      if (profileError || !profile) return oauthError(res, 400, 'invalid_grant')
+      if (profile.role !== 'super_admin' && profile.admin_role !== 'super_admin') {
+        const { data: approval, error: approvalError } = await db.from('mcp_access_approvals')
+          .select('status').eq('user_id', stored.user_id).maybeSingle()
+        if (approvalError) return oauthError(res, 503, 'server_error')
+        if (approval?.status !== 'approved') return oauthError(res, 400, 'access_denied')
+      }
       const now = new Date().toISOString()
       const { data: consumed } = await db.from('mcp_oauth_authorization_codes').update({ consumed_at: now })
         .eq('id', stored.id).is('consumed_at', null).gt('expires_at', now).select('id').maybeSingle()
@@ -95,15 +104,21 @@ export default async function handler(req: any, res: any) {
         .eq('token_hash', sha256(rawRefreshToken)).eq('client_id', client.id)
         .is('revoked_at', null).gt('expires_at', new Date().toISOString()).maybeSingle()
       if (error || !previous || previous.resource !== oauthResource()) return oauthError(res, 400, 'invalid_grant')
+      const { data: profile, error: profileError } = await db.from('profiles')
+        .select('id, role, admin_role').eq('id', previous.user_id).maybeSingle()
+      if (profileError || !profile) return oauthError(res, 400, 'invalid_grant')
+      if (profile.role !== 'super_admin' && profile.admin_role !== 'super_admin') {
+        const { data: approval, error: approvalError } = await db.from('mcp_access_approvals')
+          .select('status').eq('user_id', previous.user_id).maybeSingle()
+        if (approvalError) return oauthError(res, 503, 'server_error')
+        if (approval?.status !== 'approved') return oauthError(res, 400, 'access_denied')
+      }
       const { data: revoked } = await db.from('mcp_oauth_refresh_tokens').update({ revoked_at: new Date().toISOString() })
         .eq('id', previous.id).is('revoked_at', null).select('id').maybeSingle()
       if (!revoked) return oauthError(res, 400, 'invalid_grant')
       const { data: tokenRow, error: tokenError } = await db.from('mcp_access_tokens')
         .select('id, user_id, revoked_at').eq('id', previous.token_id).eq('user_id', previous.user_id).is('revoked_at', null).maybeSingle()
       if (tokenError || !tokenRow) return oauthError(res, 400, 'invalid_grant')
-      const { data: profile } = await db.from('profiles').select('id').eq('id', previous.user_id).maybeSingle()
-      if (!profile) return oauthError(res, 400, 'invalid_grant')
-
       const accessToken = newOpaqueToken()
       const refreshToken = newOpaqueToken('abz_mcp_refresh_')
       const accessExpiry = new Date(Date.now() + ACCESS_SECONDS * 1000).toISOString()

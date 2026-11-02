@@ -3,6 +3,7 @@ import { Navigate, useLocation, useNavigate, useSearchParams } from 'react-route
 import { ArrowRight, Bot, Check, ShieldCheck, X } from 'lucide-react'
 import { useAuth } from '../lib/authContext'
 import PageLoadingSkeleton from '../components/PageLoadingSkeleton'
+import { getMcpAccessStatus, requestMcpAccess, type McpAccessStatus } from '../lib/api/mcp'
 
 type ConsentInfo = {
   clientName: string
@@ -23,10 +24,13 @@ export default function OAuthConsent() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const { session, profile, loading: authLoading, mfa } = useAuth()
+  const sessionUserId = session?.user.id
   const [info, setInfo] = useState<ConsentInfo | null>(null)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [mcpAccessStatus, setMcpAccessStatus] = useState<McpAccessStatus | null>(null)
+  const [requestingAccess, setRequestingAccess] = useState(false)
 
   const request = useMemo(() => Object.fromEntries(searchParams.entries()), [searchParams])
 
@@ -45,6 +49,15 @@ export default function OAuthConsent() {
     return () => { active = false }
   }, [location.search])
 
+  useEffect(() => {
+    if (!sessionUserId) return
+    let active = true
+    getMcpAccessStatus()
+      .then(status => { if (active) setMcpAccessStatus(status) })
+      .catch(() => { if (active) setMcpAccessStatus(null) })
+    return () => { active = false }
+  }, [sessionUserId])
+
   if (authLoading) return <PageLoadingSkeleton label="Checking your secure AbroBiz session" />
   if (!session) return <Navigate to="/login" state={{ from: { pathname: location.pathname, search: location.search } }} replace />
 
@@ -54,7 +67,7 @@ export default function OAuthConsent() {
   const needsMarketingPolicy = Boolean(profile && ['marketing_admin', 'sales_person'].includes(profile.adminRole) && profile.marketingPolicyVersion !== '2026-09')
 
   async function approve() {
-    if (!session || !info || !profileReady || needsMfa || needsMarketingPolicy) return
+    if (!session || !info || !profileReady || needsMfa || needsMarketingPolicy || mcpAccessStatus !== 'approved') return
     setBusy(true)
     setError('')
     try {
@@ -69,6 +82,8 @@ export default function OAuthConsent() {
           ? 'Complete administrator MFA before connecting an external service.'
           : payload.error === 'account_setup_required'
             ? 'Complete your AbroBiz account verification and required policies before connecting.'
+            : payload.error === 'mcp_access_not_approved'
+              ? 'A super administrator must approve MCP access before you can connect Claude.'
             : 'We could not authorize this connection. Please retry from Claude.'
         throw new Error(message)
       }
@@ -77,6 +92,15 @@ export default function OAuthConsent() {
       setError(reason instanceof Error ? reason.message : 'We could not authorize this connection. Please try again.')
       setBusy(false)
     }
+  }
+
+  async function requestApproval() {
+    setRequestingAccess(true); setError('')
+    try {
+      setMcpAccessStatus(await requestMcpAccess())
+    } catch {
+      setError('We could not send the access request. Please try again from Account security.')
+    } finally { setRequestingAccess(false) }
   }
 
   function cancel() {
@@ -108,10 +132,15 @@ export default function OAuthConsent() {
           {needsMfa && <div role="note" style={alert}>Administrator MFA is required. <button type="button" onClick={() => navigate('/security/mfa', { state: { from: { pathname: location.pathname, search: location.search } } })} style={textButton}>Set up MFA</button></div>}
           {needsMarketingPolicy && <div role="note" style={alert}>Accept the current marketing policy before connecting. <button type="button" onClick={() => navigate('/marketing-policy', { state: { from: { pathname: location.pathname, search: location.search } } })} style={textButton}>Review policy</button></div>}
           {!profileReady && <div role="note" style={alert}>Verify your email and accept AbroBiz’s current Terms and Privacy Policy before connecting. <button type="button" onClick={() => navigate('/legal-acceptance', { state: { from: { pathname: location.pathname, search: location.search } } })} style={textButton}>Continue setup</button></div>}
+          {mcpAccessStatus !== 'approved' && <div role="note" style={alert}>
+            {mcpAccessStatus === 'pending' ? 'Your MCP access request is pending super-administrator review.' : 'A super administrator must approve MCP access before Claude can connect.'}
+            {mcpAccessStatus !== 'pending' && <button type="button" onClick={() => void requestApproval()} disabled={requestingAccess || mcpAccessStatus === null} style={textButton}>{requestingAccess ? 'Sending request…' : 'Request approval'}</button>}
+            {mcpAccessStatus === null && <button type="button" onClick={() => navigate('/security/account')} style={textButton}>Open account security</button>}
+          </div>}
           {error && <p role="alert" style={errorText}>{error}</p>}
           <div style={actions}>
             <button type="button" onClick={cancel} disabled={busy} style={cancelButton}><X size={16} /> Cancel</button>
-            <button type="button" onClick={() => void approve()} disabled={busy || !profileReady || needsMfa || needsMarketingPolicy} style={approveButton}>{busy ? 'Connecting…' : 'Approve access'} <ArrowRight size={16} /></button>
+            <button type="button" onClick={() => void approve()} disabled={busy || !profileReady || needsMfa || needsMarketingPolicy || mcpAccessStatus !== 'approved'} style={approveButton}>{busy ? 'Connecting…' : 'Approve access'} <ArrowRight size={16} /></button>
           </div>
           {clientHost && <p style={clientMeta}>Requesting service: <strong>{clientHost}</strong></p>}
         </> : null}
