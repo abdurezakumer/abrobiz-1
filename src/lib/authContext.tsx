@@ -50,8 +50,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const generationRef = useRef(0)
   const mountedRef = useRef(true)
   const lastActivityRef = useRef<number | null>(null)
+  const activeUserIdRef = useRef<string | null>(null)
 
-  const loadForSession = useCallback(async (s: Session | null, generation: number) => {
+  const loadForSession = useCallback(async (s: Session | null, generation: number, preserveCurrentState = false) => {
     const current = () => mountedRef.current && generationRef.current === generation
     if (!s) {
       if (current()) {
@@ -62,7 +63,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       return
     }
-    if (current()) {
+    if (current() && !preserveCurrentState) {
       setProfile(null)
       setBusiness(null)
       setSubscription(null)
@@ -171,20 +172,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let mounted = true
     mountedRef.current = true
 
-    const syncSession = async (nextSession: Session | null) => {
+    const syncSession = async (nextSession: Session | null, preserveSameUserScreen = false) => {
+      const nextUserId = nextSession?.user.id ?? null
+      const preserveCurrentState = preserveSameUserScreen && !!nextUserId && activeUserIdRef.current === nextUserId
+      activeUserIdRef.current = nextUserId
       const generation = generationRef.current + 1
       generationRef.current = generation
       if (!mounted) return
       setSession(nextSession)
-      setLoading(true)
-      lastActivityRef.current = Date.now()
-      await loadForSession(nextSession, generation)
+      if (!preserveCurrentState) {
+        setLoading(true)
+        lastActivityRef.current = Date.now()
+      }
+      await loadForSession(nextSession, generation, preserveCurrentState)
       if (mounted && generationRef.current === generation) setLoading(false)
     }
 
     supabase.auth.getSession().then(({ data }) => void syncSession(data.session))
 
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => { void syncSession(newSession) })
+    const { data: sub } = supabase.auth.onAuthStateChange((event, newSession) => {
+      // Supabase refreshes tokens when a mobile tab returns from the
+      // background, and MFA verification also emits an auth event. Keep the
+      // same user's screen mounted so an in-progress code challenge is not
+      // replaced by the full-page loading skeleton.
+      void syncSession(newSession, event !== 'SIGNED_OUT')
+    })
 
     return () => {
       mounted = false

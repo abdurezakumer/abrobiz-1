@@ -9,15 +9,18 @@ import TurnstileWidget from '../components/TurnstileWidget'
 import { turnstileEnabled } from '../lib/turnstile'
 import { useAuth } from '../lib/authContext'
 import { safeInternalPath } from '../lib/safeUrl'
+import { clearSignupVerificationDraft, loadSignupVerificationDraft, saveSignupVerificationDraft } from '../lib/authFormDraft'
 
 export default function VerifyEmail() {
   const [params] = useSearchParams()
   const navigate = useNavigate()
   const location = useLocation()
   const otpLength = 6
-  const [email, setEmail] = useState(params.get('email') ?? '')
-  const [code, setCode] = useState(() => Array.from({ length: otpLength }, () => ''))
-  const [cooldown, setCooldown] = useState(60)
+  const [initialDraft] = useState(() => loadSignupVerificationDraft(params.get('email') ?? ''))
+  const [email, setEmail] = useState(() => initialDraft?.email ?? params.get('email') ?? '')
+  const [code, setCode] = useState(() => Array.from({ length: otpLength }, (_, index) => initialDraft?.code[index] ?? ''))
+  const [cooldownUntil, setCooldownUntil] = useState(() => initialDraft?.cooldownUntil ?? Date.now() + 60_000)
+  const [cooldown, setCooldown] = useState(() => Math.max(0, Math.ceil(((initialDraft?.cooldownUntil ?? Date.now() + 60_000) - Date.now()) / 1000)))
   const [submitting, setSubmitting] = useState(false)
   const [resending, setResending] = useState(false)
   const [verified, setVerified] = useState(false)
@@ -29,13 +32,18 @@ export default function VerifyEmail() {
   const requested = (location.state as { from?: { pathname?: string; search?: string; hash?: string } } | null)?.from
   const continuePath = safeInternalPath(requested ? `${requested.pathname ?? ''}${requested.search ?? ''}${requested.hash ?? ''}` : null, '/setup')
 
-  useEffect(() => {
-    if (cooldown <= 0) return
-    const timer = window.setInterval(() => setCooldown(value => Math.max(0, value - 1)), 1000)
-    return () => window.clearInterval(timer)
-  }, [cooldown])
-
   const token = code.join('')
+
+  useEffect(() => {
+    const updateCooldown = () => setCooldown(Math.max(0, Math.ceil((cooldownUntil - Date.now()) / 1000)))
+    updateCooldown()
+    const timer = window.setInterval(updateCooldown, 1000)
+    return () => window.clearInterval(timer)
+  }, [cooldownUntil])
+
+  useEffect(() => {
+    saveSignupVerificationDraft({ email, code: token, cooldownUntil })
+  }, [email, token, cooldownUntil])
 
   function updateDigit(index: number, value: string) {
     const digit = value.replace(/\D/g, '').slice(-1)
@@ -71,6 +79,7 @@ export default function VerifyEmail() {
     setSubmitting(true)
     try {
       await verifySignupOtp(email, token)
+      clearSignupVerificationDraft()
       try {
         await recordLegalAcceptance()
       } catch {
@@ -100,6 +109,8 @@ export default function VerifyEmail() {
     setResending(true)
     try {
       await resendVerificationOtp(email, turnstileToken)
+      setCode(Array.from({ length: otpLength }, () => ''))
+      setCooldownUntil(Date.now() + 60_000)
       setCooldown(60)
       setTurnstileToken(null)
       setTurnstileResetKey(value => value + 1)
@@ -113,7 +124,7 @@ export default function VerifyEmail() {
   return (
     <div style={{ minHeight: '100vh', background: '#0A0C10', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
       <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} style={cardStyle}>
-        <Link to="/login" style={backStyle}><ArrowLeft size={15} /> Back to login</Link>
+        <Link to="/login" onClick={clearSignupVerificationDraft} style={backStyle}><ArrowLeft size={15} /> Back to login</Link>
         {verified ? (
           <div style={{ textAlign: 'center', paddingTop: 25 }}>
             <CheckCircle2 size={38} color="#4ADE80" style={{ margin: '0 auto 16px' }} />
@@ -126,10 +137,11 @@ export default function VerifyEmail() {
           <>
             <h1 style={headingStyle}>Verify your email</h1>
             <p style={mutedStyle}>Enter the verification code AbroBiz sent to your email. Codes expire shortly and can only be used once.</p>
+            {initialDraft && <div role="status" style={resumeNoticeStyle}>Your verification step was restored. You can switch to your email and return here without restarting signup.</div>}
             <form onSubmit={handleVerify} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <label style={labelStyle}>
                 <span>Email address</span>
-                <input required type="email" value={email} onChange={event => setEmail(event.target.value)} style={inputStyle} placeholder="you@example.com" autoComplete="email" />
+                <input required type="email" value={email} onChange={event => { const value = event.target.value; if (value.trim().toLowerCase() !== email.trim().toLowerCase()) setCode(Array.from({ length: otpLength }, () => '')); setEmail(value) }} style={inputStyle} placeholder="you@example.com" autoComplete="email" />
               </label>
               <div role="group" aria-label={`${code.length}-digit verification code`} style={{ display: 'flex', justifyContent: 'space-between', gap: otpLength > 6 ? 4 : 7 }}>
                 {code.map((digit, index) => (
@@ -172,6 +184,7 @@ const cardStyle: React.CSSProperties = { width: '100%', maxWidth: 410, backgroun
 const backStyle: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 6, color: 'rgba(240,237,231,0.5)', fontSize: 13, textDecoration: 'none' }
 const headingStyle: React.CSSProperties = { fontFamily: 'Outfit, sans-serif', fontSize: 22, fontWeight: 600, color: '#F0EDE7', margin: '26px 0 7px' }
 const mutedStyle: React.CSSProperties = { color: 'rgba(240,237,231,0.55)', fontSize: 13.5, lineHeight: 1.6, marginBottom: 22 }
+const resumeNoticeStyle: React.CSSProperties = { color: '#D6E7FF', background: 'rgba(72,130,210,0.12)', border: '1px solid rgba(120,170,235,0.22)', borderRadius: 10, padding: '10px 12px', fontSize: 12.5, lineHeight: 1.5, marginBottom: 14 }
 const labelStyle: React.CSSProperties = { display: 'flex', flexDirection: 'column', gap: 6, color: 'rgba(240,237,231,0.5)', fontSize: 12.5 }
 const inputStyle: React.CSSProperties = { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '11px 13px', color: '#F0EDE7', fontSize: 14.5, outline: 'none' }
 const codeInputStyle: React.CSSProperties = { ...inputStyle, width: 44, height: 50, padding: 0, textAlign: 'center', fontSize: 22, fontWeight: 600 }

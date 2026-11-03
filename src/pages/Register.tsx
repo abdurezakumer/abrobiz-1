@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { ArrowLeft } from 'lucide-react'
@@ -7,20 +7,26 @@ import { validatePassword, passwordStrength } from '../lib/passwordPolicy'
 import GoogleSignInButton from '../components/GoogleSignInButton'
 import TurnstileWidget from '../components/TurnstileWidget'
 import { turnstileEnabled } from '../lib/turnstile'
+import { clearSignupFormDraft, loadSignupFormDraft, saveSignupFormDraft } from '../lib/authFormDraft'
 
 export default function Register() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const [name, setName] = useState('')
-  const [phone, setPhone] = useState('')
-  const [referralCode, setReferralCode] = useState(() => searchParams.get('ref')?.trim().toUpperCase() ?? '')
-  const [email, setEmail] = useState('')
+  const [initialDraft] = useState(() => loadSignupFormDraft())
+  const [name, setName] = useState(() => initialDraft?.name ?? '')
+  const [phone, setPhone] = useState(() => initialDraft?.phone ?? '')
+  const [referralCode, setReferralCode] = useState(() => searchParams.get('ref')?.trim().toUpperCase() || initialDraft?.referralCode || '')
+  const [email, setEmail] = useState(() => initialDraft?.email ?? '')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [legalAccepted, setLegalAccepted] = useState(false)
+  const [legalAccepted, setLegalAccepted] = useState(() => initialDraft?.legalAccepted ?? false)
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
   const [turnstileResetKey, setTurnstileResetKey] = useState(0)
+
+  useEffect(() => {
+    saveSignupFormDraft({ name, phone, referralCode, email, legalAccepted })
+  }, [name, phone, referralCode, email, legalAccepted])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -43,6 +49,7 @@ export default function Register() {
       await signUp(email, password, name, phone, true, true, turnstileToken, referralCode)
       // Keep the verification contract uniform so signup never reveals the
       // provider's account or OTP shape.
+      clearSignupFormDraft()
       navigate('/verify-email?email=' + encodeURIComponent(email.trim().toLowerCase()), { replace: true })
     } catch (err) {
       setError(friendlyAuthError(err))
@@ -64,6 +71,7 @@ export default function Register() {
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }} style={cardStyle}>
           <h1 style={headingStyle}>Create your account</h1>
           <p style={mutedStyle}>Set up your business's digital presence in minutes.</p>
+          {initialDraft && <div role="status" style={resumeNoticeStyle}>Your signup details were restored. For your security, re-enter your password and complete the security check.</div>}
 
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <Field label="Full name"><input required value={name} onChange={e => setName(e.target.value)} style={inputStyle} placeholder="Abebe Kebede" /></Field>
@@ -109,6 +117,7 @@ function passwordCheckColor(strength: string): string {
 const cardStyle: React.CSSProperties = { width: '100%', maxWidth: 420, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 20, padding: '36px 32px' }
 const headingStyle: React.CSSProperties = { fontFamily: 'Outfit, sans-serif', fontSize: 24, fontWeight: 600, color: '#F0EDE7', marginBottom: 6 }
 const mutedStyle: React.CSSProperties = { color: 'rgba(240,237,231,0.5)', fontSize: 14, marginBottom: 26 }
+const resumeNoticeStyle: React.CSSProperties = { color: '#D6E7FF', background: 'rgba(72,130,210,0.12)', border: '1px solid rgba(120,170,235,0.22)', borderRadius: 10, padding: '10px 12px', fontSize: 12.5, lineHeight: 1.5, marginBottom: 16 }
 const ruleStyle: React.CSSProperties = { flex: 1, height: 1, background: 'rgba(255,255,255,0.08)' }
 const inputStyle: React.CSSProperties = { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '11px 13px', color: '#F0EDE7', fontSize: 14.5, outline: 'none' }
 const checkLabelStyle: React.CSSProperties = { display: 'flex', alignItems: 'flex-start', gap: 9, color: 'rgba(240,237,231,0.58)', fontSize: 12, lineHeight: 1.55, cursor: 'pointer' }
