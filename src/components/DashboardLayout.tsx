@@ -135,14 +135,14 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
               to={item.to}
               onClick={() => setMobileOpen(false)}
               style={{
-                display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 10,
+                display: 'flex', alignItems: 'center', gap: 13, padding: '12px 13px', borderRadius: 11,
                 color: active ? '#0A0C10' : 'rgba(240,237,231,0.7)',
                 background: active ? '#D4A853' : 'transparent',
-                fontSize: 14, fontWeight: active ? 600 : 500, textDecoration: 'none',
+                fontSize: 15.5, fontWeight: active ? 650 : 500, textDecoration: 'none',
                 transition: 'background 0.15s, color 0.15s', flexShrink: 0,
               }}
             >
-              <Icon size={17} />
+              <Icon size={20} strokeWidth={2.1} />
               <span style={{ flex: 1 }}>{item.label}</span>
               {'locked' in item && item.locked && <Lock size={12} style={{ opacity: 0.5 }} />}
             </Link>
@@ -203,7 +203,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             cursor: 'pointer', textAlign: 'left',
           }}
         >
-          <LogOut size={17} /> Sign out
+          <LogOut size={20} strokeWidth={2.1} /> Sign out
         </button>
       </div>
     </div>
@@ -280,12 +280,12 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
               aria-current={active ? 'page' : undefined}
               style={{
                 display: 'flex', flex: 1, minWidth: 0, flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4,
-                minHeight: 54, padding: '5px 2px', borderRadius: 10, color: active ? '#0A0C10' : 'rgba(10,12,16,0.52)',
-                background: active ? 'rgba(212,168,83,0.18)' : 'transparent', fontSize: 10.5, fontWeight: active ? 700 : 600,
+                minHeight: 62, padding: '6px 2px', borderRadius: 12, color: active ? '#0A0C10' : 'rgba(10,12,16,0.58)',
+                background: active ? 'rgba(212,168,83,0.2)' : 'transparent', fontSize: 12, fontWeight: active ? 750 : 600,
                 textDecoration: 'none', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
               }}
             >
-              <Icon size={18} />
+              <Icon size={22} strokeWidth={2.1} />
               <span style={{ maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label}</span>
             </Link>
           )
@@ -296,11 +296,11 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           aria-label="Open dashboard menu"
           style={{
             display: 'flex', flex: 1, minWidth: 0, flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4,
-            minHeight: 54, padding: '5px 2px', border: 0, borderRadius: 10, color: 'rgba(10,12,16,0.52)',
-            background: 'transparent', fontSize: 10.5, fontWeight: 600, cursor: 'pointer',
+            minHeight: 62, padding: '6px 2px', border: 0, borderRadius: 12, color: 'rgba(10,12,16,0.58)',
+            background: 'transparent', fontSize: 12, fontWeight: 600, cursor: 'pointer',
           }}
         >
-          <MenuIcon size={18} />
+          <MenuIcon size={22} strokeWidth={2.1} />
           <span>More</span>
         </button>
       </nav>
@@ -498,8 +498,8 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           bottom: 0;
           z-index: 35;
           align-items: center;
-          gap: 4px;
-          padding: 7px 8px calc(7px + env(safe-area-inset-bottom));
+          gap: 5px;
+          padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
           background: rgba(255,255,255,0.97);
           border-top: 1px solid rgba(10,12,16,0.1);
           box-shadow: 0 -8px 24px rgba(10,12,16,0.08);

@@ -4,12 +4,14 @@ export default function AbroBizLogo({
   size = 32,
   showName = true,
   light = false,
+  textColor,
 }: {
   size?: number
   showName?: boolean
   light?: boolean
+  textColor?: string
 }) {
-  const textColor = light ? '#FFFFFF' : '#F0EDE7'
+  const resolvedTextColor = textColor ?? (light ? '#FFFFFF' : '#F0EDE7')
   const markCrop = size / 78
 
   return (
@@ -23,7 +25,7 @@ export default function AbroBizLogo({
           style={{ position: 'absolute', maxWidth: 'none', left: -58 * markCrop, top: -34 * markCrop }}
         />
       </span>
-      {showName && <span style={{ color: textColor, fontFamily: 'Outfit, sans-serif', fontWeight: 650, fontSize: Math.max(14, size * 0.52), letterSpacing: '-0.02em' }}>AbroBiz</span>}
+      {showName && <span style={{ color: resolvedTextColor, fontFamily: 'Outfit, sans-serif', fontWeight: 650, fontSize: Math.max(14, size * 0.52), letterSpacing: '-0.02em' }}>AbroBiz</span>}
     </span>
   )
 }

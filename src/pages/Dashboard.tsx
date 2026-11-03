@@ -84,10 +84,10 @@ export default function Dashboard() {
 
   return (
     <DashboardLayout>
-      <motion.h1 initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ fontFamily: 'Outfit, sans-serif', fontSize: 26, fontWeight: 600, color: '#0A0C10' }}>
+      <motion.h1 initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ fontFamily: 'Outfit, sans-serif', fontSize: 'clamp(30px, 3vw, 36px)', fontWeight: 700, letterSpacing: '-0.035em', color: '#0A0C10' }}>
         Welcome back, {business.name}
       </motion.h1>
-      <p style={{ color: 'rgba(10,12,16,0.5)', fontSize: 14, marginTop: 4, marginBottom: 28 }}>
+      <p style={{ color: 'rgba(10,12,16,0.58)', fontSize: 16, marginTop: 8, marginBottom: 30 }}>
         Here's how your site is doing.
       </p>
 
@@ -120,12 +120,14 @@ export default function Dashboard() {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 14, marginBottom: 24 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(175px, 1fr))', gap: 18, marginBottom: 28 }}>
         {stats.map(s => (
-          <div key={s.label} style={{ background: '#fff', borderRadius: 16, padding: '18px 20px', border: '1px solid rgba(10,12,16,0.06)' }}>
-            <s.icon size={18} color="#D4A853" />
-            <div style={{ fontSize: 26, fontWeight: 700, color: '#0A0C10', marginTop: 10, fontFamily: 'Outfit, sans-serif' }}>{s.value}</div>
-            <div style={{ fontSize: 12.5, color: 'rgba(10,12,16,0.45)', marginTop: 2 }}>{s.label}</div>
+          <div key={s.label} style={{ background: 'linear-gradient(145deg, #FFFFFF 0%, #FFFEFC 100%)', borderRadius: 18, padding: '22px 22px 20px', border: '1px solid rgba(10,12,16,0.07)', boxShadow: '0 8px 22px rgba(10,12,16,0.045)', transition: 'transform 160ms ease, box-shadow 160ms ease' }}>
+            <div style={{ width: 52, height: 52, borderRadius: 16, background: 'linear-gradient(145deg, rgba(212,168,83,0.2), rgba(212,168,83,0.08))', display: 'grid', placeItems: 'center' }}>
+              <s.icon size={25} strokeWidth={2.1} color="#A77621" />
+            </div>
+            <div style={{ fontSize: 34, fontWeight: 750, color: '#0A0C10', marginTop: 15, fontFamily: 'Outfit, sans-serif', letterSpacing: '-0.035em', lineHeight: 1.05 }}>{s.value}</div>
+            <div style={{ fontSize: 14, fontWeight: 550, color: 'rgba(10,12,16,0.58)', marginTop: 7 }}>{s.label}</div>
           </div>
         ))}
       </div>
@@ -171,14 +173,14 @@ export default function Dashboard() {
 }
 
 const iconBtn: React.CSSProperties = {
-  width: 38, height: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 10,
+  width: 46, height: 46, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 13,
   background: '#0A0C10', color: '#F0EDE7', border: 'none', cursor: 'pointer', textDecoration: 'none',
 }
 const dismissNoticeButton: React.CSSProperties = { position: 'absolute', top: 12, right: 12, width: 30, height: 30, display: 'grid', placeItems: 'center', border: '1px solid rgba(10,12,16,0.1)', borderRadius: 8, background: 'rgba(255,255,255,0.7)', color: '#0A0C10', cursor: 'pointer' }
 const analyticsCard: React.CSSProperties = { marginBottom: 24, borderRadius: 20, padding: '24px 26px', color: '#F0EDE7', background: 'linear-gradient(135deg, #11151D 0%, #1D2528 55%, #2B2419 100%)', boxShadow: '0 18px 40px rgba(10,12,16,0.14)', overflow: 'hidden' }
 const analyticsEyebrow: React.CSSProperties = { color: '#D4A853', fontSize: 10, fontWeight: 800, letterSpacing: 1.5 }
-const analyticsTitle: React.CSSProperties = { margin: '8px 0 7px', fontFamily: 'Outfit, sans-serif', fontSize: 21, fontWeight: 600 }
-const analyticsCopy: React.CSSProperties = { margin: 0, maxWidth: 520, color: 'rgba(240,237,231,0.62)', fontSize: 13, lineHeight: 1.6 }
+const analyticsTitle: React.CSSProperties = { margin: '8px 0 7px', fontFamily: 'Outfit, sans-serif', fontSize: 24, fontWeight: 650, letterSpacing: '-0.02em' }
+const analyticsCopy: React.CSSProperties = { margin: 0, maxWidth: 520, color: 'rgba(240,237,231,0.68)', fontSize: 14, lineHeight: 1.65 }
 const analyticsTotal: React.CSSProperties = { minWidth: 155, display: 'flex', flexDirection: 'column', gap: 4, padding: '13px 15px', borderRadius: 14, background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)' }
 const analyticsBars: React.CSSProperties = { marginTop: 24, maxWidth: 680 }
 const analyticsBarLabel: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', gap: 12, color: 'rgba(240,237,231,0.68)', fontSize: 12 }

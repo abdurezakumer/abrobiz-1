@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { QrCode, Palette, Globe2, Check, ArrowRight, UserPlus, LayoutTemplate, Rocket, TrendingUp, Sparkles, ShieldCheck } from 'lucide-react'
+import { QrCode, Palette, Globe2, Check, ArrowRight, UserPlus, LayoutTemplate, Rocket, TrendingUp, Sparkles, ShieldCheck, Sun, Moon } from 'lucide-react'
 import { listPlans } from '../lib/api/plans'
 import PhoneMockup from '../components/PhoneMockup'
 import CategoryMarquee from '../components/CategoryMarquee'
@@ -42,10 +42,36 @@ export default function Landing() {
   const [plans, setPlans] = useState<Plan[]>([])
   const [billingCycle, setBillingCycle] = useState<BillingInterval>('month')
   const [wordIndex, setWordIndex] = useState(0)
+  const [theme, setTheme] = useState<'night' | 'day'>(() => {
+    try { return window.localStorage.getItem('abrobiz:marketing-theme') === 'day' ? 'day' : 'night' }
+    catch { return 'night' }
+  })
+  const isDay = theme === 'day'
+  const landingThemeStyle = {
+    '--landing-background': isDay ? '#F7F5F0' : '#0A0C10',
+    '--landing-foreground': isDay ? '#17202B' : '#F0EDE7',
+    '--landing-muted': isDay ? 'rgba(23,32,43,0.68)' : 'rgba(240,237,231,0.55)',
+    '--landing-muted-soft': isDay ? 'rgba(23,32,43,0.54)' : 'rgba(240,237,231,0.4)',
+    '--landing-muted-strong': isDay ? 'rgba(23,32,43,0.82)' : 'rgba(240,237,231,0.7)',
+    '--landing-card': isDay ? '#FFFFFF' : 'rgba(255,255,255,0.03)',
+    '--landing-card-border': isDay ? 'rgba(23,32,43,0.1)' : 'rgba(255,255,255,0.08)',
+    '--landing-divider': isDay ? 'rgba(23,32,43,0.12)' : 'rgba(255,255,255,0.06)',
+    '--landing-control': isDay ? '#EEEAE2' : 'rgba(255,255,255,0.06)',
+    '--landing-control-border': isDay ? 'rgba(23,32,43,0.13)' : 'rgba(255,255,255,0.12)',
+    '--landing-accent': isDay ? '#8B5E16' : '#D4A853',
+    '--landing-offer': isDay ? '#80550F' : '#F0C978',
+    '--landing-positive': isDay ? '#256B3E' : '#9BD5A7',
+    '--landing-featured-card': isDay ? 'rgba(212,168,83,0.12)' : 'rgba(212,168,83,0.06)',
+  } as React.CSSProperties
 
   useEffect(() => {
     listPlans().then(setPlans).catch(() => {})
   }, [])
+
+  useEffect(() => {
+    try { window.localStorage.setItem('abrobiz:marketing-theme', theme) }
+    catch { /* The theme still works for this visit when browser storage is unavailable. */ }
+  }, [theme])
 
   useEffect(() => {
     const id = setInterval(() => setWordIndex(i => (i + 1) % ROTATING_WORDS.length), 2800)
@@ -53,11 +79,11 @@ export default function Landing() {
   }, [])
 
   return (
-    <div style={{ background: '#0A0C10', color: '#F0EDE7', fontFamily: 'Inter, sans-serif', overflowX: 'hidden' }}>
+    <div data-marketing-theme={theme} style={{ ...landingThemeStyle, background: 'var(--landing-background)', color: 'var(--landing-foreground)', fontFamily: 'Inter, sans-serif', overflowX: 'hidden', transition: 'background-color 180ms ease, color 180ms ease' }}>
       {/* Nav */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', maxWidth: 1100, margin: '0 auto' }}>
+      <div className="landing-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', maxWidth: 1100, margin: '0 auto' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <AbroBizLogo size={30} />
+          <AbroBizLogo size={30} textColor={isDay ? '#17202B' : '#F0EDE7'} />
         </div>
         <nav style={{ display: 'flex', gap: 22, alignItems: 'center' }} className="landing-nav-links">
           <a href="#how-it-works" style={navLinkStyle}>How it works</a>
@@ -65,8 +91,17 @@ export default function Landing() {
           <a href="#faq" style={navLinkStyle}>FAQ</a>
           <Link to="/about" style={navLinkStyle}>About</Link>
         </nav>
-        <div style={{ display: 'flex', gap: 20, alignItems: 'center' }}>
-          <Link to="/login" style={{ color: 'rgba(240,237,231,0.7)', textDecoration: 'none', fontSize: 14 }}>Log in</Link>
+        <div className="landing-header-controls" style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+          <button
+            type="button"
+            onClick={() => setTheme(current => current === 'night' ? 'day' : 'night')}
+            aria-label={isDay ? 'Switch to night mode' : 'Switch to day mode'}
+            title={isDay ? 'Switch to night mode' : 'Switch to day mode'}
+            style={{ width: 40, height: 40, display: 'grid', placeItems: 'center', borderRadius: 12, border: '1px solid var(--landing-control-border)', background: 'var(--landing-control)', color: 'var(--landing-foreground)', cursor: 'pointer' }}
+          >
+            {isDay ? <Moon size={18} /> : <Sun size={18} />}
+          </button>
+          <Link to="/login" style={{ color: 'var(--landing-muted-strong)', textDecoration: 'none', fontSize: 14 }}>Log in</Link>
           <Link to="/register" style={{ background: '#D4A853', color: '#0A0C10', padding: '9px 18px', borderRadius: 9, fontSize: 14, fontWeight: 600, textDecoration: 'none' }}>
             Get started
           </Link>
@@ -94,7 +129,7 @@ export default function Landing() {
               <motion.span
                 key={wordIndex}
                 initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -14 }} transition={{ duration: 0.35 }}
-                style={{ position: 'absolute', left: 0, top: 0, color: '#D4A853' }}
+                style={{ position: 'absolute', left: 0, top: 0, color: 'var(--landing-accent)' }}
               >
                 {ROTATING_WORDS[wordIndex]}
               </motion.span>
@@ -102,7 +137,7 @@ export default function Landing() {
           </motion.h1>
           <motion.p
             initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.12 }}
-            style={{ color: 'rgba(240,237,231,0.6)', fontSize: 16, marginTop: 20, lineHeight: 1.6, maxWidth: 460 }}
+            style={{ color: 'var(--landing-muted)', fontSize: 16, marginTop: 20, lineHeight: 1.6, maxWidth: 460 }}
           >
             Go live with a QR-ready website, digital menu or catalog, and multi-language support in minutes — built for restaurants, cafés, salons, retail shops, and more.
           </motion.p>
@@ -112,7 +147,7 @@ export default function Landing() {
                 Start your free trial <ArrowRight size={16} />
               </Link>
             </MagneticButton>
-            <span style={{ fontSize: 12.5, color: 'rgba(240,237,231,0.4)' }}>7 days free, no card required</span>
+            <span style={{ fontSize: 12.5, color: 'var(--landing-muted-soft)' }}>7 days free, no card required</span>
           </motion.div>
         </div>
 
@@ -123,7 +158,7 @@ export default function Landing() {
           <div style={{ position: 'relative' }}>
             <div style={{ position: 'absolute', top: 18, left: -68, zIndex: 2, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.13)', borderRadius: 12, padding: '9px 12px', backdropFilter: 'blur(12px)', boxShadow: '0 12px 35px rgba(0,0,0,0.2)' }} className="preview-badge">
               <div style={{ color: '#D4A853', fontSize: 9.5, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase' }}>Live preview</div>
-              <div style={{ color: 'rgba(240,237,231,0.68)', fontSize: 11.5, marginTop: 3 }}>Your brand, mobile-ready</div>
+              <div style={{ color: '#F0EDE7', fontSize: 11.5, marginTop: 3 }}>Your brand, mobile-ready</div>
             </div>
             <PhoneMockup activeIndex={wordIndex} />
           </div>
@@ -141,13 +176,13 @@ export default function Landing() {
             key={f.title}
             initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.4, delay: i * 0.08 }}
             whileHover={{ y: -4 }}
-            style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 18, padding: 24, transition: 'border-color 0.2s' }}
+            style={{ background: 'var(--landing-card)', border: '1px solid var(--landing-card-border)', borderRadius: 18, padding: 24, transition: 'border-color 0.2s, background-color 180ms ease' }}
           >
             <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(212,168,83,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <f.icon size={19} color="#D4A853" />
+              <f.icon size={19} color="var(--landing-accent)" />
             </div>
             <h3 style={{ fontFamily: 'Outfit, sans-serif', fontSize: 16, fontWeight: 600, marginTop: 14 }}>{f.title}</h3>
-            <p style={{ fontSize: 13.5, color: 'rgba(240,237,231,0.5)', marginTop: 6, lineHeight: 1.6 }}>{f.desc}</p>
+            <p style={{ fontSize: 13.5, color: 'var(--landing-muted)', marginTop: 6, lineHeight: 1.6 }}>{f.desc}</p>
           </motion.div>
         ))}
       </div>
@@ -163,13 +198,13 @@ export default function Landing() {
               style={{ textAlign: 'center' }}
             >
               <div style={{ position: 'relative', width: 52, height: 52, borderRadius: '50%', background: 'rgba(212,168,83,0.1)', border: '1px solid rgba(212,168,83,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
-                <step.icon size={22} color="#D4A853" />
+                <step.icon size={22} color="var(--landing-accent)" />
                 <span style={{ position: 'absolute', top: -6, right: -6, width: 20, height: 20, borderRadius: '50%', background: '#D4A853', color: '#0A0C10', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   {i + 1}
                 </span>
               </div>
               <h3 style={{ fontFamily: 'Outfit, sans-serif', fontSize: 15, fontWeight: 600, marginBottom: 6 }}>{step.title}</h3>
-              <p style={{ fontSize: 13, color: 'rgba(240,237,231,0.5)', lineHeight: 1.6 }}>{step.desc}</p>
+              <p style={{ fontSize: 13, color: 'var(--landing-muted)', lineHeight: 1.6 }}>{step.desc}</p>
             </motion.div>
           ))}
         </div>
@@ -180,7 +215,7 @@ export default function Landing() {
         <div style={{ maxWidth: 680, margin: '0 auto', textAlign: 'center' }}>
           <div style={showcaseEyebrow}><ShieldCheck size={13} /> CLEAR BY DESIGN</div>
           <h2 style={{ fontFamily: 'Outfit, sans-serif', fontSize: 26, fontWeight: 600, margin: '10px 0' }}>A simple platform, with transparent data use</h2>
-          <p style={{ color: 'rgba(240,237,231,0.55)', fontSize: 14, lineHeight: 1.7, margin: 0 }}>
+          <p style={{ color: 'var(--landing-muted)', fontSize: 14, lineHeight: 1.7, margin: 0 }}>
             AbroBiz is a website and digital storefront service for business owners. We use account information to authenticate you, secure your workspace, and provide the website tools you request.
           </p>
         </div>
@@ -189,8 +224,8 @@ export default function Landing() {
           <div style={dataUseCard}><strong>For storefront visitors</strong><p>Explore public business websites and submit information only when you choose to contact, book, order, or review a business.</p></div>
           <div style={dataUseCard}><strong>Google sign-in</strong><p>Google is used only to authenticate your AbroBiz account and provide basic account details. AbroBiz does not request access to Google Drive, contacts, or unrelated Google data.</p></div>
         </div>
-        <p style={{ textAlign: 'center', color: 'rgba(240,237,231,0.48)', fontSize: 13, lineHeight: 1.6, margin: '22px auto 0' }}>
-          Read exactly how AbroBiz collects, uses, protects, and shares information in our <Link to="/privacy" style={{ color: '#D4A853', textDecoration: 'none', fontWeight: 600 }}>Privacy Policy</Link>.
+        <p style={{ textAlign: 'center', color: 'var(--landing-muted)', fontSize: 13, lineHeight: 1.6, margin: '22px auto 0' }}>
+          Read exactly how AbroBiz collects, uses, protects, and shares information in our <Link to="/privacy" style={{ color: 'var(--landing-accent)', textDecoration: 'none', fontWeight: 600 }}>Privacy Policy</Link>.
         </p>
       </section>
 
@@ -198,7 +233,7 @@ export default function Landing() {
       {plans.length > 0 && (
         <div id="pricing" style={{ maxWidth: 900, margin: '0 auto', padding: '20px 20px 80px' }}>
           <h2 style={{ textAlign: 'center', fontFamily: 'Outfit, sans-serif', fontSize: 26, fontWeight: 600, marginBottom: 14 }}>Simple, transparent pricing</h2>
-          <p style={{ textAlign: 'center', color: 'rgba(240,237,231,0.52)', fontSize: 13.5, margin: '0 0 18px' }}>Choose monthly flexibility or save with an annual plan.</p>
+          <p style={{ textAlign: 'center', color: 'var(--landing-muted)', fontSize: 13.5, margin: '0 0 18px' }}>Choose monthly flexibility or save with an annual plan.</p>
           <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 34 }}>
             <div style={landingBillingToggle} role="group" aria-label="Pricing billing cycle">
               {(['month', 'year'] as const).map(cycle => <button key={cycle} type="button" onClick={() => setBillingCycle(cycle)} style={{ ...landingBillingButton, ...(billingCycle === cycle ? landingBillingButtonActive : {}) }}>{cycle === 'month' ? 'Monthly' : 'Annual'}</button>)}
@@ -213,32 +248,32 @@ export default function Landing() {
                 initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.4, delay: i * 0.08 }}
                 whileHover={{ y: -5 }}
                 style={{
-                  background: i === 1 ? 'rgba(212,168,83,0.06)' : 'rgba(255,255,255,0.03)',
-                  border: i === 1 ? '1.5px solid #D4A853' : '1px solid rgba(255,255,255,0.08)',
+                  background: i === 1 ? 'var(--landing-featured-card)' : 'var(--landing-card)',
+                  border: i === 1 ? '1.5px solid var(--landing-accent)' : '1px solid var(--landing-card-border)',
                   borderRadius: 18, padding: 26,
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 7, color: '#D4A853', fontSize: 10, fontWeight: 850, letterSpacing: 1.1, marginBottom: 17 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7, color: 'var(--landing-accent)', fontSize: 10, fontWeight: 850, letterSpacing: 1.1, marginBottom: 17 }}>
                   <Sparkles size={13} /> {billingCycle === 'month' ? 'MONTHLY PLAN' : 'ANNUAL PLAN'}
-                  {billingCycle === 'year' && pricing.annualSavingsEtb > 0 && <span style={{ marginLeft: 'auto', color: '#9BD5A7', fontSize: 9.5, letterSpacing: .6 }}>BEST VALUE</span>}
+                  {billingCycle === 'year' && pricing.annualSavingsEtb > 0 && <span style={{ marginLeft: 'auto', color: 'var(--landing-positive)', fontSize: 9.5, letterSpacing: .6 }}>BEST VALUE</span>}
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'flex-start' }}>
                   <div style={{ fontSize: 15, fontWeight: 650 }}>{plan.name}</div>
                   {pricing.hasDiscount && <span style={landingOfferBadge}>{pricing.discountLabel}</span>}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap', fontFamily: 'Outfit, sans-serif', fontSize: 32, fontWeight: 700, marginTop: 10 }}>
-                  {formatEtb(pricing.priceEtb)} <span style={{ fontSize: 14, fontWeight: 400, color: 'rgba(240,237,231,0.45)' }}>ETB/{billingCycle}</span>
-                  {pricing.hasDiscount && <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, fontWeight: 400, color: 'rgba(240,237,231,0.42)', textDecoration: 'line-through' }}>{formatEtb(pricing.originalPriceEtb)} ETB</span>}
+                  {formatEtb(pricing.priceEtb)} <span style={{ fontSize: 14, fontWeight: 400, color: 'var(--landing-muted)' }}>ETB/{billingCycle}</span>
+                  {pricing.hasDiscount && <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, fontWeight: 400, color: 'var(--landing-muted-soft)', textDecoration: 'line-through' }}>{formatEtb(pricing.originalPriceEtb)} ETB</span>}
                 </div>
-                {billingCycle === 'year' && pricing.annualSavingsEtb > 0 && <div style={{ color: '#9BD5A7', fontSize: 12, fontWeight: 650, marginTop: 5 }}>Save {formatEtb(pricing.annualSavingsEtb)} ETB vs monthly</div>}
+                {billingCycle === 'year' && pricing.annualSavingsEtb > 0 && <div style={{ color: 'var(--landing-positive)', fontSize: 12, fontWeight: 650, marginTop: 5 }}>Save {formatEtb(pricing.annualSavingsEtb)} ETB vs monthly</div>}
                 <ul style={{ listStyle: 'none', padding: 0, margin: '18px 0 22px', display: 'flex', flexDirection: 'column', gap: 9 }}>
                   {plan.features.map(f => (
-                    <li key={f} style={{ display: 'flex', gap: 8, fontSize: 13.5, color: 'rgba(240,237,231,0.65)' }}>
-                      <Check size={15} color="#D4A853" style={{ flexShrink: 0, marginTop: 1 }} /> {f}
+                    <li key={f} style={{ display: 'flex', gap: 8, fontSize: 13.5, color: 'var(--landing-muted-strong)' }}>
+                      <Check size={15} color="var(--landing-accent)" style={{ flexShrink: 0, marginTop: 1 }} /> {f}
                     </li>
                   ))}
                 </ul>
-                <Link to="/register" style={{ display: 'block', textAlign: 'center', background: i === 1 ? '#D4A853' : 'rgba(255,255,255,0.06)', color: i === 1 ? '#0A0C10' : '#F0EDE7', padding: '11px', borderRadius: 10, fontSize: 14, fontWeight: 600, textDecoration: 'none' }}>
+                <Link to="/register" style={{ display: 'block', textAlign: 'center', background: i === 1 ? '#D4A853' : 'var(--landing-control)', color: i === 1 ? '#0A0C10' : 'var(--landing-foreground)', padding: '11px', borderRadius: 10, fontSize: 14, fontWeight: 600, textDecoration: 'none' }}>
                   Get started
                 </Link>
               </motion.div>
@@ -258,7 +293,7 @@ export default function Landing() {
       <div style={{ maxWidth: 720, margin: '0 auto', padding: '20px 24px 90px', textAlign: 'center' }}>
         <motion.div initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}>
           <h2 style={{ fontFamily: 'Outfit, sans-serif', fontSize: 26, fontWeight: 600, marginBottom: 12 }}>Ready to go live?</h2>
-          <p style={{ color: 'rgba(240,237,231,0.5)', fontSize: 14.5, marginBottom: 24 }}>Set up your site in minutes. Cancel anytime during your trial.</p>
+          <p style={{ color: 'var(--landing-muted)', fontSize: 14.5, marginBottom: 24 }}>Set up your site in minutes. Cancel anytime during your trial.</p>
           <MagneticButton>
             <Link to="/register" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: '#D4A853', color: '#0A0C10', padding: '13px 28px', borderRadius: 11, fontSize: 15, fontWeight: 600, textDecoration: 'none' }}>
               Start your free trial <ArrowRight size={16} />
@@ -268,13 +303,13 @@ export default function Landing() {
       </div>
 
       {/* Footer */}
-      <footer style={{ borderTop: '1px solid rgba(255,255,255,0.06)', padding: '48px 24px 28px' }}>
+      <footer style={{ borderTop: '1px solid var(--landing-divider)', padding: '48px 24px 28px' }}>
         <div style={{ maxWidth: 1000, margin: '0 auto', display: 'grid', gridTemplateColumns: '1.4fr repeat(3, 1fr)', gap: 32 }} className="footer-grid">
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-              <AbroBizLogo size={26} />
+              <AbroBizLogo size={26} textColor={isDay ? '#17202B' : '#F0EDE7'} />
             </div>
-            <p style={{ fontSize: 12.5, color: 'rgba(240,237,231,0.4)', lineHeight: 1.6, maxWidth: 260 }}>
+            <p style={{ fontSize: 12.5, color: 'var(--landing-muted-soft)', lineHeight: 1.6, maxWidth: 260 }}>
               A digital storefront platform for restaurants, cafés, salons, retail shops, and more.
             </p>
           </div>
@@ -296,7 +331,7 @@ export default function Landing() {
             <Link to="/contact" style={footerLink}>Contact support</Link>
           </div>
         </div>
-        <div style={{ maxWidth: 1000, margin: '32px auto 0', paddingTop: 20, borderTop: '1px solid rgba(255,255,255,0.06)', textAlign: 'center', fontSize: 12, color: 'rgba(240,237,231,0.35)' }}>
+        <div style={{ maxWidth: 1000, margin: '32px auto 0', paddingTop: 20, borderTop: '1px solid var(--landing-divider)', textAlign: 'center', fontSize: 12, color: 'var(--landing-muted-soft)' }}>
           © {new Date().getFullYear()} AbroBiz. All rights reserved.
         </div>
       </footer>
@@ -309,17 +344,22 @@ export default function Landing() {
           .footer-grid { grid-template-columns: 1fr !important; text-align: center; }
           .preview-badge { display: none !important; }
         }
+        @media (max-width: 380px) {
+          .landing-header { padding: 16px !important; }
+          .landing-header-controls { gap: 10px !important; }
+          .landing-header-controls > a:last-child { padding: 9px 12px !important; }
+        }
       `}</style>
     </div>
   )
 }
 
-const navLinkStyle: React.CSSProperties = { color: 'rgba(240,237,231,0.55)', textDecoration: 'none', fontSize: 13.5, fontWeight: 500 }
-const landingBillingToggle: React.CSSProperties = { display: 'inline-flex', padding: 4, gap: 3, borderRadius: 11, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }
-const landingBillingButton: React.CSSProperties = { border: 'none', borderRadius: 8, padding: '8px 18px', background: 'transparent', color: 'rgba(240,237,231,0.56)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }
+const navLinkStyle: React.CSSProperties = { color: 'var(--landing-muted)', textDecoration: 'none', fontSize: 13.5, fontWeight: 500 }
+const landingBillingToggle: React.CSSProperties = { display: 'inline-flex', padding: 4, gap: 3, borderRadius: 11, background: 'var(--landing-control)', border: '1px solid var(--landing-control-border)' }
+const landingBillingButton: React.CSSProperties = { border: 'none', borderRadius: 8, padding: '8px 18px', background: 'transparent', color: 'var(--landing-muted)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }
 const landingBillingButtonActive: React.CSSProperties = { background: '#D4A853', color: '#0A0C10' }
-const landingOfferBadge: React.CSSProperties = { display: 'inline-flex', borderRadius: 999, padding: '5px 8px', background: 'rgba(212,168,83,0.16)', color: '#F0C978', fontSize: 10.5, fontWeight: 800, whiteSpace: 'nowrap' }
-const footerHeading: React.CSSProperties = { fontSize: 12.5, fontWeight: 700, color: 'rgba(240,237,231,0.4)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 12 }
-const footerLink: React.CSSProperties = { display: 'block', fontSize: 13, color: 'rgba(240,237,231,0.55)', textDecoration: 'none', marginBottom: 9 }
-const showcaseEyebrow: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 6, color: '#D4A853', fontSize: 10.5, letterSpacing: 1.5, fontWeight: 700 }
-const dataUseCard: React.CSSProperties = { padding: '18px 18px 16px', borderRadius: 14, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(240,237,231,0.68)', fontSize: 13.5, lineHeight: 1.6 }
+const landingOfferBadge: React.CSSProperties = { display: 'inline-flex', borderRadius: 999, padding: '5px 8px', background: 'rgba(212,168,83,0.16)', color: 'var(--landing-offer)', fontSize: 10.5, fontWeight: 800, whiteSpace: 'nowrap' }
+const footerHeading: React.CSSProperties = { fontSize: 12.5, fontWeight: 700, color: 'var(--landing-muted-soft)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 12 }
+const footerLink: React.CSSProperties = { display: 'block', fontSize: 13, color: 'var(--landing-muted)', textDecoration: 'none', marginBottom: 9 }
+const showcaseEyebrow: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--landing-accent)', fontSize: 10.5, letterSpacing: 1.5, fontWeight: 700 }
+const dataUseCard: React.CSSProperties = { padding: '18px 18px 16px', borderRadius: 14, background: 'var(--landing-card)', border: '1px solid var(--landing-card-border)', color: 'var(--landing-muted-strong)', fontSize: 13.5, lineHeight: 1.6 }

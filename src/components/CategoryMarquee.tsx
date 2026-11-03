@@ -13,12 +13,12 @@ export default function CategoryMarquee() {
   const track = [...ITEMS, ...ITEMS] // duplicated for a seamless loop
 
   return (
-    <div style={{ overflow: 'hidden', borderTop: '1px solid rgba(255,255,255,0.06)', borderBottom: '1px solid rgba(255,255,255,0.06)', padding: '18px 0' }}>
+    <div style={{ overflow: 'hidden', borderTop: '1px solid var(--landing-divider, rgba(255,255,255,0.06))', borderBottom: '1px solid var(--landing-divider, rgba(255,255,255,0.06))', padding: '18px 0' }}>
       <div className="marquee-track" style={{ display: 'flex', width: 'max-content', gap: 40 }}>
         {track.map((item, i) => (
           <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 9, flexShrink: 0 }}>
-            <item.icon size={16} color="#D4A853" />
-            <span style={{ fontSize: 13.5, color: 'rgba(240,237,231,0.5)', fontFamily: 'Outfit, sans-serif', whiteSpace: 'nowrap' }}>{item.label}</span>
+            <item.icon size={16} color="var(--landing-accent, #D4A853)" />
+            <span style={{ fontSize: 13.5, color: 'var(--landing-muted, rgba(240,237,231,0.5))', fontFamily: 'Outfit, sans-serif', whiteSpace: 'nowrap' }}>{item.label}</span>
           </div>
         ))}
       </div>

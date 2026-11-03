@@ -15,13 +15,13 @@ export default function FaqAccordion({ items }: { items: FaqItem[] }) {
       {items.map((item, i) => {
         const open = openIndex === i
         return (
-          <div key={item.question} style={{ border: '1px solid rgba(255,255,255,0.08)', borderRadius: 14, overflow: 'hidden', background: 'rgba(255,255,255,0.02)' }}>
+          <div key={item.question} style={{ border: '1px solid var(--landing-card-border, rgba(255,255,255,0.08))', borderRadius: 14, overflow: 'hidden', background: 'var(--landing-card, rgba(255,255,255,0.02))' }}>
             <button
               onClick={() => setOpenIndex(open ? null : i)}
               style={{
                 width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12,
                 background: 'none', border: 'none', cursor: 'pointer', padding: '16px 18px', textAlign: 'left',
-                fontSize: 14.5, fontWeight: 600, color: '#F0EDE7', fontFamily: 'inherit',
+                fontSize: 14.5, fontWeight: 600, color: 'var(--landing-foreground, #F0EDE7)', fontFamily: 'inherit',
               }}
             >
               {item.question}
@@ -36,7 +36,7 @@ export default function FaqAccordion({ items }: { items: FaqItem[] }) {
                   transition={{ duration: 0.25 }}
                   style={{ overflow: 'hidden' }}
                 >
-                  <p style={{ padding: '0 18px 16px', fontSize: 13.5, color: 'rgba(240,237,231,0.55)', lineHeight: 1.6 }}>{item.answer}</p>
+                  <p style={{ padding: '0 18px 16px', fontSize: 13.5, color: 'var(--landing-muted, rgba(240,237,231,0.55))', lineHeight: 1.6 }}>{item.answer}</p>
                 </motion.div>
               )}
             </AnimatePresence>
