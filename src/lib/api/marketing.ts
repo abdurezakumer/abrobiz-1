@@ -65,6 +65,7 @@ export interface MarketingSummary {
   commissionPending: number
   commissionPaid: number
   activeCustomers: number
+  liveBusinesses: number
   conversionRate: number
   myCommission: number
   teamCommission: number
@@ -92,27 +93,48 @@ function scopedAttributions(profile: Profile) {
 }
 
 export async function getMarketingWorkspace(profile: Profile): Promise<MarketingWorkspace> {
-  const [{ data: attributionRows, error: attributionError }, { data: teamRows, error: teamError }, { data: codeRows, error: codeError }, { data: ruleRows, error: ruleError }, { data: membershipRows, error: membershipError }] = await Promise.all([
+  const [{ data: attributionRows, error: attributionError }, { data: teamRows, error: teamError }, { data: ruleRows, error: ruleError }, { data: membershipRows, error: membershipError }, { data: liveBusinessCount, error: liveBusinessCountError }] = await Promise.all([
     scopedAttributions(profile),
     supabase.from('profiles').select('id, name, email, platform_id, admin_role').in('admin_role', ['marketing_admin', 'sales_person']).order('name').limit(500),
-    supabase.from('marketing_referral_codes').select('id, sales_person_id, marketing_admin_id, code, label, is_active').order('created_at', { ascending: false }).limit(500),
     supabase.from('marketing_commission_rules').select('id, name, sales_person_rate, marketing_admin_rate, abrobiz_rate').eq('is_active', true).limit(1),
     supabase.from('marketing_team_memberships').select('sales_person_id, marketing_admin_id').is('ended_at', null).limit(1000),
+    supabase.rpc('marketing_my_live_business_count'),
   ])
   if (attributionError) throw attributionError
   if (teamError) throw teamError
-  if (codeError) throw codeError
   if (ruleError) throw ruleError
   if (membershipError) throw membershipError
+  const liveCountFunctionUnavailable = liveBusinessCountError?.code === 'PGRST202' || liveBusinessCountError?.code === '42883'
+  if (liveBusinessCountError && !liveCountFunctionUnavailable) throw liveBusinessCountError
 
   const attributions = attributionRows ?? []
+  const activeMemberships = membershipRows ?? []
+  const codesQuery = () => supabase.from('marketing_referral_codes').select('id, sales_person_id, marketing_admin_id, code, label, is_active').order('created_at', { ascending: false }).limit(500)
+  let scopedCodeRows: any[]
+  if (profile.adminRole === 'sales_person') {
+    const { data, error } = await codesQuery().eq('sales_person_id', profile.id)
+    if (error) throw error
+    scopedCodeRows = data ?? []
+  } else if (profile.adminRole === 'marketing_admin') {
+    const managedIds = [...new Set(activeMemberships.filter((row: any) => row.marketing_admin_id === profile.id).map((row: any) => row.sales_person_id))]
+    const codeQueries = [codesQuery().eq('marketing_admin_id', profile.id)]
+    if (managedIds.length) codeQueries.push(codesQuery().in('sales_person_id', managedIds))
+    const results = await Promise.all(codeQueries)
+    const codeError = results.find(result => result.error)?.error
+    if (codeError) throw codeError
+    scopedCodeRows = [...new Map(results.flatMap(result => result.data ?? []).map((row: any) => [row.id, row])).values()]
+  } else {
+    const { data, error } = await codesQuery()
+    if (error) throw error
+    scopedCodeRows = data ?? []
+  }
   const ownerIds = attributions.map((row: any) => row.owner_id)
   const { data: ownerRows, error: ownerError } = ownerIds.length
     ? await supabase.from('profiles').select('id, name, email, phone, platform_id').in('id', ownerIds)
     : { data: [], error: null }
   if (ownerError) throw ownerError
   const { data: businessRows, error: businessError } = ownerIds.length
-    ? await supabase.from('businesses').select('id, owner_id, name, slug, is_blocked').in('owner_id', ownerIds)
+    ? await supabase.from('businesses').select('id, owner_id, name, slug, is_blocked, is_published').in('owner_id', ownerIds)
     : { data: [], error: null }
   if (businessError) throw businessError
 
@@ -236,7 +258,6 @@ export async function getMarketingWorkspace(profile: Profile): Promise<Marketing
       createdAt: entry.createdAt,
     })),
   ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-  const activeMemberships = membershipRows ?? []
   const managedSalesIds = profile.adminRole === 'marketing_admin'
     ? activeMemberships.filter((row: any) => row.marketing_admin_id === profile.id).map((row: any) => row.sales_person_id)
     : activeMemberships.map((row: any) => row.sales_person_id)
@@ -257,6 +278,12 @@ export async function getMarketingWorkspace(profile: Profile): Promise<Marketing
       commissionPending: partnerLedger.filter(entry => ['pending', 'calculated', 'eligible'].includes(entry.status)).reduce((sum, entry) => sum + entry.amountEtb, 0),
       commissionPaid: partnerLedger.filter(entry => entry.status === 'paid').reduce((sum, entry) => sum + entry.amountEtb, 0),
       activeCustomers: customers.filter(customer => customer.subscriptionStatus === 'active').length,
+      // The RPC gives an exact aggregate without loading every attribution. If
+      // a client is ahead of the migration, fall back to these already-scoped
+      // owner IDs so it can never degrade to a platform-wide count.
+      liveBusinesses: liveCountFunctionUnavailable
+        ? (businessRows ?? []).filter((row: any) => row.is_published && !row.is_blocked).length
+        : Number(liveBusinessCount ?? 0),
       conversionRate: customers.length ? Math.round((customers.filter(customer => customer.qualifyingAmount > 0).length / customers.length) * 100) : 0,
       myCommission: myLedger.reduce((sum, entry) => sum + entry.amountEtb, 0),
       teamCommission: teamLedger.reduce((sum, entry) => sum + entry.amountEtb, 0),
@@ -266,7 +293,7 @@ export async function getMarketingWorkspace(profile: Profile): Promise<Marketing
     team: (teamRows ?? []).map((row: any) => ({ id: row.id, name: row.name || 'Unnamed', email: row.email || '—', platformId: row.platform_id || '—', role: row.admin_role })),
     managedSalesIds,
     salesPool: (salesPoolRows ?? []).map((row: any) => ({ id: row.id, platformId: row.platform_id, name: row.name || 'Unnamed Sales Person', isAssignedToMe: Boolean(row.is_assigned_to_me), isAssignedElsewhere: Boolean(row.is_assigned_elsewhere) })),
-    referralCodes: (codeRows ?? []).map((row: any) => ({ id: row.id, salesPersonId: row.sales_person_id ?? null, marketingAdminId: row.marketing_admin_id ?? null, code: row.code, label: row.label, isActive: row.is_active })),
+    referralCodes: scopedCodeRows.map((row: any) => ({ id: row.id, salesPersonId: row.sales_person_id ?? null, marketingAdminId: row.marketing_admin_id ?? null, code: row.code, label: row.label, isActive: row.is_active })),
     commissionRule: ruleRows?.[0] ? { id: ruleRows[0].id, name: ruleRows[0].name, salesPersonRate: Number(ruleRows[0].sales_person_rate), marketingAdminRate: Number(ruleRows[0].marketing_admin_rate), abrobizRate: Number(ruleRows[0].abrobiz_rate) } : null,
   }
 }

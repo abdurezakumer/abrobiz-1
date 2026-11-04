@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { Navigate } from 'react-router-dom'
 import { Activity, Building2, CreditCard, Crown, DollarSign, RefreshCw, ShieldCheck, TrendingUp, UserRound, Users } from 'lucide-react'
 import AdminLayout from '../../components/AdminLayout'
 import { useAuth } from '../../lib/authContext'
@@ -15,11 +16,16 @@ export default function AdminOverview() {
   const [error, setError] = useState('')
   const isSuper = profile?.role === 'super_admin' || profile?.adminRole === 'super_admin'
   const isSupport = profile?.adminRole === 'support' && !isSuper
+  const isMarketingRole = profile?.adminRole === 'sales_person' || profile?.adminRole === 'marketing_admin'
   const load = useCallback(async (manual = false) => {
     if (manual) setRefreshing(true); setError('')
     try { setData(await getAdminDashboard(profile)) } catch (err) { setError(friendlyError(err)) } finally { setLoading(false); setRefreshing(false) }
   }, [profile])
-  useEffect(() => { void load() }, [load])
+  useEffect(() => { if (!isMarketingRole) void load() }, [load, isMarketingRole])
+
+  // Sales and Marketing Admin accounts use the attribution-scoped workspace.
+  // Never issue or display the platform-wide operations dashboard for them.
+  if (isMarketingRole) return <Navigate to="/admin/marketing" replace />
 
   return <AdminLayout>
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, marginBottom: 26, flexWrap: 'wrap' }}>

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import QRCode from 'qrcode'
 import { toast } from 'sonner'
 import {
-  Activity, BarChart3, BadgeDollarSign, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight,
+  Activity, BarChart3, BadgeDollarSign, Building2, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight,
   ClipboardList, Copy, ExternalLink, Filter, Link2, LockKeyhole, RefreshCw, Search, Send,
   ShieldCheck, SlidersHorizontal, TrendingUp, UserRound, Users, WalletCards, X,
 } from 'lucide-react'
@@ -87,6 +87,7 @@ export default function AdminMarketing() {
 
 function KpiStrip({ workspace, isSales }: { workspace: MarketingWorkspace; isSales: boolean }) {
   const cards: Array<[string, number, typeof Users, 'count' | 'money' | 'percent']> = [
+    ['Live websites', workspace.summary.liveBusinesses, Building2, 'count'],
     ['Total customers', workspace.summary.customers, Users, 'count'],
     ['Active customers', workspace.summary.activeCustomers, CheckCircle2, 'count'],
     ['Payment pending', workspace.summary.pendingCustomers, WalletCards, 'count'],
