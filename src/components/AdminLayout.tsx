@@ -28,9 +28,15 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const location = useLocation()
   const navigate = useNavigate()
   const [mobileOpen, setMobileOpen] = useState(false)
-  const adminLabel = profile?.adminRole === 'sales_person'
-    ? profile.name?.trim() || 'Sales Person'
+  const isMarketingWorkspace = profile?.adminRole === 'sales_person' || profile?.adminRole === 'marketing_admin'
+  const adminLabel = isMarketingWorkspace
+    ? profile.name?.trim() || (profile.adminRole === 'sales_person' ? 'Sales Person' : 'Marketing Manager')
     : profile?.role === 'super_admin' ? 'Super Admin' : 'Admin'
+  const visibleNavItems = navItems.filter(item => {
+    if (isMarketingWorkspace && item.to === '/admin') return false
+    if (item.superOnly) return profile?.role === 'super_admin' || profile?.adminRole === 'super_admin'
+    return !!item.permission && hasAdminPermission(profile, item.permission)
+  }).map(item => isMarketingWorkspace && item.to === '/admin/marketing' ? { ...item, label: 'Overview' } : item)
 
   const Sidebar = (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: '24px 16px' }}>
@@ -54,7 +60,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       </div>
 
       <nav style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, minHeight: 0, overflowY: 'auto' }}>
-        {navItems.filter(item => item.superOnly ? profile?.role === 'super_admin' || profile?.adminRole === 'super_admin' : !!item.permission && hasAdminPermission(profile, item.permission)).map(item => {
+        {visibleNavItems.map(item => {
           const active = location.pathname === item.to
           const Icon = item.icon
           return (
