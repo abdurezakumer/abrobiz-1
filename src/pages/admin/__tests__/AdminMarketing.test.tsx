@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 const mocks = vi.hoisted(() => ({
   useAuth: vi.fn(),
@@ -32,7 +32,20 @@ describe('Marketing Admin overview', () => {
       profile: { id: 'manager-1', role: 'admin', adminRole: 'marketing_admin', name: 'Almaz Bekele' },
     })
     mocks.getMarketingWorkspace.mockResolvedValue({
-      customers: [],
+      customers: [
+        {
+          attributionId: 'attr-sales', ownerId: 'owner-sales', ownerName: 'Customer One', ownerEmail: 'one@example.com', ownerPhone: '0900000001', ownerPlatformId: 'U00000001',
+          businessName: 'Sales Referral Cafe', businessSlug: 'sales-cafe', salesPersonId: 'sales-1', marketingAdminId: 'manager-1', referralCode: 'SA001', source: 'referral_code', attributedAt: new Date().toISOString(),
+          paymentStatus: 'unpaid', planName: 'Starter', amountRequired: 1000, paidAmount: 0, qualifyingAmount: 0, paymentId: null, paymentCreatedAt: null, paymentUpdatedAt: null,
+          subscriptionStatus: null, daysPending: 0, lastReminderAt: null, salesPersonName: 'Sales Referral Person', marketingAdminName: 'Almaz Bekele',
+        },
+        {
+          attributionId: 'attr-manager', ownerId: 'owner-manager', ownerName: 'Customer Two', ownerEmail: 'two@example.com', ownerPhone: '0900000002', ownerPlatformId: 'U00000002',
+          businessName: 'Manager Referral Spa', businessSlug: 'manager-spa', salesPersonId: null, marketingAdminId: 'manager-1', referralCode: 'MA01', source: 'referral_code', attributedAt: new Date().toISOString(),
+          paymentStatus: 'unpaid', planName: 'Starter', amountRequired: 1000, paidAmount: 0, qualifyingAmount: 0, paymentId: null, paymentCreatedAt: null, paymentUpdatedAt: null,
+          subscriptionStatus: null, daysPending: 0, lastReminderAt: null, salesPersonName: null, marketingAdminName: 'Almaz Bekele',
+        },
+      ],
       ledger: [],
       activity: [],
       summary: {
@@ -62,6 +75,11 @@ describe('Marketing Admin overview', () => {
 
     expect(await screen.findByRole('heading', { name: 'Welcome, Almaz Bekele' })).toBeInTheDocument()
     expect(screen.getByText('Live websites')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Customers' }))
+    expect(screen.getByRole('columnheader', { name: 'Referred by' })).toBeInTheDocument()
+    expect(screen.getByText('Sales Referral Person')).toBeInTheDocument()
+    expect(screen.getByText('Marketing Manager · MA01')).toBeInTheDocument()
+    expect(screen.queryByText('Referrer unavailable')).not.toBeInTheDocument()
     await waitFor(() => expect(mocks.getMarketingWorkspace).toHaveBeenCalledTimes(1))
   })
 })
