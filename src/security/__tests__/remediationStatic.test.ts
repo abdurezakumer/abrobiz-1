@@ -35,6 +35,20 @@ describe('production security remediation invariants', () => {
     expect(migration).toMatch(/notifications_select_self/)
   })
 
+  it('closes referral-code DML, hidden-business review reads, and marketing RPC MFA gaps', () => {
+    const migration = read('supabase/migrations/0068_rls_and_marketing_privilege_hardening.sql')
+    expect(migration).toMatch(/drop policy if exists marketing_referral_codes_write/i)
+    expect(migration).toMatch(/drop policy if exists marketing_team_write/i)
+    expect(migration).toMatch(/drop policy if exists marketing_attributions_update_super/i)
+    expect(migration).toMatch(/drop policy if exists marketing_rules_write/i)
+    expect(migration).toMatch(/revoke all privileges on table public\.marketing_referral_codes,[\s\S]*?public\.marketing_commission_rules[\s\S]*?from public, anon, authenticated/i)
+    expect(migration).toMatch(/grant select on table public\.marketing_referral_codes,[\s\S]*?public\.marketing_commission_rules[\s\S]*?to authenticated/i)
+    expect(migration).toMatch(/grant all privileges on table public\.marketing_referral_codes,[\s\S]*?public\.marketing_commission_rules[\s\S]*?to service_role/i)
+    expect(migration).toMatch(/is_approved[\s\S]*?b\.is_published[\s\S]*?not b\.is_blocked/i)
+    expect(migration.match(/public\.has_privileged_mfa\(\)/g)).toHaveLength(2)
+    expect(migration).toMatch(/p_action is null or p_action not in \('add', 'remove'\)/i)
+  })
+
   it('keeps the client free of server-only environment prefixes', () => {
     const source = readSourceTree('src')
     expect(source).not.toMatch(/SUPABASE_SERVICE_ROLE_KEY|RESEND_API_KEY|TELEGRAM_BOT_TOKEN|CRON_SECRET|GEMINI_API_KEY/)
