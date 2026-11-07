@@ -68,20 +68,32 @@ export default function AdminMarketing() {
     {loading ? <DashboardSkeleton /> : workspace ? <>
       <KpiStrip workspace={workspace} isSales={isSales} />
       <ActiveCommissionRule rule={workspace.commissionRule} isMarketingAdmin={isMarketingAdmin} />
-      <nav aria-label="Marketing dashboard sections" style={tabBar}>{tabs.filter(item => canManage || item.key !== 'team').map(item => { const Icon = item.icon; return <button key={item.key} type="button" onClick={() => setTab(item.key)} style={{ ...tabButton, ...(tab === item.key ? activeTabButton : {}) }}><Icon size={15} />{item.label}</button> })}</nav>
-      {tab === 'overview' && <OverviewView workspace={workspace} range={range} isSales={isSales} onCustomer={setSelectedCustomer} onOpenReferral={() => setTab('referral')} />}
-      {tab === 'customers' && <CustomersView workspace={workspace} range={range} onCustomer={setSelectedCustomer} />}
-      {tab === 'payments' && <PaymentsView workspace={workspace} range={range} onCustomer={setSelectedCustomer} />}
-      {tab === 'commissions' && <CommissionsView workspace={workspace} isSuper={isSuper} range={range} onChanged={() => void load(true)} />}
-      {tab === 'referral' && <ReferralCenter workspace={workspace} profileId={profile?.id ?? ''} isSales={isSales} range={range} />}
-      {tab === 'performance' && <PerformanceView workspace={workspace} range={range} isSales={isSales} />}
-      {tab === 'activity' && <ActivityView workspace={workspace} range={range} />}
-      {tab === 'team' && canManage && <TeamManagement workspace={workspace} isSuper={isSuper} isMarketingAdmin={isMarketingAdmin} onChanged={() => void load(true)} />}
-      {tab === 'payouts' && <PayoutsView workspace={workspace} range={range} isSales={isSales} />}
-      {tab === 'policy' && <PolicyView />}
+      <div className="marketing-workspace-layout">
+        <nav aria-label="Marketing dashboard sections" className="marketing-section-sidebar">
+          <div className="marketing-section-label">WORKSPACE</div>
+          {tabs.filter(item => canManage || item.key !== 'team').map(item => {
+            const Icon = item.icon
+            const active = tab === item.key
+            return <button key={item.key} type="button" aria-current={active ? 'page' : undefined} onClick={() => setTab(item.key)} className={`marketing-section-link${active ? ' is-active' : ''}`}><Icon size={17} />{item.label}</button>
+          })}
+        </nav>
+        <label className="marketing-section-mobile"><span>Workspace section</span><select aria-label="Workspace section" value={tab} onChange={event => setTab(event.target.value as TabKey)}>{tabs.filter(item => canManage || item.key !== 'team').map(item => <option key={item.key} value={item.key}>{item.label}</option>)}</select></label>
+        <div className="marketing-workspace-content">
+          {tab === 'overview' && <OverviewView workspace={workspace} range={range} isSales={isSales} onCustomer={setSelectedCustomer} onOpenReferral={() => setTab('referral')} />}
+          {tab === 'customers' && <CustomersView workspace={workspace} range={range} onCustomer={setSelectedCustomer} />}
+          {tab === 'payments' && <PaymentsView workspace={workspace} range={range} onCustomer={setSelectedCustomer} />}
+          {tab === 'commissions' && <CommissionsView workspace={workspace} isSuper={isSuper} range={range} onChanged={() => void load(true)} />}
+          {tab === 'referral' && <ReferralCenter workspace={workspace} profileId={profile?.id ?? ''} isSales={isSales} range={range} />}
+          {tab === 'performance' && <PerformanceView workspace={workspace} range={range} isSales={isSales} />}
+          {tab === 'activity' && <ActivityView workspace={workspace} range={range} />}
+          {tab === 'team' && canManage && <TeamManagement workspace={workspace} isSuper={isSuper} isMarketingAdmin={isMarketingAdmin} onChanged={() => void load(true)} />}
+          {tab === 'payouts' && <PayoutsView workspace={workspace} range={range} isSales={isSales} />}
+          {tab === 'policy' && <PolicyView />}
+        </div>
+      </div>
       {selectedCustomer && <CustomerDrawer customer={selectedCustomer} onClose={() => setSelectedCustomer(null)} />}
     </> : null}
-    <style>{'@keyframes marketing-spin { to { transform: rotate(360deg); } } @keyframes marketing-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } } @media (max-width: 900px) { .marketing-grid-2 { grid-template-columns: 1fr !important; } .marketing-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; } } @media (max-width: 520px) { .marketing-kpis { grid-template-columns: 1fr !important; } }'}</style>
+    <style>{'@keyframes marketing-spin { to { transform: rotate(360deg); } } @keyframes marketing-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } } .marketing-workspace-layout { display: grid; grid-template-columns: 218px minmax(0, 1fr); align-items: start; gap: 16px; } .marketing-section-sidebar { position: sticky; top: 18px; display: flex; flex-direction: column; gap: 5px; padding: 12px; background: #fff; border: 1px solid rgba(10,12,16,.08); border-radius: 15px; box-shadow: 0 8px 24px rgba(10,12,16,.035); } .marketing-section-label { padding: 4px 9px 9px; color: rgba(10,12,16,.42); font-size: 10px; font-weight: 750; letter-spacing: 1.25px; } .marketing-section-link { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 42px; padding: 9px 11px; border: 0; border-radius: 9px; background: transparent; color: rgba(10,12,16,.65); text-align: left; font-family: Outfit, sans-serif; font-size: 12.5px; font-weight: 600; cursor: pointer; transition: background .16s ease, color .16s ease, transform .16s ease; } .marketing-section-link:hover { background: #F7F4EE; color: #0A0C10; } .marketing-section-link.is-active { background: #FFF4D8; color: #72551D; box-shadow: inset 3px 0 #D4A853; } .marketing-section-link:focus-visible { outline: 2px solid #B98522; outline-offset: 2px; } .marketing-section-mobile { display: none; } .marketing-workspace-content { min-width: 0; } @media (max-width: 900px) { .marketing-grid-2 { grid-template-columns: 1fr !important; } .marketing-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; } } @media (max-width: 760px) { .marketing-workspace-layout { display: block; } .marketing-section-sidebar { display: none; } .marketing-section-mobile { display: grid; gap: 6px; margin-bottom: 12px; color: rgba(10,12,16,.52); font-size: 11px; font-weight: 650; } .marketing-section-mobile select { width: 100%; min-height: 42px; padding: 9px 11px; border: 1px solid rgba(10,12,16,.13); border-radius: 9px; background: #fff; color: #0A0C10; font-size: 13px; } } @media (max-width: 520px) { .marketing-kpis { grid-template-columns: 1fr !important; } } @media (prefers-reduced-motion: reduce) { .marketing-section-link { transition: none; } }'}</style>
   </AdminLayout>
 }
 
@@ -275,9 +287,6 @@ const kpiLabel: React.CSSProperties = { color: 'rgba(10,12,16,.48)', fontSize: 1
 const kpiValue: React.CSSProperties = { color: '#0A0C10', fontFamily: 'Outfit, sans-serif', fontWeight: 700, fontSize: 18, marginTop: 3, whiteSpace: 'nowrap' }
 const ruleSummary: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 9 }
 const ruleSummaryItem: React.CSSProperties = { display: 'flex', flexDirection: 'column', gap: 2, padding: '11px 12px', borderRadius: 10, background: '#F6F3EE' }
-const tabBar: React.CSSProperties = { display: 'flex', gap: 5, overflowX: 'auto', padding: 5, marginBottom: 16, background: 'rgba(255,255,255,.72)', border: '1px solid rgba(10,12,16,.07)', borderRadius: 12 }
-const tabButton: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0, border: 0, borderRadius: 8, padding: '8px 10px', color: 'rgba(10,12,16,.55)', background: 'transparent', cursor: 'pointer', fontSize: 11.5, fontWeight: 650 }
-const activeTabButton: React.CSSProperties = { color: '#0A0C10', background: '#D4A853' }
 const grid2: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'minmax(0, 1.15fr) minmax(300px, .85fr)', gap: 16 }
 const panel: React.CSSProperties = { background: '#fff', border: '1px solid rgba(10,12,16,.07)', borderRadius: 16, padding: 18, minWidth: 0 }
 const panelHeader: React.CSSProperties = { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 14 }

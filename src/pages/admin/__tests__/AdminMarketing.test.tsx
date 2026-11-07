@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 
 const mocks = vi.hoisted(() => ({
   useAuth: vi.fn(),
@@ -75,7 +75,12 @@ describe('Marketing Admin overview', () => {
 
     expect(await screen.findByRole('heading', { name: 'Welcome, Almaz Bekele' })).toBeInTheDocument()
     expect(screen.getByText('Live websites')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Customers' }))
+    const sidebar = screen.getByRole('navigation', { name: 'Marketing dashboard sections' })
+    expect(within(sidebar).getByRole('button', { name: 'Overview' })).toHaveAttribute('aria-current', 'page')
+    expect(within(sidebar).getByRole('button', { name: 'Referral center' })).toBeInTheDocument()
+    expect(within(sidebar).getByRole('button', { name: 'Team management' })).toBeInTheDocument()
+    fireEvent.click(within(sidebar).getByRole('button', { name: 'Customers' }))
+    expect(within(sidebar).getByRole('button', { name: 'Customers' })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByRole('columnheader', { name: 'Referred by' })).toBeInTheDocument()
     expect(screen.getByText('Sales Referral Person')).toBeInTheDocument()
     expect(screen.getByText('Marketing Manager · MA01')).toBeInTheDocument()
