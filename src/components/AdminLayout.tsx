@@ -1,11 +1,21 @@
 import { useState, type ReactNode } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { LayoutDashboard, Building2, CreditCard, SlidersHorizontal, LogOut, Menu as MenuIcon, ShieldCheck, Megaphone, Users, ClipboardList, Copy, Send, TrendingUp, Lock, LifeBuoy, Bot } from 'lucide-react'
+import { LayoutDashboard, Activity, BadgeDollarSign, Building2, CreditCard, SlidersHorizontal, LogOut, Menu as MenuIcon, ShieldCheck, Megaphone, Users, ClipboardList, Copy, Send, TrendingUp, Link2, WalletCards, Lock, LifeBuoy, Bot } from 'lucide-react'
 import { useAuth } from '../lib/authContext'
-import { hasAdminPermission } from '../lib/api/adminControl'
+import { hasAdminPermission, type AdminPermission } from '../lib/api/adminControl'
 
-const navItems = [
+type AdminNavItem = {
+  to: string
+  label: string
+  icon: typeof LayoutDashboard
+  permission?: AdminPermission
+  superOnly?: boolean
+  section?: string
+  group?: string
+}
+
+const navItems: AdminNavItem[] = [
   { to: '/admin', label: 'Overview', icon: LayoutDashboard, permission: 'dashboard.read' as const },
   { to: '/admin/users', label: 'User directory', icon: Users, permission: 'users.read' as const },
   { to: '/admin/telegram', label: 'Telegram', icon: Send, permission: 'dashboard.read' as const },
@@ -23,20 +33,37 @@ const navItems = [
   { to: '/security/account', label: 'Account security', icon: Lock, permission: 'dashboard.read' as const },
 ]
 
+const marketingWorkspaceItems: AdminNavItem[] = [
+  { to: '/admin/marketing?section=overview', section: 'overview', label: 'Overview', icon: LayoutDashboard, permission: 'marketing.read', group: 'MARKETING WORKSPACE' },
+  { to: '/admin/marketing?section=customers', section: 'customers', label: 'Customers', icon: Users, permission: 'marketing.read', group: 'MARKETING WORKSPACE' },
+  { to: '/admin/marketing?section=payments', section: 'payments', label: 'Pending payments', icon: WalletCards, permission: 'marketing.read', group: 'MARKETING WORKSPACE' },
+  { to: '/admin/marketing?section=commissions', section: 'commissions', label: 'Commissions', icon: BadgeDollarSign, permission: 'marketing.read', group: 'MARKETING WORKSPACE' },
+  { to: '/admin/marketing?section=referral', section: 'referral', label: 'Referral center', icon: Link2, permission: 'marketing.read', group: 'MARKETING WORKSPACE' },
+  { to: '/admin/marketing?section=performance', section: 'performance', label: 'Performance', icon: TrendingUp, permission: 'marketing.read', group: 'MARKETING WORKSPACE' },
+  { to: '/admin/marketing?section=activity', section: 'activity', label: 'Activity', icon: Activity, permission: 'marketing.read', group: 'MARKETING WORKSPACE' },
+  { to: '/admin/marketing?section=payouts', section: 'payouts', label: 'Payouts', icon: CreditCard, permission: 'marketing.read', group: 'MARKETING WORKSPACE' },
+  { to: '/admin/marketing?section=policy', section: 'policy', label: 'Marketing policy', icon: ClipboardList, permission: 'marketing.read', group: 'MARKETING WORKSPACE' },
+  { to: '/admin/marketing?section=team', section: 'team', label: 'My sales team', icon: ShieldCheck, permission: 'marketing.manage', group: 'MARKETING WORKSPACE' },
+  { to: '/admin/telegram', label: 'Telegram', icon: Send, permission: 'dashboard.read', group: 'TOOLS' },
+  { to: '/security/account', label: 'Account security', icon: Lock, permission: 'dashboard.read', group: 'ACCOUNT' },
+]
+
 export default function AdminLayout({ children }: { children: ReactNode }) {
   const { signOut, profile } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
   const [mobileOpen, setMobileOpen] = useState(false)
   const isMarketingWorkspace = profile?.adminRole === 'sales_person' || profile?.adminRole === 'marketing_admin'
+  const currentSection = new URLSearchParams(location.search).get('section') || 'overview'
   const adminLabel = isMarketingWorkspace
     ? profile.name?.trim() || (profile.adminRole === 'sales_person' ? 'Sales Person' : 'Marketing Manager')
     : profile?.role === 'super_admin' ? 'Super Admin' : 'Admin'
-  const visibleNavItems = navItems.filter(item => {
-    if (isMarketingWorkspace && item.to === '/admin') return false
-    if (item.superOnly) return profile?.role === 'super_admin' || profile?.adminRole === 'super_admin'
-    return !!item.permission && hasAdminPermission(profile, item.permission)
-  }).map(item => isMarketingWorkspace && item.to === '/admin/marketing' ? { ...item, label: 'Overview' } : item)
+  const visibleNavItems = isMarketingWorkspace
+    ? marketingWorkspaceItems.filter(item => !!item.permission && hasAdminPermission(profile, item.permission))
+    : navItems.filter(item => {
+      if (item.superOnly) return profile?.role === 'super_admin' || profile?.adminRole === 'super_admin'
+      return !!item.permission && hasAdminPermission(profile, item.permission)
+    })
 
   const Sidebar = (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: '24px 16px' }}>
@@ -53,31 +80,37 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           {adminLabel}
         </span>
       </div>
-      <div style={{ fontSize: 11, color: 'rgba(240,237,231,0.35)', padding: '0 8px 16px' }}>Platform control · {profile?.adminRole ?? 'administrator'}</div>
+      <div style={{ fontSize: 11, color: 'rgba(240,237,231,0.48)', padding: '0 8px 16px' }}>{isMarketingWorkspace ? 'Marketing workspace' : 'Platform control'} · {profile?.adminRole ?? 'administrator'}</div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'rgba(240,237,231,0.5)', fontSize: 10.5, padding: '0 8px 18px' }}>
         <span style={{ color: '#D4A853', fontWeight: 700 }}>{profile?.platformId ?? 'ABZ—'}</span>
         <button type="button" aria-label="Copy platform ID" onClick={() => profile?.platformId && void navigator.clipboard?.writeText(profile.platformId)} style={{ border: 0, background: 'transparent', color: 'inherit', padding: 0, cursor: 'pointer' }}><Copy size={11} /></button>
       </div>
 
-      <nav style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, minHeight: 0, overflowY: 'auto' }}>
-        {visibleNavItems.map(item => {
+      <nav aria-label={isMarketingWorkspace ? 'Marketing workspace navigation' : 'Admin navigation'} style={{ display: 'flex', flexDirection: 'column', gap: 5, flex: 1, minHeight: 0, overflowY: 'auto' }}>
+        {visibleNavItems.map((item, index) => {
           const active = location.pathname === item.to
+            || (!!item.section && location.pathname === '/admin/marketing' && currentSection === item.section)
+          const showGroupLabel = !!item.group && item.group !== visibleNavItems[index - 1]?.group
           const Icon = item.icon
           return (
-            <Link
-              key={item.to}
-              to={item.to}
-              onClick={() => setMobileOpen(false)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 10,
-                color: active ? '#0A0C10' : 'rgba(240,237,231,0.7)',
-                background: active ? '#D4A853' : 'transparent',
-                fontSize: 14, fontWeight: active ? 600 : 500, textDecoration: 'none', flexShrink: 0,
-              }}
-            >
-              <Icon size={17} />
-              {item.label}
-            </Link>
+            <div key={item.to}>
+              {showGroupLabel && <div style={{ padding: index === 0 ? '3px 11px 7px' : '17px 11px 7px', color: 'rgba(240,237,231,0.4)', fontSize: 10, fontWeight: 750, letterSpacing: 1.15 }}>{item.group}</div>}
+              <Link
+                to={item.to}
+                aria-current={active ? 'page' : undefined}
+                onClick={() => setMobileOpen(false)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 12, minHeight: 46, padding: '11px 12px', borderRadius: 11,
+                  color: active ? '#0A0C10' : 'rgba(240,237,231,0.78)',
+                  background: active ? '#D4A853' : 'transparent',
+                  fontSize: 14.5, fontWeight: active ? 700 : 550, textDecoration: 'none', flexShrink: 0,
+                  transition: 'background .16s ease, color .16s ease',
+                }}
+              >
+                <Icon size={19} strokeWidth={active ? 2.3 : 1.9} />
+                {item.label}
+              </Link>
+            </div>
           )
         })}
       </nav>

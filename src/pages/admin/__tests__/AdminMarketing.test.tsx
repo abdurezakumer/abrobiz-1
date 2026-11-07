@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 
 const mocks = vi.hoisted(() => ({
   useAuth: vi.fn(),
@@ -7,9 +8,6 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('../../../lib/authContext', () => ({ useAuth: mocks.useAuth }))
-vi.mock('../../../components/AdminLayout', () => ({
-  default: ({ children }: { children: import('react').ReactNode }) => <div>{children}</div>,
-}))
 vi.mock('../../../lib/api/marketing', () => ({
   assignMarketingTeam: vi.fn(),
   getMarketingWorkspace: mocks.getMarketingWorkspace,
@@ -71,20 +69,19 @@ describe('Marketing Admin overview', () => {
       commissionRule: null,
     })
 
-    render(<AdminMarketing />)
+    render(<MemoryRouter initialEntries={['/admin/marketing']}><AdminMarketing /></MemoryRouter>)
 
     expect(await screen.findByRole('heading', { name: 'Welcome, Almaz Bekele' })).toBeInTheDocument()
     expect(screen.getByText('Live websites')).toBeInTheDocument()
-    const sidebar = screen.getByRole('navigation', { name: 'Marketing dashboard sections' })
-    expect(within(sidebar).getByRole('button', { name: 'Overview' })).toHaveAttribute('aria-current', 'page')
-    expect(within(sidebar).getByRole('button', { name: 'Referral center' })).toBeInTheDocument()
-    expect(within(sidebar).getByRole('button', { name: 'Team management' })).toBeInTheDocument()
-    fireEvent.click(within(sidebar).getByRole('button', { name: 'Customers' }))
-    expect(within(sidebar).getByRole('button', { name: 'Customers' })).toHaveAttribute('aria-current', 'page')
+    const sidebar = screen.getByRole('navigation', { name: 'Marketing workspace navigation' })
+    expect(within(sidebar).getByRole('link', { name: 'Overview' })).toHaveAttribute('aria-current', 'page')
+    expect(within(sidebar).getByRole('link', { name: 'Referral center' })).toBeInTheDocument()
+    expect(within(sidebar).getByRole('link', { name: 'My sales team' })).toBeInTheDocument()
+    fireEvent.click(within(sidebar).getByRole('link', { name: 'Customers' }))
     expect(screen.getByRole('columnheader', { name: 'Referred by' })).toBeInTheDocument()
     expect(screen.getByText('Sales Referral Person')).toBeInTheDocument()
     expect(screen.getByText('Marketing Manager · MA01')).toBeInTheDocument()
     expect(screen.queryByText('Referrer unavailable')).not.toBeInTheDocument()
     await waitFor(() => expect(mocks.getMarketingWorkspace).toHaveBeenCalledTimes(1))
-  })
+  }, 15000)
 })

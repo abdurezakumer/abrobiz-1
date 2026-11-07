@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import QRCode from 'qrcode'
 import { toast } from 'sonner'
 import {
@@ -38,17 +38,28 @@ const tabs: Array<{ key: TabKey; label: string; icon: typeof Activity }> = [
 
 export default function AdminMarketing() {
   const { profile } = useAuth()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [workspace, setWorkspace] = useState<MarketingWorkspace | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState('')
-  const [tab, setTab] = useState<TabKey>('overview')
   const [range, setRange] = useState<RangeKey>('30')
   const [selectedCustomer, setSelectedCustomer] = useState<MarketingCustomer | null>(null)
   const isSuper = profile?.role === 'super_admin' || profile?.adminRole === 'super_admin'
   const isSales = profile?.adminRole === 'sales_person'
   const isMarketingAdmin = profile?.adminRole === 'marketing_admin'
   const canManage = isSuper || isMarketingAdmin
+  const availableTabs = tabs.filter(item => canManage || item.key !== 'team')
+  const requestedTab = searchParams.get('section')
+  const tab: TabKey = availableTabs.some(item => item.key === requestedTab) ? requestedTab as TabKey : 'overview'
+
+  function setTab(nextTab: TabKey) {
+    setSearchParams(current => {
+      const next = new URLSearchParams(current)
+      next.set('section', nextTab)
+      return next
+    })
+  }
 
   async function load(refresh = false) {
     if (!profile) return
@@ -68,16 +79,18 @@ export default function AdminMarketing() {
     {loading ? <DashboardSkeleton /> : workspace ? <>
       <KpiStrip workspace={workspace} isSales={isSales} />
       <ActiveCommissionRule rule={workspace.commissionRule} isMarketingAdmin={isMarketingAdmin} />
-      <div className="marketing-workspace-layout">
-        <nav aria-label="Marketing dashboard sections" className="marketing-section-sidebar">
-          <div className="marketing-section-label">WORKSPACE</div>
-          {tabs.filter(item => canManage || item.key !== 'team').map(item => {
+      <div className={`marketing-workspace-layout${isSuper ? '' : ' marketing-workspace-primary-nav'}`}>
+        {isSuper && <>
+          <nav aria-label="Marketing dashboard sections" className="marketing-section-sidebar">
+            <div className="marketing-section-label">WORKSPACE</div>
+            {availableTabs.map(item => {
             const Icon = item.icon
             const active = tab === item.key
             return <button key={item.key} type="button" aria-current={active ? 'page' : undefined} onClick={() => setTab(item.key)} className={`marketing-section-link${active ? ' is-active' : ''}`}><Icon size={17} />{item.label}</button>
-          })}
-        </nav>
-        <label className="marketing-section-mobile"><span>Workspace section</span><select aria-label="Workspace section" value={tab} onChange={event => setTab(event.target.value as TabKey)}>{tabs.filter(item => canManage || item.key !== 'team').map(item => <option key={item.key} value={item.key}>{item.label}</option>)}</select></label>
+            })}
+          </nav>
+          <label className="marketing-section-mobile"><span>Workspace section</span><select aria-label="Workspace section" value={tab} onChange={event => setTab(event.target.value as TabKey)}>{availableTabs.map(item => <option key={item.key} value={item.key}>{item.label}</option>)}</select></label>
+        </>}
         <div className="marketing-workspace-content">
           {tab === 'overview' && <OverviewView workspace={workspace} range={range} isSales={isSales} onCustomer={setSelectedCustomer} onOpenReferral={() => setTab('referral')} />}
           {tab === 'customers' && <CustomersView workspace={workspace} range={range} onCustomer={setSelectedCustomer} />}
@@ -93,7 +106,7 @@ export default function AdminMarketing() {
       </div>
       {selectedCustomer && <CustomerDrawer customer={selectedCustomer} onClose={() => setSelectedCustomer(null)} />}
     </> : null}
-    <style>{'@keyframes marketing-spin { to { transform: rotate(360deg); } } @keyframes marketing-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } } .marketing-workspace-layout { display: grid; grid-template-columns: 218px minmax(0, 1fr); align-items: start; gap: 16px; } .marketing-section-sidebar { position: sticky; top: 18px; display: flex; flex-direction: column; gap: 5px; padding: 12px; background: #fff; border: 1px solid rgba(10,12,16,.08); border-radius: 15px; box-shadow: 0 8px 24px rgba(10,12,16,.035); } .marketing-section-label { padding: 4px 9px 9px; color: rgba(10,12,16,.42); font-size: 10px; font-weight: 750; letter-spacing: 1.25px; } .marketing-section-link { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 42px; padding: 9px 11px; border: 0; border-radius: 9px; background: transparent; color: rgba(10,12,16,.65); text-align: left; font-family: Outfit, sans-serif; font-size: 12.5px; font-weight: 600; cursor: pointer; transition: background .16s ease, color .16s ease, transform .16s ease; } .marketing-section-link:hover { background: #F7F4EE; color: #0A0C10; } .marketing-section-link.is-active { background: #FFF4D8; color: #72551D; box-shadow: inset 3px 0 #D4A853; } .marketing-section-link:focus-visible { outline: 2px solid #B98522; outline-offset: 2px; } .marketing-section-mobile { display: none; } .marketing-workspace-content { min-width: 0; } @media (max-width: 900px) { .marketing-grid-2 { grid-template-columns: 1fr !important; } .marketing-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; } } @media (max-width: 760px) { .marketing-workspace-layout { display: block; } .marketing-section-sidebar { display: none; } .marketing-section-mobile { display: grid; gap: 6px; margin-bottom: 12px; color: rgba(10,12,16,.52); font-size: 11px; font-weight: 650; } .marketing-section-mobile select { width: 100%; min-height: 42px; padding: 9px 11px; border: 1px solid rgba(10,12,16,.13); border-radius: 9px; background: #fff; color: #0A0C10; font-size: 13px; } } @media (max-width: 520px) { .marketing-kpis { grid-template-columns: 1fr !important; } } @media (prefers-reduced-motion: reduce) { .marketing-section-link { transition: none; } }'}</style>
+    <style>{'@keyframes marketing-spin { to { transform: rotate(360deg); } } @keyframes marketing-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } } .marketing-workspace-layout { display: grid; grid-template-columns: 218px minmax(0, 1fr); align-items: start; gap: 16px; } .marketing-workspace-layout.marketing-workspace-primary-nav { display: block; } .marketing-section-sidebar { position: sticky; top: 18px; display: flex; flex-direction: column; gap: 5px; padding: 12px; background: #fff; border: 1px solid rgba(10,12,16,.08); border-radius: 15px; box-shadow: 0 8px 24px rgba(10,12,16,.035); } .marketing-section-label { padding: 4px 9px 9px; color: rgba(10,12,16,.42); font-size: 10px; font-weight: 750; letter-spacing: 1.25px; } .marketing-section-link { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 42px; padding: 9px 11px; border: 0; border-radius: 9px; background: transparent; color: rgba(10,12,16,.65); text-align: left; font-family: Outfit, sans-serif; font-size: 12.5px; font-weight: 600; cursor: pointer; transition: background .16s ease, color .16s ease, transform .16s ease; } .marketing-section-link:hover { background: #F7F4EE; color: #0A0C10; } .marketing-section-link.is-active { background: #FFF4D8; color: #72551D; box-shadow: inset 3px 0 #D4A853; } .marketing-section-link:focus-visible { outline: 2px solid #B98522; outline-offset: 2px; } .marketing-section-mobile { display: none; } .marketing-workspace-content { min-width: 0; } @media (max-width: 900px) { .marketing-grid-2 { grid-template-columns: 1fr !important; } .marketing-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; } } @media (max-width: 760px) { .marketing-workspace-layout:not(.marketing-workspace-primary-nav) { display: block; } .marketing-section-sidebar { display: none; } .marketing-section-mobile { display: grid; gap: 6px; margin-bottom: 12px; color: rgba(10,12,16,.52); font-size: 11px; font-weight: 650; } .marketing-section-mobile select { width: 100%; min-height: 42px; padding: 9px 11px; border: 1px solid rgba(10,12,16,.13); border-radius: 9px; background: #fff; color: #0A0C10; font-size: 13px; } } @media (max-width: 520px) { .marketing-kpis { grid-template-columns: 1fr !important; } } @media (prefers-reduced-motion: reduce) { .marketing-section-link { transition: none; } }'}</style>
   </AdminLayout>
 }
 
