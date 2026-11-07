@@ -158,6 +158,7 @@ export interface PlatformSeo {
   description: string
   canonicalUrl: string
   robots: 'index,follow' | 'noindex,nofollow'
+  imageUrl?: string
   schema?: Record<string, unknown> | Record<string, unknown>[]
 }
 
@@ -168,8 +169,9 @@ export function platformSeoForPath(pathname: string, siteUrl = 'https://abrobiz.
       title: 'AbroBiz — Digital storefronts for every business',
       description: 'Create a polished business website, showcase your offerings, and connect with customers through AbroBiz.',
       robots: 'index,follow',
+      imageUrl: `${base}/social/abrobiz-og-image-1200x630.png`,
       schema: [
-        { '@context': 'https://schema.org', '@type': 'Organization', name: 'AbroBiz', url: `${base}/`, logo: `${base}/favicon_io/android-chrome-192x192.png`, email: 'abdurezak4525@gmail.com' },
+        { '@context': 'https://schema.org', '@type': 'Organization', name: 'AbroBiz', url: `${base}/`, logo: `${base}/social/abrobiz-profile-picture-1000x1000.png`, email: 'abdurezak4525@gmail.com' },
         { '@context': 'https://schema.org', '@type': 'WebSite', name: 'AbroBiz', url: `${base}/`, description: 'Digital storefronts for growing businesses.' },
         { '@context': 'https://schema.org', '@type': 'SoftwareApplication', name: 'AbroBiz', applicationCategory: 'BusinessApplication', operatingSystem: 'Web', url: `${base}/` },
       ],

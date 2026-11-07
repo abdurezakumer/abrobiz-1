@@ -4,29 +4,24 @@ export default function AbroBizLogo({
   size = 32,
   showName = true,
   light = false,
-  textColor,
 }: {
   size?: number
   showName?: boolean
   light?: boolean
-  textColor?: string
 }) {
-  const resolvedTextColor = textColor ?? (light ? '#FFFFFF' : '#F0EDE7')
-  const markCrop = size / 78
+  const logoSrc = showName
+    ? light ? '/brand/abrobiz-logo-horizontal-dark.svg' : '/brand/abrobiz-logo-horizontal-light.svg'
+    : light ? '/brand/abrobiz-mark-dark.svg' : '/brand/abrobiz-mark-light.svg'
+  const logoWidth = size * (showName ? 4502.3 / 880 : 900 / 880)
 
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: Math.max(8, size * 0.28) }}>
-      <span style={{ position: 'relative', width: size, height: size, overflow: 'hidden', borderRadius: Math.max(5, size * 0.22), background: '#FFFFFF', flex: '0 0 auto' }}>
-        <img
-          src="/favicon_io/android-chrome-192x192.png"
-          width={192 * markCrop}
-          height={192 * markCrop}
-          alt="AbroBiz logo mark"
-          style={{ position: 'absolute', maxWidth: 'none', left: -58 * markCrop, top: -34 * markCrop }}
-        />
-      </span>
-      {showName && <span style={{ color: resolvedTextColor, fontFamily: 'Outfit, sans-serif', fontWeight: 650, fontSize: Math.max(14, size * 0.52), letterSpacing: '-0.02em' }}>AbroBiz</span>}
-    </span>
+    <img
+      src={logoSrc}
+      width={logoWidth}
+      height={size}
+      alt={showName ? 'AbroBiz' : 'AbroBiz mark'}
+      style={{ display: 'block', width: logoWidth, height: size, objectFit: 'contain', flex: '0 0 auto' }}
+    />
   )
 }
 

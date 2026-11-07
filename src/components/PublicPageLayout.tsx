@@ -9,7 +9,7 @@ export default function PublicPageLayout({ title, eyebrow, children }: { title: 
       <div aria-hidden style={{ position: 'fixed', inset: 0, pointerEvents: 'none', background: 'radial-gradient(circle at 12% 0%, rgba(212,168,83,0.12), transparent 32%), radial-gradient(circle at 88% 20%, rgba(73,101,131,0.12), transparent 28%)' }} />
       <header style={{ position: 'relative', borderBottom: '1px solid rgba(255,255,255,0.08)', background: 'rgba(8,10,14,0.84)', backdropFilter: 'blur(16px)' }}>
         <div style={{ maxWidth: 1100, margin: '0 auto', padding: '18px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20 }}>
-          <Link to="/" style={{ textDecoration: 'none' }}><AbroBizLogo size={30} /></Link>
+          <Link to="/" style={{ textDecoration: 'none' }}><AbroBizLogo size={24} light /></Link>
           <nav aria-label="Public navigation" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <Link to="/about" style={navStyle}>About</Link>
             <Link to="/contact" style={navStyle}>Contact</Link>

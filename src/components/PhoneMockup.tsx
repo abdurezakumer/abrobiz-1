@@ -93,7 +93,7 @@ export default function PhoneMockup({ activeIndex }: { activeIndex: number }) {
           </motion.div>
         </AnimatePresence>
       </div>
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 7, marginTop: 11, color: 'rgba(240,237,231,.48)', fontSize: 10 }}><span style={{ width: 6, height: 6, borderRadius: 99, background: '#6FCF97', boxShadow: '0 0 10px #6FCF97' }} /> Live storefront preview · <AbroBizLogo size={15} showName={false} light /></div>
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 7, marginTop: 11, color: 'rgba(240,237,231,.48)', fontSize: 10 }}><span style={{ width: 6, height: 6, borderRadius: 99, background: '#6FCF97', boxShadow: '0 0 10px #6FCF97' }} /> Live storefront preview · <AbroBizLogo size={16} showName={false} light /></div>
     </div>
   )
 }

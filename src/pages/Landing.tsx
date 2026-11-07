@@ -83,7 +83,7 @@ export default function Landing() {
       {/* Nav */}
       <div className="landing-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', maxWidth: 1100, margin: '0 auto' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <AbroBizLogo size={30} textColor={isDay ? '#17202B' : '#F0EDE7'} />
+          <AbroBizLogo size={30} light={!isDay} />
         </div>
         <nav style={{ display: 'flex', gap: 22, alignItems: 'center' }} className="landing-nav-links">
           <a href="#how-it-works" style={navLinkStyle}>How it works</a>
@@ -307,7 +307,7 @@ export default function Landing() {
         <div style={{ maxWidth: 1000, margin: '0 auto', display: 'grid', gridTemplateColumns: '1.4fr repeat(3, 1fr)', gap: 32 }} className="footer-grid">
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-              <AbroBizLogo size={26} textColor={isDay ? '#17202B' : '#F0EDE7'} />
+              <AbroBizLogo size={26} light={!isDay} />
             </div>
             <p style={{ fontSize: 12.5, color: 'var(--landing-muted-soft)', lineHeight: 1.6, maxWidth: 260 }}>
               A digital storefront platform for restaurants, cafés, salons, retail shops, and more.
