@@ -37,7 +37,26 @@ export default function StorefrontPageShell({
     return applySeoDefinition(seo)
   }, [data.business, data.entitlements.siteActive, data.labels.label, data.labels.slug])
 
-  if (data.business === undefined) return null
+  if (data.business === undefined) {
+    if (data.loadError) {
+      return (
+        <main role="alert" style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24, background: '#080A0E', color: '#F5F3EF', textAlign: 'center', fontFamily: 'Inter, sans-serif' }}>
+          <div style={{ width: 'min(460px, 100%)' }}>
+            <div style={{ color: '#D4A853', fontSize: 12, fontWeight: 750, letterSpacing: 2 }}>ABROBIZ STOREFRONT</div>
+            <h1 style={{ fontFamily: 'Outfit, sans-serif', fontSize: 30, margin: '14px 0 10px' }}>We couldn’t load this website</h1>
+            <p style={{ color: 'rgba(245,243,239,.66)', lineHeight: 1.7 }}>Please check your connection and try again. The business website and its data have not been changed.</p>
+            <button type="button" onClick={data.retry} style={{ marginTop: 10, border: 0, borderRadius: 11, padding: '12px 20px', background: '#D4A853', color: '#0A0C10', fontWeight: 750, cursor: 'pointer' }}>Try again</button>
+          </div>
+        </main>
+      )
+    }
+
+    return (
+      <main role="status" aria-live="polite" style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24, background: '#080A0E', color: '#F5F3EF', textAlign: 'center', fontFamily: 'Inter, sans-serif' }}>
+        <div><div style={{ color: '#D4A853', fontSize: 12, fontWeight: 750, letterSpacing: 2 }}>ABROBIZ</div><p style={{ marginTop: 12, color: 'rgba(245,243,239,.68)' }}>Loading this business website…</p></div>
+      </main>
+    )
+  }
 
   if (data.business === null) {
     return (

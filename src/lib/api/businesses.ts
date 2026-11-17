@@ -4,6 +4,16 @@ import { isValidBusinessSlug } from '../slugify'
 import { createClientUuid, prepareImageForUpload } from '../fileUpload'
 import { uploadBinaryToFunction } from '../uploadClient'
 
+// Anonymous storefront reads are deliberately limited to public presentation
+// fields; owner_id and internal moderation/SEO workflow columns stay private.
+const PUBLIC_BUSINESS_COLUMNS = [
+  'id', 'category_id', 'name', 'slug', 'description', 'about_content', 'gallery_urls',
+  'logo_url', 'cover_url', 'phone', 'email', 'address', 'maps_url', 'template_slug',
+  'languages', 'accent_color', 'opening_hours', 'social', 'currency', 'timezone',
+  'is_published', 'is_blocked', 'created_at', 'seo_title', 'seo_description',
+  'seo_image_url', 'seo_indexing_enabled',
+].join(', ')
+
 const DEFAULT_HOURS: WeeklyHours = {
   mon: { open: '08:00', close: '22:00', closed: false },
   tue: { open: '08:00', close: '22:00', closed: false },
@@ -17,7 +27,7 @@ const DEFAULT_HOURS: WeeklyHours = {
 function mapBusiness(row: any): Business {
   return {
     id: row.id,
-    ownerId: row.owner_id,
+    ownerId: row.owner_id ?? '',
     categoryId: row.category_id,
     name: row.name,
     slug: row.slug,
@@ -65,7 +75,7 @@ export async function getMyBusiness(): Promise<Business | null> {
 }
 
 export async function getBusinessBySlug(slug: string): Promise<Business | null> {
-  const { data, error } = await supabase.from('businesses').select('*').eq('slug', slug).maybeSingle()
+  const { data, error } = await supabase.from('businesses').select(PUBLIC_BUSINESS_COLUMNS).eq('slug', slug).maybeSingle()
   if (error) throw error
   return data ? mapBusiness(data) : null
 }

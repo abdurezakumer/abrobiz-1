@@ -35,6 +35,16 @@ describe('production security remediation invariants', () => {
     expect(migration).toMatch(/notifications_select_self/)
   })
 
+  it('restores least-privilege anonymous storefront reads without bypassing RLS', () => {
+    const migration = read('supabase/migrations/0069_restore_scoped_public_storefront_reads.sql')
+    expect(migration).toMatch(/revoke select on table public\.businesses from anon/i)
+    expect(migration).toMatch(/grant select \([\s\S]*?seo_indexing_enabled[\s\S]*?\) on table public\.businesses to anon/i)
+    expect(migration).toMatch(/grant select \(slug, is_active, config\) on table public\.templates to anon/i)
+    expect(migration).toMatch(/on table public\.reviews to anon/i)
+    expect(migration).not.toMatch(/disable row level security/i)
+    expect(read('src/lib/api/businesses.ts')).toMatch(/select\(PUBLIC_BUSINESS_COLUMNS\)/)
+  })
+
   it('closes referral-code DML, hidden-business review reads, and marketing RPC MFA gaps', () => {
     const migration = read('supabase/migrations/0068_rls_and_marketing_privilege_hardening.sql')
     expect(migration).toMatch(/drop policy if exists marketing_referral_codes_write/i)

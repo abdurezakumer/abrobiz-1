@@ -24,6 +24,8 @@ export interface StorefrontEntitlements {
 
 export interface StorefrontData {
   business: Business | null | undefined // undefined = still loading, null = not found
+  loadError: boolean
+  retry: () => void
   categories: Category[]
   items: Item[]
   labels: StorefrontLabels
@@ -59,6 +61,8 @@ async function loadTemplateConfig(slug: string): Promise<{ data: { config: unkno
 
 export function useStorefrontData(slug: string | undefined, pagePath: string): StorefrontData {
   const [business, setBusiness] = useState<Business | null | undefined>(undefined)
+  const [loadError, setLoadError] = useState(false)
+  const [retryVersion, setRetryVersion] = useState(0)
   const [categories, setCategories] = useState<Category[]>([])
   const [items, setItems] = useState<Item[]>([])
   const [labels, setLabels] = useState<StorefrontLabels>(DEFAULT_LABELS)
@@ -68,6 +72,8 @@ export function useStorefrontData(slug: string | undefined, pagePath: string): S
   const [approvedCopy, setApprovedCopy] = useState<StorefrontData['approvedCopy']>({})
 
   useEffect(() => {
+    setBusiness(undefined)
+    setLoadError(false)
     if (!slug) {
       setBusiness(null)
       setApprovedCopy({})
@@ -76,6 +82,7 @@ export function useStorefrontData(slug: string | undefined, pagePath: string): S
     const businessSlug = slug
     let cancelled = false
     let inFlight = false
+    let resolvedBusiness = false
     let refreshTimer: number | undefined
 
     function scheduleNextRefresh() {
@@ -91,6 +98,8 @@ export function useStorefrontData(slug: string | undefined, pagePath: string): S
         if (cancelled) return
         if (!biz) {
           setBusiness(null)
+          setLoadError(false)
+          resolvedBusiness = true
           return
         }
 
@@ -100,6 +109,8 @@ export function useStorefrontData(slug: string | undefined, pagePath: string): S
         const ent = await retryRead(() => getBusinessEntitlements(biz.id))
         if (cancelled) return
         setBusiness(biz)
+        setLoadError(false)
+        resolvedBusiness = true
         setEntitlements(ent)
         setLang(previous => biz.languages.includes(previous) ? previous : (biz.languages[0] ?? 'en'))
 
@@ -143,8 +154,9 @@ export function useStorefrontData(slug: string | undefined, pagePath: string): S
           }
         }
       } catch {
-        // Keep the last successful storefront visible during a transient poll
-        // failure. The next interval will retry automatically.
+        // Keep an already-rendered storefront visible during polling errors;
+        // show a retry state instead of a blank screen on the initial failure.
+        if (!cancelled && !resolvedBusiness) setLoadError(true)
       } finally {
         inFlight = false
         scheduleNextRefresh()
@@ -167,7 +179,13 @@ export function useStorefrontData(slug: string | undefined, pagePath: string): S
       if (refreshTimer !== undefined) window.clearTimeout(refreshTimer)
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
-  }, [slug, pagePath])
+  }, [slug, pagePath, retryVersion])
 
-  return { business, categories, items, labels, lang, setLang, entitlements, templateConfig, approvedCopy }
+  const retry = () => {
+    setLoadError(false)
+    setBusiness(undefined)
+    setRetryVersion(version => version + 1)
+  }
+
+  return { business, loadError, retry, categories, items, labels, lang, setLang, entitlements, templateConfig, approvedCopy }
 }
