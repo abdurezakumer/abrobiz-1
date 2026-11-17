@@ -45,6 +45,16 @@ describe('production security remediation invariants', () => {
     expect(read('src/lib/api/businesses.ts')).toMatch(/select\(PUBLIC_BUSINESS_COLUMNS\)/)
   })
 
+  it('keeps storefront RLS policy lookups behind boolean-only security-definer helpers', () => {
+    const migration = read('supabase/migrations/0070_secure_public_storefront_rls_helpers.sql')
+    expect(migration).toMatch(/security definer[\s\S]*?public\.marketing_attributions/i)
+    expect(migration).toMatch(/revoke all on function public\.can_select_storefront_business\(uuid\) from public, anon, authenticated/i)
+    expect(migration).toMatch(/grant execute on function public\.can_select_storefront_business\(uuid\) to anon, authenticated/i)
+    expect(migration).toMatch(/create policy businesses_select[\s\S]*?can_select_storefront_business\(id\)/i)
+    expect(migration).not.toMatch(/grant select on table public\.marketing_attributions/i)
+    expect(migration).not.toMatch(/disable row level security/i)
+  })
+
   it('closes referral-code DML, hidden-business review reads, and marketing RPC MFA gaps', () => {
     const migration = read('supabase/migrations/0068_rls_and_marketing_privilege_hardening.sql')
     expect(migration).toMatch(/drop policy if exists marketing_referral_codes_write/i)
